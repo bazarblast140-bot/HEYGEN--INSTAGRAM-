@@ -11,7 +11,8 @@
     "generate": "node scripts/generate.js",
     "chart": "node pipeline/render-chart.js",
     "chart:fixture": "node pipeline/render-chart.js --fixture",
-    "hybrid": "node pipeline/compose-hybrid.js"
+    "hybrid": "node pipeline/compose-hybrid.js",
+    "card": "node pipeline/render-card.js"
   },
   "engines": {
     "node": ">=20"

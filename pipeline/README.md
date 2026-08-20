@@ -138,3 +138,40 @@ one b-roll source should never cost the day's post.
 Both licenses allow commercial use without attribution. Neither allows implying
 that a person shown endorses anything, so the script must never pair a stock face
 with a claim about a real person.
+
+## Where the avatar appears
+
+The avatar is a split-screen panel, never the whole frame: **visual on top, presenter
+in the bottom half**. It appears twice in a reel — the hook, and one short cut-in
+that punctuates the reel before its most important number.
+
+```
+0.0s  ┌───────────┐  hook      card + avatar   7.4s
+      │ card      │
+      ├───────────┤
+      │ avatar    │
+7.4s  ├───────────┤  chart     full frame      5.0s
+12.4s ├───────────┤  b-roll    full frame      4.0s
+16.4s ├───────────┤  cut-in    card + avatar   2.6s
+19.0s ├───────────┤  stat      full frame      7.0s
+26.0s ├───────────┤  CTA       full frame      5.0s
+31.0s └───────────┘
+```
+
+Avatar covers about **10 of 31 seconds**, and only the panel is avatar video —
+so the billed HeyGen minutes track the cut-ins, not the reel length.
+
+## Card scene
+
+`src/render/scenes/card.html` is the general-purpose statement / stat card, the
+counterpart to the chart scene for topics that are not price action — policy news,
+flows, fund returns, IPOs. Same `__scene.seek(f)` contract, same two layouts.
+
+```bash
+npm run card -- --demo hook --layout panel --seconds 7.4
+npm run card -- --spec my-card.json --layout full --seconds 5
+```
+
+Spec fields: `chips[]`, `headline`, `power` (the serif-italic word), optional
+`stat: { value, label, direction }`, `footnote`. Long stat values are measured and
+shrunk to fit on one line rather than wrapping.
