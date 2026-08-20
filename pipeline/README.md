@@ -95,3 +95,46 @@ The **presenter drives the duration**: the voiceover lives in that clip, so the
 chart panel holds on its last frame if it is shorter and is trimmed if longer —
 a long script can never truncate the speech. The presenter is scaled to cover
 and centre-cropped, so whatever aspect HeyGen returns fills the panel.
+
+## Reel structure and why the avatar is short
+
+HeyGen bills avatar video by the minute, so the avatar carries only the hook —
+a few seconds of face to establish who is speaking — and the rest of the reel is
+rendered graphics and free stock footage with a voiceover over it.
+
+```
+0s   ┌─────────────┐  avatar  — HeyGen, ~5s of billed video
+     ├─────────────┤
+5s   │ chart scene │  rendered locally, free
+     ├─────────────┤
+11s  │ stock b-roll│  Pexels / Pixabay, free
+     ├─────────────┤
+     │ ...         │
+45s  └─────────────┘
+```
+
+A 45-second reel then costs about five seconds of avatar rather than forty-five.
+The voice stays continuous because both halves use the same cloned voice id: the
+avatar clip's own audio covers the hook, HeyGen TTS covers the body.
+
+`src/assemble/timeline.js` builds it. Video and audio are assembled separately and
+muxed, because concat misbehaves when some inputs carry audio and others do not.
+
+- Every segment is scaled to fill, centre-cropped and locked to 30 fps, so stock
+  footage in any aspect fits without letterboxing.
+- Stock gets a slight darken and desaturate so it settles into the dark palette
+  instead of jumping out of it.
+- A segment shorter than its slot holds its last frame rather than cutting to black.
+- The music bed is **ducked by the voice**, not just set quiet, so it stays present
+  in the gaps. The reference reels never drop to silence — not once across five files.
+- Mastered to −14 LUFS, which is what all five reference reels measured at.
+
+## Stock footage
+
+`src/stock/index.js` searches Pexels first and falls back to Pixabay. A provider
+that is unconfigured or erroring is skipped rather than failing the run — losing
+one b-roll source should never cost the day's post.
+
+Both licenses allow commercial use without attribution. Neither allows implying
+that a person shown endorses anything, so the script must never pair a stock face
+with a claim about a real person.

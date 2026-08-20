@@ -1,0 +1,163 @@
+// Assemble a finished reel from a segment manifest.
+//
+// The cost model drives the shape. HeyGen bills avatar video by the minute, so the
+// avatar appears only in the hook — a few seconds of face to establish who is
+// talking — and everything after that is rendered graphics or free stock footage
+// with a voiceover laid over it. A 45s reel therefore buys ~5s of avatar instead
+// of 45s, while still opening on a real presenter.
+//
+// Video and audio are built separately and muxed at the end: concat behaves badly
+// when some inputs carry audio and others do not, and the voice track needs its
+// own treatment anyway.
+
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { run, probe } from './encode.js';
+
+export const FRAME = { width: 1080, height: 1920, fps: 30 };
+
+// Instagram normalises to roughly this; mastering here means the platform does
+// not have to, which is what the reference reels all measured at.
+export const LOUDNESS = { I: -14, TP: -1.5, LRA: 11 };
+
+/**
+ * One filter chain that makes any source match the reel frame: fill it by
+ * scaling up, centre-crop the overflow, lock the frame rate and pixel aspect.
+ * Stock footage arrives in every shape imaginable, so this is not optional.
+ */
+function normaliseVideo(index, duration, { grade = false } = {}) {
+  const chain = [
+    `scale=${FRAME.width}:${FRAME.height}:force_original_aspect_ratio=increase`,
+    `crop=${FRAME.width}:${FRAME.height}`,
+    `fps=${FRAME.fps}`,
+    'setsar=1',
+    // Stock clips are shot in every colour temperature going. A slight darken and
+    // desaturate settles them into the dark trading palette instead of jumping.
+    ...(grade ? ['eq=brightness=-0.06:saturation=0.85:contrast=1.05'] : []),
+    `trim=duration=${duration.toFixed(3)}`,
+    'setpts=PTS-STARTPTS',
+    // A clip shorter than its slot holds its last frame rather than cutting to black.
+    `tpad=stop_mode=clone:stop_duration=${duration.toFixed(3)}`,
+    `trim=duration=${duration.toFixed(3)}`,
+    'setpts=PTS-STARTPTS',
+  ];
+  return `[${index}:v]${chain.join(',')}[v${index}]`;
+}
+
+export async function buildVideo({ segments, out }) {
+  if (!segments.length) throw new Error('buildVideo needs at least one segment');
+
+  const filters = segments.map((s, i) => normaliseVideo(i, s.duration, { grade: s.kind === 'stock' }));
+  const concatInputs = segments.map((_, i) => `[v${i}]`).join('');
+  filters.push(`${concatInputs}concat=n=${segments.length}:v=1:a=0[v]`);
+
+  await run('ffmpeg', [
+    '-y', '-v', 'error',
+    ...segments.flatMap((s) => ['-i', s.file]),
+    '-filter_complex', filters.join(';'),
+    '-map', '[v]',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '19',
+    '-pix_fmt', 'yuv420p',
+    out,
+  ]);
+
+  return out;
+}
+
+/**
+ * Voice track: the avatar clip's own audio for the hook, then the TTS render for
+ * the rest. Both come from the same cloned voice id, so the join is a continuation
+ * rather than a change of speaker.
+ */
+export async function buildVoice({ parts, out }) {
+  const present = parts.filter(Boolean);
+  if (!present.length) throw new Error('buildVoice needs at least one audio part');
+
+  if (present.length === 1) {
+    await run('ffmpeg', ['-y', '-v', 'error', '-i', present[0], '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2', out]);
+    return out;
+  }
+
+  const filter =
+    present.map((_, i) => `[${i}:a]aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo[a${i}]`).join(';') +
+    ';' + present.map((_, i) => `[a${i}]`).join('') + `concat=n=${present.length}:v=0:a=1[a]`;
+
+  await run('ffmpeg', [
+    '-y', '-v', 'error',
+    ...present.flatMap((p) => ['-i', p]),
+    '-filter_complex', filter,
+    '-map', '[a]', '-c:a', 'pcm_s16le',
+    out,
+  ]);
+
+  return out;
+}
+
+/**
+ * Mix the voice over a music bed and master to the platform target.
+ *
+ * The bed is ducked by the voice rather than simply set quiet, so it stays present
+ * in the gaps — the reference reels never drop to silence, not once in five files.
+ */
+export async function mixAudio({ voice, music, out, duration, bedLevel = 0.32 }) {
+  if (!music) {
+    await run('ffmpeg', [
+      '-y', '-v', 'error', '-i', voice,
+      '-af', `loudnorm=I=${LOUDNESS.I}:TP=${LOUDNESS.TP}:LRA=${LOUDNESS.LRA}`,
+      '-c:a', 'aac', '-b:a', '192k', out,
+    ]);
+    return out;
+  }
+
+  const filter = [
+    `[1:a]aloop=loop=-1:size=2147483647,atrim=duration=${duration.toFixed(3)},` +
+      `aresample=48000,volume=${bedLevel}[bed]`,
+    `[0:a]aresample=48000,apad=whole_dur=${duration.toFixed(3)}[voice]`,
+    `[voice]asplit=2[voiceMix][voiceKey]`,
+    `[bed][voiceKey]sidechaincompress=threshold=0.045:ratio=6:attack=12:release=320[ducked]`,
+    `[ducked][voiceMix]amix=inputs=2:duration=first:normalize=0[mixed]`,
+    `[mixed]loudnorm=I=${LOUDNESS.I}:TP=${LOUDNESS.TP}:LRA=${LOUDNESS.LRA}[a]`,
+  ].join(';');
+
+  await run('ffmpeg', [
+    '-y', '-v', 'error',
+    '-i', voice, '-i', music,
+    '-filter_complex', filter,
+    '-map', '[a]', '-c:a', 'aac', '-b:a', '192k',
+    '-t', duration.toFixed(3),
+    out,
+  ]);
+
+  return out;
+}
+
+export async function mux({ video, audio, out }) {
+  await run('ffmpeg', [
+    '-y', '-v', 'error',
+    '-i', video, '-i', audio,
+    '-map', '0:v', '-map', '1:a',
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart',
+    '-shortest',
+    out,
+  ]);
+  return out;
+}
+
+/** Full assembly: segments + voice parts + optional music -> one reel. */
+export async function buildReel({ segments, voiceParts, music, out, workDir }) {
+  await fs.mkdir(workDir, { recursive: true });
+
+  const silent = path.join(workDir, 'video.mp4');
+  const voice = path.join(workDir, 'voice.wav');
+  const audio = path.join(workDir, 'audio.m4a');
+
+  await buildVideo({ segments, out: silent });
+  const videoInfo = await probe(silent);
+
+  await buildVoice({ parts: voiceParts, out: voice });
+  await mixAudio({ voice, music, out: audio, duration: videoInfo.duration });
+  await mux({ video: silent, audio, out });
+
+  return probe(out);
+}
