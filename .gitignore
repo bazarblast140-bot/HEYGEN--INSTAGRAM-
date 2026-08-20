@@ -4,3 +4,6 @@ node_modules/
 *.log
 downloads/
 .DS_Store
+
+# pipeline render artifacts
+pipeline/out/

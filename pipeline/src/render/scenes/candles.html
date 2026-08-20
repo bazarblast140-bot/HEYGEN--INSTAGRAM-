@@ -1,0 +1,408 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>candles scene</title>
+<style>
+  @font-face { font-family: "Brand Sans";  src: url("../../../assets/fonts/inter-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
+  @font-face { font-family: "Brand Sans";  src: url("../../../assets/fonts/inter-600.woff2") format("woff2"); font-weight: 600; font-display: block; }
+  @font-face { font-family: "Brand Mono";  src: url("../../../assets/fonts/jetbrains-mono-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
+  @font-face { font-family: "Brand Mono";  src: url("../../../assets/fonts/jetbrains-mono-500.woff2") format("woff2"); font-weight: 500; font-display: block; }
+  @font-face { font-family: "Brand Serif"; src: url("../../../assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; font-display: block; }
+
+  :root {
+    --bg: #020617;
+    --card: #0E1223;
+    --surface: #1A1E2F;
+    --up: #22C55E;
+    --down: #EF4444;
+    --neutral: #94A3B8;
+    --border: #334155;
+    --text: #F8FAFC;
+    --amber: #F59E0B;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 720px; height: 1280px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Brand Sans", sans-serif;
+    overflow: hidden;
+  }
+
+  #stage { position: relative; width: 720px; height: 1280px; }
+
+  /* ---- header ---- */
+  #header { position: absolute; top: 52px; left: 48px; right: 48px; display: flex; gap: 10px; align-items: center; }
+  .chip {
+    font-family: "Brand Mono", monospace; font-weight: 700;
+    font-size: 19px; letter-spacing: .1em; text-transform: uppercase;
+    padding: 9px 14px; border-radius: 5px;
+    background: var(--surface); color: var(--neutral);
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .chip--live { background: rgba(34,197,94,.13); color: var(--up); border-color: rgba(34,197,94,.4); }
+  .chip--warn { background: rgba(245,158,11,.13); color: var(--amber); border-color: rgba(245,158,11,.45); }
+
+  /* ---- headline number ---- */
+  #numberBlock { position: absolute; top: 132px; left: 48px; right: 48px; }
+  #label {
+    font-family: "Brand Mono", monospace; font-weight: 500;
+    font-size: 22px; letter-spacing: .16em; text-transform: uppercase; color: var(--neutral);
+    margin-bottom: 14px;
+  }
+  #price {
+    font-family: "Brand Mono", monospace; font-weight: 700;
+    font-size: 104px; line-height: .95; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  #pill {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-top: 20px; padding: 11px 20px; border-radius: 999px;
+    font-family: "Brand Mono", monospace; font-weight: 700; font-size: 34px;
+    font-variant-numeric: tabular-nums;
+    transform-origin: left center;
+  }
+  #arrow { font-size: 30px; line-height: 1; }
+
+  /* ---- chart ---- */
+  #chart { position: absolute; top: 372px; left: 0; }
+
+  /* ---- verdict ---- */
+  #verdict {
+    position: absolute; top: 1082px; left: 48px; right: 48px;
+    font-family: "Brand Serif", Georgia, serif; font-style: italic;
+    font-size: 76px; line-height: 1; letter-spacing: -.015em;
+    text-align: center;
+  }
+
+  /* Caption band is burned in later by ffmpeg — nothing may sit below this line. */
+  #safe { position: absolute; top: 1152px; left: 0; width: 720px; height: 128px; }
+</style>
+
+<div id="stage">
+  <div id="header">
+    <span class="chip" id="chipSymbol">NIFTY 50</span>
+    <span class="chip" id="chipInterval">1D</span>
+    <span class="chip chip--live" id="chipDate">—</span>
+  </div>
+
+  <div id="numberBlock">
+    <div id="label">Closing level</div>
+    <div id="price">0</div>
+    <div id="pill"><span id="arrow">▲</span><span id="pillText">0.00%</span></div>
+  </div>
+
+  <canvas id="chart" width="720" height="700"></canvas>
+
+  <div id="verdict"></div>
+  <div id="safe"></div>
+</div>
+
+<script>
+(() => {
+  const C = {
+    bg: '#020617', card: '#0E1223', surface: '#1A1E2F',
+    up: '#22C55E', down: '#EF4444', neutral: '#94A3B8',
+    border: '#334155', text: '#F8FAFC', amber: '#F59E0B',
+  };
+
+  const FPS = 30;
+  const TOTAL = 150;                       // 5 seconds
+
+  // Every beat is [startFrame, endFrame]. Nothing here reads a clock, so the
+  // same frame index always paints the same pixels.
+  const BEAT = {
+    header:  [0, 14],
+    candles: [6, 58],
+    volume:  [40, 75],
+    ma:      [50, 78],
+    price:   [62, 92],
+    pill:    [80, 104],
+    verdict: [96, 124],
+  };
+
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const p = (f, [a, b]) => clamp01((f - a) / (b - a));
+  const outCubic  = (t) => 1 - Math.pow(1 - t, 3);
+  const outQuint  = (t) => 1 - Math.pow(1 - t, 5);
+  const outBack   = (t) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
+
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+
+  // All geometry below is written in 720x1280 design pixels. When the capture runs
+  // at a higher deviceScaleFactor the canvas backing store is enlarged to match and
+  // the context is scaled once, so the chart stays vector-sharp instead of being
+  // upscaled by the browser.
+  const CSS_W = 720, CSS_H = 700;
+  function sizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(CSS_W * dpr);
+    canvas.height = Math.round(CSS_H * dpr);
+    canvas.style.width = CSS_W + 'px';
+    canvas.style.height = CSS_H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // Geometry inside the canvas (720 x 700).
+  const PAD_X = 48;
+  const PRICE_TOP = 24, PRICE_H = 470;
+  const VOL_TOP = 540, VOL_H = 118;
+  const PLOT_W = 720 - PAD_X * 2;
+
+  let data = null;   // set by __load
+  let scale = null;
+
+  function computeScale(candles) {
+    const lows = candles.map((d) => d.l);
+    const highs = candles.map((d) => d.h);
+    let min = Math.min(...lows);
+    let max = Math.max(...highs);
+    const headroom = (max - min) * 0.08 || max * 0.01;
+    min -= headroom; max += headroom;
+
+    const maxVol = Math.max(...candles.map((d) => d.v)) || 1;
+    const step = PLOT_W / candles.length;
+
+    return {
+      min, max, maxVol, step,
+      bodyW: Math.max(3, step * 0.62),
+      y: (v) => PRICE_TOP + (1 - (v - min) / (max - min)) * PRICE_H,
+      x: (i) => PAD_X + step * (i + 0.5),
+      volY: (v) => VOL_TOP + VOL_H - (v / maxVol) * VOL_H,
+    };
+  }
+
+  function movingAverage(candles, period) {
+    const out = [];
+    let sum = 0;
+    for (let i = 0; i < candles.length; i += 1) {
+      sum += candles[i].c;
+      if (i >= period) sum -= candles[i - period].c;
+      out.push(i >= period - 1 ? sum / period : null);
+    }
+    return out;
+  }
+
+  function drawGrid() {
+    ctx.strokeStyle = 'rgba(51,65,85,.5)';
+    ctx.lineWidth = 1;
+    ctx.font = '500 17px "Brand Mono", monospace';
+    ctx.fillStyle = C.neutral;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i <= 4; i += 1) {
+      const value = scale.min + ((scale.max - scale.min) * i) / 4;
+      const y = Math.round(scale.y(value)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(PAD_X, y);
+      ctx.lineTo(720 - PAD_X, y);
+      ctx.stroke();
+
+      // Candles run right up to the axis, so each tick gets its own backing plate
+      // rather than sitting unreadably on top of a wick.
+      const text = Math.round(value).toLocaleString('en-IN');
+      const w = ctx.measureText(text).width;
+      const tx = 720 - PAD_X - 6;
+      ctx.fillStyle = 'rgba(2,6,23,.82)';
+      ctx.fillRect(tx - w - 6, y - 23, w + 12, 22);
+      ctx.fillStyle = C.neutral;
+      ctx.fillText(text, tx, y - 12);
+    }
+  }
+
+  function drawCandles(f) {
+    const shown = p(f, BEAT.candles) * data.candles.length;
+
+    data.candles.forEach((d, i) => {
+      const reveal = clamp01(shown - i);
+      if (reveal <= 0) return;
+
+      const grow = outCubic(reveal);
+      const rising = d.c >= d.o;
+      const colour = rising ? C.up : C.down;
+      const x = scale.x(i);
+
+      // Wick and body both grow from the candle's own midpoint, so the reveal
+      // reads as the bar "opening up" rather than sliding in.
+      const mid = scale.y((d.h + d.l) / 2);
+
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = Math.max(1.5, scale.bodyW * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(x, mid + (scale.y(d.h) - mid) * grow);
+      ctx.lineTo(x, mid + (scale.y(d.l) - mid) * grow);
+      ctx.stroke();
+
+      const yO = scale.y(d.o), yC = scale.y(d.c);
+      const top = Math.min(yO, yC), height = Math.max(2, Math.abs(yC - yO));
+      const bodyMid = top + height / 2;
+
+      ctx.fillStyle = colour;
+      ctx.fillRect(
+        x - scale.bodyW / 2,
+        bodyMid + (top - bodyMid) * grow,
+        scale.bodyW,
+        height * grow,
+      );
+    });
+  }
+
+  function drawVolume(f) {
+    const shown = p(f, BEAT.volume) * data.candles.length;
+
+    data.candles.forEach((d, i) => {
+      const reveal = clamp01(shown - i);
+      if (reveal <= 0) return;
+      const grow = outCubic(reveal);
+      const top = scale.volY(d.v);
+      const h = (VOL_TOP + VOL_H - top) * grow;
+
+      ctx.fillStyle = d.c >= d.o ? 'rgba(34,197,94,.42)' : 'rgba(239,68,68,.42)';
+      ctx.fillRect(scale.x(i) - scale.bodyW / 2, VOL_TOP + VOL_H - h, scale.bodyW, h);
+    });
+  }
+
+  function drawMA(f, period = 20) {
+    const t = outQuint(p(f, BEAT.ma));
+    if (t <= 0) return;
+
+    const ma = movingAverage(data.candles, period);
+    const points = ma.map((v, i) => (v == null ? null : { x: scale.x(i), y: scale.y(v) })).filter(Boolean);
+    if (points.length < 2) return;
+
+    const upto = Math.max(2, Math.floor(points.length * t));
+
+    ctx.strokeStyle = C.amber;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    points.slice(0, upto).forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+    ctx.stroke();
+
+    if (t >= 1) {
+      // Anchor the label a quarter of the way along the line, well clear of the
+      // right-hand price axis where it used to collide with the tick labels.
+      const anchor = points[Math.floor(points.length * 0.25)];
+      ctx.font = '700 18px "Brand Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      const text = `MA${period}`;
+      const w = ctx.measureText(text).width;
+      ctx.fillStyle = 'rgba(2,6,23,.85)';
+      ctx.fillRect(anchor.x - 5, anchor.y - 34, w + 10, 24);
+      ctx.fillStyle = C.amber;
+      ctx.fillText(text, anchor.x, anchor.y - 17);
+    }
+  }
+
+  function drawLastMarker(f) {
+    if (f < BEAT.candles[1]) return;
+    const last = data.candles[data.candles.length - 1];
+    const y = scale.y(last.c);
+    const rising = last.c >= last.o;
+
+    ctx.setLineDash([7, 7]);
+    ctx.strokeStyle = rising ? 'rgba(34,197,94,.55)' : 'rgba(239,68,68,.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(PAD_X, y);
+    ctx.lineTo(720 - PAD_X, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Pulse the dot on a fixed 30-frame cycle so it is frame-deterministic.
+    const pulse = 1 + 0.35 * Math.sin(((f % 30) / 30) * Math.PI * 2);
+    ctx.fillStyle = rising ? C.up : C.down;
+    ctx.beginPath();
+    ctx.arc(scale.x(data.candles.length - 1), y, 5.5 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function paintCanvas(f) {
+    ctx.clearRect(0, 0, CSS_W, CSS_H);
+    drawGrid();
+    drawVolume(f);
+    drawCandles(f);
+    drawMA(f);
+    drawLastMarker(f);
+  }
+
+  function paintDom(f) {
+    const s = data.summary;
+    const rising = s.direction === 'up';
+    const colour = rising ? C.up : C.down;
+
+    // Header chips slide up and fade, staggered by 3 frames each.
+    const chips = document.querySelectorAll('#header .chip');
+    chips.forEach((chip, i) => {
+      const t = outCubic(p(f - i * 3, BEAT.header));
+      chip.style.opacity = t;
+      chip.style.transform = `translateY(${(1 - t) * 16}px)`;
+    });
+
+    // The level counts from the previous close to today's, so the motion itself
+    // shows the direction of the day.
+    const tp = outQuint(p(f, BEAT.price));
+    const value = s.prevClose + (s.last - s.prevClose) * tp;
+    const priceEl = document.getElementById('price');
+    priceEl.textContent = value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    priceEl.style.opacity = clamp01(p(f, BEAT.price) * 4);
+    document.getElementById('label').style.opacity = outCubic(p(f - 6, BEAT.header));
+
+    const tpill = p(f, BEAT.pill);
+    const pill = document.getElementById('pill');
+    pill.style.opacity = clamp01(tpill * 3);
+    pill.style.transform = `scale(${tpill > 0 ? outBack(tpill) : 0})`;
+    pill.style.background = rising ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)';
+    pill.style.color = colour;
+    pill.style.border = `2px solid ${rising ? 'rgba(34,197,94,.45)' : 'rgba(239,68,68,.45)'}`;
+    document.getElementById('arrow').textContent = rising ? '▲' : '▼';
+    document.getElementById('pillText').textContent =
+      `${rising ? '+' : ''}${s.changePct.toFixed(2)}%  ${rising ? '+' : ''}${s.change.toFixed(0)}`;
+
+    const tv = outCubic(p(f, BEAT.verdict));
+    const verdict = document.getElementById('verdict');
+    verdict.style.opacity = tv;
+    verdict.style.transform = `translateY(${(1 - tv) * 22}px)`;
+    verdict.style.color = colour;
+  }
+
+  window.__scene = {
+    fps: FPS,
+    totalFrames: TOTAL,
+
+    /** Install the dataset. Called once, before any seek. */
+    load(payload) {
+      data = payload;
+      sizeCanvas();
+      scale = computeScale(data.candles);
+
+      document.getElementById('chipSymbol').textContent = data.name;
+      document.getElementById('chipInterval').textContent = data.interval;
+      document.getElementById('chipDate').textContent = data.summary.date;
+      document.getElementById('verdict').textContent = data.verdict || '';
+
+      // A synthetic series must be visibly marked so a test render can never be
+      // mistaken for a real session.
+      if (data.synthetic) {
+        const chip = document.getElementById('chipDate');
+        chip.className = 'chip chip--warn';
+        chip.textContent = 'SAMPLE DATA';
+      }
+      this.seek(0);
+    },
+
+    /** Paint the scene exactly as it looks at frame `f`. Pure. */
+    seek(f) {
+      if (!data) throw new Error('__scene.load() must be called before seek()');
+      paintCanvas(f);
+      paintDom(f);
+      document.documentElement.dataset.frame = String(f);
+    },
+  };
+})();
+</script>
