@@ -216,3 +216,41 @@ Repository **variables** (not secret): `HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`.
 
 The finished MP4, the run report, and the TTS word timings upload as an artifact —
 including on failure, so a bad run can be inspected rather than guessed at.
+
+## Publishing
+
+Uses the **Instagram API with Instagram Login** — no Facebook Page anywhere. That is
+a different surface from the Page-based Graph API, and the differences matter:
+
+| | Instagram Login (this) | Facebook Page route |
+| --- | --- | --- |
+| Host | `graph.instagram.com` | `graph.facebook.com` |
+| Token | Instagram user token | Page token |
+| Permissions | `instagram_business_basic`, `instagram_business_content_publish` | `instagram_basic`, `instagram_content_publish` |
+| Facebook Page | not needed | required |
+
+```bash
+node pipeline/publish-reel.js --whoami                    # check the token first
+node pipeline/publish-reel.js --url https://.../reel.mp4 \
+  --caption-file caption.txt --report pipeline/out/run-report.json
+```
+
+Passing `--report` makes the publisher refuse a reel the build already marked
+unpublishable — sample data or no voiceover — rather than finding out on the feed.
+
+### The video must be at a public URL first
+
+Instagram **fetches** the file; it never accepts an upload. So the MP4 has to be
+reachable over plain HTTPS with no authentication before publishing runs.
+
+This repo is private, which rules out the obvious options: Actions artifacts need a
+token, and release assets on a private repo do too. Something publicly readable is
+required — a public bucket (Cloudflare R2's free tier works), or a separate public
+repo used only as a media host.
+
+### Unverified details
+
+`docs.instagram.com` and `graph.instagram.com` are both unreachable from the build
+environment, so the host, API version and field names are inferred rather than
+confirmed. `IG_API_HOST` and `IG_API_VERSION` override them, and every failure
+prints the exact URL it called so a mismatch is obvious.
