@@ -6,7 +6,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { generateVideo, getVideoStatus } from '../../../src/heygen.js';
+import { generateVideo, getVideoStatus, listAvatars } from '../../../src/heygen.js';
 import { config } from '../../../src/config.js';
 
 // The bottom half of a 1080x1920 hybrid frame.
@@ -14,11 +14,24 @@ export const PANEL = { width: 1080, height: 780 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * HeyGen takes `avatar_id` for studio avatars and `talking_photo_id` for photo
+ * avatars, and rejects the wrong one with a bare "not found". Rather than making
+ * that a config field somebody gets wrong six months from now, look the id up and
+ * decide from what the account actually holds.
+ */
+export async function resolveCharacterKind(id) {
+  const { avatars, talkingPhotos } = await listAvatars();
+  if (avatars.some((a) => a.id === id)) return 'avatar';
+  if (talkingPhotos.some((p) => p.id === id)) return 'talking_photo';
+  throw new Error(`No avatar or talking photo in this HeyGen account has id ${id}`);
+}
+
 export async function renderPresenter({
   script,
   avatarId = process.env.HEYGEN_AVATAR_ID || config.defaultAvatarId,
   voiceId = process.env.HEYGEN_VOICE_ID || config.defaultVoiceId,
-  characterKind = 'avatar',
+  characterKind,
   speed = 1,
   width = PANEL.width,
   height = PANEL.height,
@@ -32,11 +45,13 @@ export async function renderPresenter({
   if (!avatarId) throw new Error('No avatar id. Set HEYGEN_AVATAR_ID in .env or pass avatarId.');
   if (!voiceId) throw new Error('No voice id. Set HEYGEN_VOICE_ID in .env or pass voiceId.');
 
+  const kind = characterKind || (await resolveCharacterKind(avatarId));
+
   const { videoId } = await generateVideo({
     script: script.trim(),
     avatarId,
     voiceId,
-    characterKind,
+    characterKind: kind,
     speed,
     width,
     height,
@@ -46,7 +61,7 @@ export async function renderPresenter({
     captionsBurnedIn: false,
   });
 
-  onStatus?.({ videoId, status: 'submitted' });
+  onStatus?.({ videoId, status: 'submitted', characterKind: kind });
 
   for (let i = 0; i < maxPolls; i += 1) {
     await sleep(pollMs);
