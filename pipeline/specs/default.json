@@ -1,0 +1,55 @@
+{
+  "title": "Pre-market brief",
+  "chartSymbol": "nifty",
+  "chartRange": "3mo",
+  "verdict": "FLAT BAND",
+  "music": "assets/music/bed.wav",
+  "body": "Pehli baat — Nifty ne aaj flat band diya, lekin volume pichhle hafte se pachees percent zyada tha. Doosri — F I I ne cash market me lagataar teesre din buying ki hai. Aur teesri baat, jo sabse important hai — R B I ki policy meeting is hafte hai, aur banking stocks pehle se hi position bana rahe hain.",
+  "segments": [
+    {
+      "type": "hook",
+      "seconds": 7.4,
+      "say": "Namaste, main Rajesh. Aaj market kholne se pehle teen cheezein aapko pata honi chahiye. Teesri wali sabse zaroori hai.",
+      "card": {
+        "chips": ["PRE-MARKET", "NSE"],
+        "headline": "Market kholne se pehle",
+        "power": "TEEN BAATEIN",
+        "footnote": "Rajesh Technical Traders"
+      }
+    },
+    { "type": "chart", "seconds": 5 },
+    { "type": "stock", "seconds": 4, "query": "stock market trading screen" },
+    {
+      "type": "cutin",
+      "seconds": 2.6,
+      "say": "Ab is number ko dhyan se dekhiye.",
+      "card": {
+        "chips": ["FII FLOW", "CASH MARKET"],
+        "headline": "Lagataar teesre din",
+        "power": "KHAREEDARI",
+        "footnote": "Source: NSE provisional"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": 7,
+      "card": {
+        "chips": ["FII FLOW", "CASH MARKET"],
+        "headline": "Lagataar teesre din",
+        "power": "KHAREEDARI",
+        "stat": { "value": "+2,847 Cr", "label": "Net buy · 3 din", "direction": "up" },
+        "footnote": "Source: NSE provisional"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": 5,
+      "card": {
+        "chips": ["ROZ SUBAH 7 BAJE"],
+        "headline": "Poori list aur levels ke liye",
+        "power": "comment “MARKET”",
+        "footnote": "Educational content · Investment advice nahi"
+      }
+    }
+  ]
+}

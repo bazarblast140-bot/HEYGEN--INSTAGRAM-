@@ -12,7 +12,8 @@
     "chart": "node pipeline/render-chart.js",
     "chart:fixture": "node pipeline/render-chart.js --fixture",
     "hybrid": "node pipeline/compose-hybrid.js",
-    "card": "node pipeline/render-card.js"
+    "card": "node pipeline/render-card.js",
+    "reel": "node pipeline/build-reel.js"
   },
   "engines": {
     "node": ">=20"

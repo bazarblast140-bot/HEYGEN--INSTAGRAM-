@@ -175,3 +175,44 @@ npm run card -- --spec my-card.json --layout full --seconds 5
 Spec fields: `chips[]`, `headline`, `power` (the serif-italic word), optional
 `stat: { value, label, direction }`, `footnote`. Long stat values are measured and
 shrunk to fit on one line rather than wrapping.
+
+## Building a whole reel
+
+```bash
+node pipeline/build-reel.js --spec pipeline/specs/default.json
+node pipeline/build-reel.js --spec ... --fixture      # sample market data
+node pipeline/build-reel.js --spec ... --no-avatar    # skip HeyGen, save credits
+```
+
+A spec lists the beats. `hook` and `cutin` are avatar panels; `chart`, `card` and
+`stock` are full-frame. `body` is the narration that covers everything between.
+
+### Degrading instead of failing
+
+HeyGen quota runs out, stock providers rate-limit, and a market holiday leaves no
+fresh candles. None of that should cost the day's post, so every optional stage
+falls back to something that still renders, and the fallback is written into
+`run-report.json`:
+
+| Stage fails | What happens instead |
+| --- | --- |
+| Live market data | Sample series, and the reel is marked not publishable |
+| Avatar (quota, credit, plan) | The beat becomes a full-frame card and TTS speaks the line |
+| Voiceover | Silence of the same length, and the reel is marked not publishable |
+| Stock footage | The beat is dropped and the reel is that much shorter |
+
+The build still produces a file so you can look at what went wrong. Whether it may
+be **published** is a separate flag — `publishable` is true only with live data and
+a real voiceover.
+
+## GitHub Actions
+
+`.github/workflows/build-reel.yml` runs the whole thing on a runner, where the APIs
+this pipeline needs are actually reachable. Weekdays at 07:00 IST (`30 1 * * 1-5`,
+since Actions cron is UTC), or on demand from the Actions tab.
+
+Repository **secrets**: `HEYGEN_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`.
+Repository **variables** (not secret): `HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`.
+
+The finished MP4, the run report, and the TTS word timings upload as an artifact —
+including on failure, so a bad run can be inspected rather than guessed at.

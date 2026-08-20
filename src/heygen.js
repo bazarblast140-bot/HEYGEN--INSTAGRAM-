@@ -116,6 +116,48 @@ export async function getVideoStatus(videoId) {
   };
 }
 
+/**
+ * Text to speech. Far cheaper than avatar video, so it carries every second of a
+ * reel the avatar is not on screen. Returns word-level timestamps, which is what
+ * lets captions be cut to the word without a separate alignment pass.
+ *
+ * NOTE: the REST path could not be verified against HeyGen's docs (docs.heygen.com
+ * is unreachable from the build environment). `/v3/speech` is the best inference
+ * from the surrounding v3 voice endpoints. If it 404s, set HEYGEN_SPEECH_PATH to
+ * the correct path rather than editing this file — the error below says so too.
+ */
+const SPEECH_PATH = process.env.HEYGEN_SPEECH_PATH || '/v3/speech';
+
+export async function createSpeech({ text, voiceId, speed = 1, locale, inputType = 'text' }) {
+  if (!text?.trim()) throw new Error('createSpeech needs text');
+  if (!voiceId) throw new Error('createSpeech needs a voiceId');
+
+  let payload;
+  try {
+    payload = await request(SPEECH_PATH, {
+      method: 'POST',
+      body: { text: text.trim(), voice_id: voiceId, speed, input_type: inputType, ...(locale ? { locale } : {}) },
+    });
+  } catch (err) {
+    if (err.status === 404) {
+      throw new Error(
+        `HeyGen TTS endpoint ${SPEECH_PATH} returned 404. The path is unverified — ` +
+        'check the current docs and set HEYGEN_SPEECH_PATH to the right one.',
+      );
+    }
+    throw err;
+  }
+
+  const data = payload?.data || payload;
+  if (!data?.audio_url) throw new Error('HeyGen TTS returned no audio_url');
+
+  return {
+    audioUrl: data.audio_url,
+    duration: data.duration,
+    wordTimestamps: data.word_timestamps || [],
+  };
+}
+
 export async function getQuota() {
   const { data } = await request('/v2/user/remaining_quota');
   return data;
