@@ -23,17 +23,17 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   html, body {
-    width: 720px; height: 1280px;
+    width: 720px; height: var(--stage-h, 1280px);
     background: var(--bg);
     color: var(--text);
     font-family: "Brand Sans", sans-serif;
     overflow: hidden;
   }
 
-  #stage { position: relative; width: 720px; height: 1280px; }
+  #stage { position: relative; width: 720px; height: var(--stage-h, 1280px); }
 
   /* ---- header ---- */
-  #header { position: absolute; top: 52px; left: 48px; right: 48px; display: flex; gap: 10px; align-items: center; }
+  #header { position: absolute; top: var(--header-top); left: 48px; right: 48px; display: flex; gap: 10px; align-items: center; }
   .chip {
     font-family: "Brand Mono", monospace; font-weight: 700;
     font-size: 19px; letter-spacing: .1em; text-transform: uppercase;
@@ -45,7 +45,7 @@
   .chip--warn { background: rgba(245,158,11,.13); color: var(--amber); border-color: rgba(245,158,11,.45); }
 
   /* ---- headline number ---- */
-  #numberBlock { position: absolute; top: 132px; left: 48px; right: 48px; }
+  #numberBlock { position: absolute; top: var(--number-top); left: 48px; right: 48px; }
   #label {
     font-family: "Brand Mono", monospace; font-weight: 500;
     font-size: 22px; letter-spacing: .16em; text-transform: uppercase; color: var(--neutral);
@@ -53,7 +53,7 @@
   }
   #price {
     font-family: "Brand Mono", monospace; font-weight: 700;
-    font-size: 104px; line-height: .95; letter-spacing: -.03em;
+    font-size: var(--price-size); line-height: .95; letter-spacing: -.03em;
     font-variant-numeric: tabular-nums;
   }
   #pill {
@@ -66,18 +66,19 @@
   #arrow { font-size: 30px; line-height: 1; }
 
   /* ---- chart ---- */
-  #chart { position: absolute; top: 372px; left: 0; }
+  #chart { position: absolute; top: var(--chart-top); left: 0; }
 
   /* ---- verdict ---- */
   #verdict {
-    position: absolute; top: 1082px; left: 48px; right: 48px;
+    position: absolute; top: var(--verdict-top); left: 48px; right: 48px;
+    display: var(--verdict-display, block);
     font-family: "Brand Serif", Georgia, serif; font-style: italic;
     font-size: 76px; line-height: 1; letter-spacing: -.015em;
     text-align: center;
   }
 
   /* Caption band is burned in later by ffmpeg — nothing may sit below this line. */
-  #safe { position: absolute; top: 1152px; left: 0; width: 720px; height: 128px; }
+  #safe { position: absolute; top: var(--safe-top); left: 0; width: 720px; height: 128px; }
 </style>
 
 <div id="stage">
@@ -128,6 +129,19 @@
   const outQuint  = (t) => 1 - Math.pow(1 - t, 5);
   const outBack   = (t) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
 
+  // Two framings for the same scene. `full` fills the reel; `panel` occupies only
+  // the top half of a hybrid frame with the presenter composited beneath it.
+  const LAYOUTS = {
+    full:  { stageH: 1280, headerTop: 52, numberTop: 132, priceSize: 104,
+             chartTop: 372, chartH: 700, priceH: 470, volTop: 540, volH: 118,
+             verdictTop: 1082, safeTop: 1152, showVerdict: true },
+    panel: { stageH: 760,  headerTop: 30, numberTop: 96,  priceSize: 74,
+             chartTop: 272, chartH: 488, priceH: 344, volTop: 386, volH: 84,
+             verdictTop: 0, safeTop: 760, showVerdict: false },
+  };
+
+  let L = LAYOUTS.full;
+
   const canvas = document.getElementById('chart');
   const ctx = canvas.getContext('2d');
 
@@ -135,20 +149,32 @@
   // at a higher deviceScaleFactor the canvas backing store is enlarged to match and
   // the context is scaled once, so the chart stays vector-sharp instead of being
   // upscaled by the browser.
-  const CSS_W = 720, CSS_H = 700;
+  const CSS_W = 720;
   function sizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(CSS_W * dpr);
-    canvas.height = Math.round(CSS_H * dpr);
+    canvas.height = Math.round(L.chartH * dpr);
     canvas.style.width = CSS_W + 'px';
-    canvas.style.height = CSS_H + 'px';
+    canvas.style.height = L.chartH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function applyLayout(name) {
+    L = LAYOUTS[name] || LAYOUTS.full;
+    const root = document.documentElement.style;
+    root.setProperty('--stage-h', L.stageH + 'px');
+    root.setProperty('--header-top', L.headerTop + 'px');
+    root.setProperty('--number-top', L.numberTop + 'px');
+    root.setProperty('--price-size', L.priceSize + 'px');
+    root.setProperty('--chart-top', L.chartTop + 'px');
+    root.setProperty('--verdict-top', L.verdictTop + 'px');
+    root.setProperty('--verdict-display', L.showVerdict ? 'block' : 'none');
+    root.setProperty('--safe-top', L.safeTop + 'px');
   }
 
   // Geometry inside the canvas (720 x 700).
   const PAD_X = 48;
-  const PRICE_TOP = 24, PRICE_H = 470;
-  const VOL_TOP = 540, VOL_H = 118;
+  const PRICE_TOP = 24;
   const PLOT_W = 720 - PAD_X * 2;
 
   let data = null;   // set by __load
@@ -168,9 +194,9 @@
     return {
       min, max, maxVol, step,
       bodyW: Math.max(3, step * 0.62),
-      y: (v) => PRICE_TOP + (1 - (v - min) / (max - min)) * PRICE_H,
+      y: (v) => PRICE_TOP + (1 - (v - min) / (max - min)) * L.priceH,
       x: (i) => PAD_X + step * (i + 0.5),
-      volY: (v) => VOL_TOP + VOL_H - (v / maxVol) * VOL_H,
+      volY: (v) => L.volTop + L.volH - (v / maxVol) * L.volH,
     };
   }
 
@@ -258,10 +284,10 @@
       if (reveal <= 0) return;
       const grow = outCubic(reveal);
       const top = scale.volY(d.v);
-      const h = (VOL_TOP + VOL_H - top) * grow;
+      const h = (L.volTop + L.volH - top) * grow;
 
       ctx.fillStyle = d.c >= d.o ? 'rgba(34,197,94,.42)' : 'rgba(239,68,68,.42)';
-      ctx.fillRect(scale.x(i) - scale.bodyW / 2, VOL_TOP + VOL_H - h, scale.bodyW, h);
+      ctx.fillRect(scale.x(i) - scale.bodyW / 2, L.volTop + L.volH - h, scale.bodyW, h);
     });
   }
 
@@ -323,7 +349,7 @@
   }
 
   function paintCanvas(f) {
-    ctx.clearRect(0, 0, CSS_W, CSS_H);
+    ctx.clearRect(0, 0, CSS_W, L.chartH);
     drawGrid();
     drawVolume(f);
     drawCandles(f);
@@ -378,6 +404,7 @@
     /** Install the dataset. Called once, before any seek. */
     load(payload) {
       data = payload;
+      applyLayout(payload.layout || 'full');
       sizeCanvas();
       scale = computeScale(data.candles);
 

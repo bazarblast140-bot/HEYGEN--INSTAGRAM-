@@ -45,7 +45,9 @@ async function main() {
     : await fetchCandles(args.symbol || 'nifty', { range: args.range || '3mo' });
 
   const summary = summarise(series);
-  const data = { ...series, summary, verdict: args.verdict || verdictFor(summary) };
+  const layout = args.layout || 'full';
+  if (!['full', 'panel'].includes(layout)) { console.error(`--layout must be full or panel`); process.exit(1); }
+  const data = { ...series, summary, layout, verdict: args.verdict || verdictFor(summary) };
 
   console.log(`${data.name}  ${data.candles.length} bars  ${summary.last.toFixed(2)}  ${summary.changePct >= 0 ? '+' : ''}${summary.changePct.toFixed(2)}%${data.synthetic ? '   [SAMPLE DATA]' : ''}`);
 
@@ -56,6 +58,7 @@ async function main() {
     scenePath: path.join(HERE, 'src', 'render', 'scenes', 'candles.html'),
     data,
     outDir: frameDir,
+    height: layout === 'panel' ? 760 : 1280,
     onProgress: (f, total) => process.stdout.write(`\rcapturing ${f}/${total}`),
   });
   process.stdout.write(`\rcaptured ${totalFrames}/${totalFrames} frames\n`);
@@ -69,7 +72,8 @@ async function main() {
   );
 
   const problems = [];
-  if (info.width !== 1080 || info.height !== 1920) problems.push(`expected 1080x1920, got ${info.width}x${info.height}`);
+  const expect = layout === 'panel' ? { w: 1080, h: 1140 } : { w: 1080, h: 1920 };
+  if (info.width !== expect.w || info.height !== expect.h) problems.push(`expected ${expect.w}x${expect.h}, got ${info.width}x${info.height}`);
   if (Math.abs(info.fps - 30) > 0.01) problems.push(`expected 30fps, got ${info.fps}`);
   if (info.frames !== null && info.frames !== totalFrames) problems.push(`expected ${totalFrames} frames, got ${info.frames}`);
   if (problems.length) { console.error('FAILED:\n  ' + problems.join('\n  ')); process.exit(1); }

@@ -69,3 +69,29 @@ assets/fonts/                 bundled woff2 — no network at render time
 browser under `PLAYWRIGHT_BROWSERS_PATH` or `/opt/pw-browsers` before falling back to
 Playwright's own, so a version mismatch does not trigger a download. Override with
 `CHROMIUM_PATH`.
+
+## Hybrid frame
+
+`compose-hybrid.js` stacks the chart panel over the presenter:
+
+```
+0     ┌────────────────────┐
+      │ chart / graphics   │  1080 x 1140
+1140  ├────────────────────┤  2px divider
+      │ presenter          │  1080 x  780
+1920  └────────────────────┘
+```
+
+```bash
+npm run chart -- --fixture --layout panel --out pipeline/out/chart-panel.mp4
+npm run hybrid -- --chart pipeline/out/chart-panel.mp4 --script "Aaj Nifty flat band hua..."
+```
+
+Given `--script` and no `--presenter`, the presenter clip is generated from the
+HeyGen avatar and voice in `.env` (`HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`) first.
+Pass `--presenter <file>` to composite a clip you already have.
+
+The **presenter drives the duration**: the voiceover lives in that clip, so the
+chart panel holds on its last frame if it is shorter and is trimmed if longer —
+a long script can never truncate the speech. The presenter is scaled to cover
+and centre-cropped, so whatever aspect HeyGen returns fills the panel.
