@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HeyGen Instagram — Reel Studio</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>HeyGen Instagram</h1>
+    </div>
+    <span id="health" class="pill pill--muted">checking…</span>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>Script</h2>
+      <textarea id="script" rows="8" placeholder="Hook in the first 2 seconds. Then the value. Then the CTA."></textarea>
+      <div class="meter"><span id="wordCount">0</span> words · <span id="estimate">~0s</span> · limit 220 words</div>
+
+      <div class="grid">
+        <label>
+          Avatar
+          <select id="avatar"><option value="">loading…</option></select>
+        </label>
+        <label>
+          Voice
+          <select id="voice"><option value="">loading…</option></select>
+        </label>
+        <label>
+          Format
+          <select id="preset"></select>
+        </label>
+        <label>
+          Speed
+          <input id="speed" type="number" min="0.5" max="1.5" step="0.05" value="1" />
+        </label>
+        <label>
+          Background
+          <input id="background" type="color" value="#111827" />
+        </label>
+        <label class="checkbox">
+          <input id="captions" type="checkbox" checked />
+          Burn-in captions
+        </label>
+      </div>
+
+      <button id="generate" class="primary">Generate reel</button>
+      <p id="error" class="error" hidden></p>
+    </section>
+
+    <section class="panel">
+      <h2>Output</h2>
+      <div class="preview" id="previewFrame">
+        <video id="player" controls playsinline hidden></video>
+        <div id="placeholder" class="placeholder">9:16 preview appears here</div>
+      </div>
+      <div class="status">
+        <span id="status" class="pill pill--muted">idle</span>
+        <a id="download" class="ghost" hidden download>Download MP4</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
