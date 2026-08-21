@@ -200,7 +200,10 @@ async function main() {
       const how = narration.source === 'avatar' ? 'avatar render' : 'speech synthesis';
       console.log(`  ${narration.duration.toFixed(1)}s in Rajesh's voice via ${how}`);
     } catch (err) {
-      note(`narration unavailable (${err.message.slice(0, 110)}) — the reel will be silent`);
+      // Not truncated. When the reel comes out silent this sentence is the only
+      // record of why, and the first provider's refusal had been filling the
+      // whole budget — hiding the second provider's, which was the actionable one.
+      note(`narration unavailable — the reel will be silent. ${err.message}`);
     }
   }
 
