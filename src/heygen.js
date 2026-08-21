@@ -180,6 +180,11 @@ export async function getVideoStatus(videoId) {
  * run and logged, so it can be pinned with HEYGEN_SPEECH_PATH afterwards.
  */
 export const SPEECH_CANDIDATES = [
+  // The v1 family uses dot-notation verbs -- /v1/video_status.get is the one
+  // already in use here -- so the v1 speech route, if there is one, looks like
+  // this rather than like a REST noun.
+  '/v1/tts.generate', '/v1/speech.generate', '/v1/voice.generate',
+  '/v1/audio.generate', '/v1/text_to_speech.generate',
   '/v3/speech', '/v2/speech', '/v1/speech',
   '/v3/speech/generate', '/v2/speech/generate',
   '/v3/text_to_speech', '/v2/text_to_speech', '/v1/text_to_speech',

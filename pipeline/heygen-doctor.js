@@ -38,6 +38,8 @@ async function attempt(label, fn) {
 const SPEECH_HOSTS = ['https://api.heygen.com', 'https://api2.heygen.com'];
 
 const SPEECH_CANDIDATES = [
+  '/v1/tts.generate', '/v1/speech.generate', '/v1/voice.generate',
+  '/v1/audio.generate', '/v1/text_to_speech.generate',
   '/v3/speech', '/v2/speech', '/v1/speech',
   '/v3/speech/generate', '/v2/speech/generate',
   '/v3/text_to_speech', '/v2/text_to_speech', '/v1/text_to_speech',
@@ -111,6 +113,22 @@ async function main() {
         // else — 401, 403, 422, 429 — means the path is live and worth reporting.
         if (status === 404) continue;
         console.log(`  ${ok(String(status))}   ${host}${candidate} ${dim(String(err.message).slice(0, 80))}`);
+      }
+    }
+  }
+
+  // 405 on /v2/voice/generate says that path is real and POST is not its verb.
+  // Worth settling, because a live route is a far better lead than another guess.
+  if (!winner) {
+    console.log(`\n  ${dim('Method sweep on paths that answered 405')}`);
+    for (const method of ['GET', 'PUT', 'PATCH']) {
+      try {
+        const payload = await heygenRequest('/v2/voice/generate', { method, body: method === 'GET' ? undefined : body });
+        const data = payload?.data || payload;
+        console.log(`  ${ok(method)}   /v2/voice/generate ${dim(JSON.stringify(data).slice(0, 160))}`);
+        if (data?.audio_url) winner = { host: SPEECH_HOSTS[0], path: '/v2/voice/generate', data, method };
+      } catch (err) {
+        console.log(`  ${dim(`${err.status || '?'}   ${method} /v2/voice/generate`)}`);
       }
     }
   }
