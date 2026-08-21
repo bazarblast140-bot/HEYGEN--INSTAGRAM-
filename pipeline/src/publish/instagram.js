@@ -19,16 +19,18 @@
 // field names are inferred. Host and version are env-overridable and every
 // failure prints the exact URL it called, so a mismatch is a config change.
 
+import { env } from '../../../src/config.js';
+
 const SURFACES = {
   facebook:  'https://graph.facebook.com',
   instagram: 'https://graph.instagram.com',
 };
 
-const DEFAULT_SURFACE = process.env.IG_SURFACE || 'facebook';
-const VERSION = process.env.IG_API_VERSION || 'v23.0';
+const DEFAULT_SURFACE = env('IG_SURFACE') || 'facebook';
+const VERSION = env('IG_API_VERSION') || 'v23.0';
 
 function hostFor(surface) {
-  if (process.env.IG_API_HOST) return process.env.IG_API_HOST;
+  if (env('IG_API_HOST')) return env('IG_API_HOST');
   const host = SURFACES[surface];
   if (!host) throw new Error(`Unknown surface "${surface}". Use one of: ${Object.keys(SURFACES).join(', ')}`);
   return host;
@@ -107,8 +109,8 @@ export async function publishContainer({ igUserId, containerId, token, surface }
 }
 
 export async function publishReel({
-  igUserId = process.env.IG_USER_ID,
-  token = process.env.IG_ACCESS_TOKEN,
+  igUserId = env('IG_USER_ID'),
+  token = env('IG_ACCESS_TOKEN'),
   videoUrl,
   caption,
   shareToFeed,
@@ -135,7 +137,7 @@ export async function publishReel({
  * Run it before spending a render — an hour of build is wasted on a token that was
  * never going to publish.
  */
-export async function whoami({ igUserId = process.env.IG_USER_ID, token = process.env.IG_ACCESS_TOKEN } = {}) {
+export async function whoami({ igUserId = env('IG_USER_ID'), token = env('IG_ACCESS_TOKEN') } = {}) {
   if (!token) throw new Error('No IG_ACCESS_TOKEN. Set it in .env or pass token.');
 
   const results = [];

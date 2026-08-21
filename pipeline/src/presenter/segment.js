@@ -7,7 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { generateVideo, getVideoStatus, listAvatars } from '../../../src/heygen.js';
-import { config } from '../../../src/config.js';
+import { config, env } from '../../../src/config.js';
 
 // The bottom half of a 1080x1920 hybrid frame.
 export const PANEL = { width: 1080, height: 780 };
@@ -30,7 +30,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * out than a lookup that quietly disagrees with reality.
  */
 export async function resolveCharacterKind(id) {
-  const configured = process.env.HEYGEN_AVATAR_KIND;
+  const configured = env('HEYGEN_AVATAR_KIND');
   if (configured) return configured;
 
   try {
@@ -46,8 +46,8 @@ export async function resolveCharacterKind(id) {
 
 export async function renderPresenter({
   script,
-  avatarId = process.env.HEYGEN_AVATAR_ID || config.defaultAvatarId,
-  voiceId = process.env.HEYGEN_VOICE_ID || config.defaultVoiceId,
+  avatarId = env('HEYGEN_AVATAR_ID') || config.defaultAvatarId,
+  voiceId = env('HEYGEN_VOICE_ID') || config.defaultVoiceId,
   characterKind,
   speed = 1,
   width = PANEL.width,

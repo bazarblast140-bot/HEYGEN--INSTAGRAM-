@@ -121,31 +121,49 @@ export async function getVideoStatus(videoId) {
  * reel the avatar is not on screen. Returns word-level timestamps, which is what
  * lets captions be cut to the word without a separate alignment pass.
  *
- * NOTE: the REST path could not be verified against HeyGen's docs (docs.heygen.com
- * is unreachable from the build environment). `/v3/speech` is the best inference
- * from the surrounding v3 voice endpoints. If it 404s, set HEYGEN_SPEECH_PATH to
- * the correct path rather than editing this file — the error below says so too.
+ * The first guess at the REST path, /v3/speech, returned 404 in production. Rather
+ * than guess again, try the plausible paths in order and keep whichever answers.
+ * The winner is logged so it can be pinned with HEYGEN_SPEECH_PATH, which skips
+ * the probing entirely on later runs.
  */
-const SPEECH_PATH = process.env.HEYGEN_SPEECH_PATH || '/v3/speech';
+const SPEECH_PATHS = process.env.HEYGEN_SPEECH_PATH
+  ? [process.env.HEYGEN_SPEECH_PATH.trim()]
+  : ['/v2/speech', '/v1/speech', '/v3/speech', '/v2/audio/generate', '/v1/audio/generate'];
+
+let resolvedSpeechPath = null;
 
 export async function createSpeech({ text, voiceId, speed = 1, locale, inputType = 'text' }) {
   if (!text?.trim()) throw new Error('createSpeech needs text');
   if (!voiceId) throw new Error('createSpeech needs a voiceId');
 
+  const body = { text: text.trim(), voice_id: voiceId, speed, input_type: inputType, ...(locale ? { locale } : {}) };
+  const candidates = resolvedSpeechPath ? [resolvedSpeechPath] : SPEECH_PATHS;
+
   let payload;
-  try {
-    payload = await request(SPEECH_PATH, {
-      method: 'POST',
-      body: { text: text.trim(), voice_id: voiceId, speed, input_type: inputType, ...(locale ? { locale } : {}) },
-    });
-  } catch (err) {
-    if (err.status === 404) {
-      throw new Error(
-        `HeyGen TTS endpoint ${SPEECH_PATH} returned 404. The path is unverified — ` +
-        'check the current docs and set HEYGEN_SPEECH_PATH to the right one.',
-      );
+  const tried = [];
+
+  for (const path of candidates) {
+    try {
+      payload = await request(path, { method: 'POST', body });
+      if (resolvedSpeechPath !== path) {
+        resolvedSpeechPath = path;
+        console.log(`HeyGen TTS endpoint resolved to ${path} — pin it with HEYGEN_SPEECH_PATH to skip probing.`);
+      }
+      break;
+    } catch (err) {
+      // Only a missing endpoint justifies trying the next candidate. Any other
+      // status means the endpoint exists and rejected the request, which must
+      // surface rather than be masked by further probing.
+      if (err.status !== 404) throw err;
+      tried.push(path);
     }
-    throw err;
+  }
+
+  if (!payload) {
+    throw new Error(
+      `No HeyGen TTS endpoint answered — all returned 404. Tried: ${tried.join(', ')}. ` +
+      'Find the correct path in the current docs and set HEYGEN_SPEECH_PATH.',
+    );
   }
 
   const data = payload?.data || payload;

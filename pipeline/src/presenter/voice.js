@@ -3,10 +3,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createSpeech } from '../../../src/heygen.js';
+import { env } from '../../../src/config.js';
 
 export async function renderVoice({
   text,
-  voiceId = process.env.HEYGEN_VOICE_ID,
+  voiceId = env('HEYGEN_VOICE_ID'),
   speed = 1.02,
   locale = 'hi-IN',
   out,

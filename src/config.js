@@ -1,10 +1,23 @@
 import 'dotenv/config';
 
+/**
+ * Read an environment value with surrounding whitespace removed.
+ *
+ * Not defensive padding: a GitHub repository variable pasted with a trailing
+ * newline sent HeyGen an avatar id ending in \r\n, and HeyGen answered "avatar
+ * look not found" — an error that points at the id rather than at the invisible
+ * character after it. Every id, key and token now goes through here.
+ */
+export function env(name, fallback = '') {
+  const value = process.env[name];
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
 export const config = {
-  apiKey: process.env.HEYGEN_API_KEY || '',
-  port: Number(process.env.PORT) || 3000,
-  defaultAvatarId: process.env.DEFAULT_AVATAR_ID || '',
-  defaultVoiceId: process.env.DEFAULT_VOICE_ID || '',
+  apiKey: env('HEYGEN_API_KEY'),
+  port: Number(env('PORT')) || 3000,
+  defaultAvatarId: env('DEFAULT_AVATAR_ID'),
+  defaultVoiceId: env('DEFAULT_VOICE_ID'),
 };
 
 // Instagram-friendly output sizes. Reels/Stories are 9:16, feed posts are 1:1.

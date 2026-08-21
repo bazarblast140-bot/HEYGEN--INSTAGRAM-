@@ -15,6 +15,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { fetchCandles, summarise } from './src/harvest/yahoo.js';
+import { fetchCandles as fetchFromStooq } from './src/harvest/stooq.js';
 import { syntheticSeries } from './src/harvest/fixture.js';
 import { captureScene } from './src/render/capture.js';
 import { encodeFrames, probe } from './src/assemble/encode.js';
@@ -131,11 +132,27 @@ async function main() {
     series = syntheticSeries();
     note('synthetic sample data — this reel must not be published');
   } else {
-    try {
-      series = await fetchCandles(spec.chartSymbol || 'nifty', { range: spec.chartRange || '3mo' });
-    } catch (err) {
+    // Two independent sources before giving up. Yahoo has the richer payload but
+    // refuses CI address ranges outright; Stooq is plainer and answers.
+    const sources = [
+      ['Yahoo', () => fetchCandles(spec.chartSymbol || 'nifty', { range: spec.chartRange || '3mo' })],
+      ['Stooq', () => fetchFromStooq(spec.chartSymbol || 'nifty')],
+    ];
+
+    const failures = [];
+    for (const [name, fetchFrom] of sources) {
+      try {
+        series = await fetchFrom();
+        if (failures.length) note(`${name} supplied the data after ${failures.join('; ')}`);
+        break;
+      } catch (err) {
+        failures.push(`${name} failed (${err.message.slice(0, 70)})`);
+      }
+    }
+
+    if (!series) {
       series = syntheticSeries();
-      note(`live market data failed (${err.message.slice(0, 90)}) — fell back to sample data`);
+      note(`no live market data — ${failures.join('; ')} — fell back to sample data`);
     }
   }
   const chartData = { ...series, summary: summarise(series), verdict: spec.verdict || '' };

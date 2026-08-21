@@ -14,6 +14,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { env } from '../../../src/config.js';
 
 const PEXELS = 'https://api.pexels.com/videos/search';
 const PIXABAY = 'https://pixabay.com/api/videos/';
@@ -81,8 +82,8 @@ async function searchPixabay(query, { limit, minDuration, apiKey }) {
 export async function searchStock(query, {
   limit = 5,
   minDuration = 4,
-  pexelsKey = process.env.PEXELS_API_KEY,
-  pixabayKey = process.env.PIXABAY_API_KEY,
+  pexelsKey = env('PEXELS_API_KEY'),
+  pixabayKey = env('PIXABAY_API_KEY'),
 } = {}) {
   const attempts = [
     pexelsKey && (() => searchPexels(query, { limit, minDuration, apiKey: pexelsKey })),
