@@ -183,9 +183,28 @@ async function main() {
   // the same treatment: does the key work, is there a CLONED voice on the
   // account, and does synthesis actually return audio and timings.
   console.log('\nElevenLabs');
-  if (!env('ELEVENLABS_API_KEY')) {
+  const elevenKey = env('ELEVENLABS_API_KEY');
+  if (!elevenKey) {
     console.log(dim('  No ELEVENLABS_API_KEY — skipped.'));
   } else {
+    // A 401 has several causes that look identical from the outside: a mistyped
+    // key, a key pasted with invisible whitespace, or a restricted key without
+    // the voices_read scope. Print the shape of what arrived — never the key —
+    // and the provider's own full sentence, which names which one it is.
+    const raw = process.env.ELEVENLABS_API_KEY || '';
+    console.log(dim(`  key ${elevenKey.length} chars, ends ...${elevenKey.slice(-4)}` +
+      (raw !== elevenKey ? `, had ${raw.length - elevenKey.length} chars of whitespace around it` : '')));
+    if (!/^sk_/.test(elevenKey)) {
+      console.log(`  ${bad('That does not start with "sk_" — ElevenLabs keys do.')}`);
+    }
+    try {
+      const res = await fetch('https://api.elevenlabs.io/v1/user', { headers: { 'xi-api-key': elevenKey } });
+      const text = await res.text();
+      console.log(`  ${res.ok ? ok(String(res.status)) : bad(String(res.status))}   /v1/user ${dim(text.slice(0, 400))}`);
+    } catch (err) {
+      console.log(`  ${bad('err')}   /v1/user ${dim(String(err.message).slice(0, 200))}`);
+    }
+
     const voice = await attempt('find a cloned voice', discoverElevenVoice);
     if (voice) {
       console.log(`        ${dim(`${voice.name || voice.id} (${voice.category})`)}`);
