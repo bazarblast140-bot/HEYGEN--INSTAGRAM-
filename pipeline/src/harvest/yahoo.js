@@ -7,7 +7,14 @@
 // Blocked by the network policy inside Claude Code sessions; works on GitHub
 // Actions runners. Use fixtures/ for local development.
 
-const BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
+// Yahoo rate-limits shared CI address ranges hard — a GitHub runner gets a 429 on
+// the first call more often than not. Both hosts serve the same data from
+// different pools, so rotating across them and backing off turns a near-certain
+// failure into a near-certain success.
+const HOSTS = [
+  'https://query1.finance.yahoo.com/v8/finance/chart',
+  'https://query2.finance.yahoo.com/v8/finance/chart',
+];
 
 // Yahoo rejects requests without a browser-shaped User-Agent.
 const UA =
@@ -26,14 +33,45 @@ export function resolveSymbol(nameOrTicker) {
   return SYMBOLS[nameOrTicker] || nameOrTicker;
 }
 
-export async function fetchCandles(nameOrTicker, { interval = '1d', range = '3mo' } = {}) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function fetchCandles(nameOrTicker, {
+  interval = '1d',
+  range = '3mo',
+  attempts = 6,
+  onRetry,
+} = {}) {
   const symbol = resolveSymbol(nameOrTicker);
-  const url = `${BASE}/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
+  const query = `${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
 
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`Yahoo returned ${res.status} for ${symbol}`);
+  let payload;
+  let lastError;
 
-  const payload = await res.json();
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const url = `${HOSTS[attempt % HOSTS.length]}/${query}`;
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+
+      // 429 and 5xx are worth another go on the other host; a 404 is not.
+      if (res.status === 429 || res.status >= 500) {
+        lastError = new Error(`Yahoo returned ${res.status} for ${symbol}`);
+        const waitMs = Math.round(1000 * 2 ** attempt + Math.random() * 500);
+        onRetry?.(attempt + 1, res.status, waitMs);
+        await sleep(waitMs);
+        continue;
+      }
+
+      if (!res.ok) throw new Error(`Yahoo returned ${res.status} for ${symbol}`);
+      payload = await res.json();
+      break;
+    } catch (err) {
+      lastError = err;
+      if (attempt === attempts - 1) break;
+      await sleep(Math.round(1000 * 2 ** attempt));
+    }
+  }
+
+  if (!payload) throw lastError || new Error(`Could not reach Yahoo for ${symbol}`);
   if (payload?.chart?.error) throw new Error(`Yahoo error for ${symbol}: ${payload.chart.error.description}`);
 
   const result = payload?.chart?.result?.[0];

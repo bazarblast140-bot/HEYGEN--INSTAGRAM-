@@ -16,15 +16,32 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * HeyGen takes `avatar_id` for studio avatars and `talking_photo_id` for photo
- * avatars, and rejects the wrong one with a bare "not found". Rather than making
- * that a config field somebody gets wrong six months from now, look the id up and
- * decide from what the account actually holds.
+ * avatars, and rejects the wrong one with a bare "not found".
+ *
+ * The obvious approach — look the id up in /v2/avatars — turned out to be wrong in
+ * production: photo avatars that belong to an avatar group are not in that
+ * listing at all, so a perfectly valid id came back "not found" and the whole
+ * presenter beat was skipped.
+ *
+ * So the lookup is now only a hint, never a gate. An explicit setting wins, the
+ * listing is consulted when it happens to know, and anything else falls through to
+ * talking_photo — which is what a grouped photo avatar is. If that guess is wrong,
+ * HeyGen says so on the actual generate call, which is a far better place to find
+ * out than a lookup that quietly disagrees with reality.
  */
 export async function resolveCharacterKind(id) {
-  const { avatars, talkingPhotos } = await listAvatars();
-  if (avatars.some((a) => a.id === id)) return 'avatar';
-  if (talkingPhotos.some((p) => p.id === id)) return 'talking_photo';
-  throw new Error(`No avatar or talking photo in this HeyGen account has id ${id}`);
+  const configured = process.env.HEYGEN_AVATAR_KIND;
+  if (configured) return configured;
+
+  try {
+    const { avatars, talkingPhotos } = await listAvatars();
+    if (avatars.some((a) => a.id === id)) return 'avatar';
+    if (talkingPhotos.some((p) => p.id === id)) return 'talking_photo';
+  } catch {
+    // A listing failure must not decide whether the presenter appears.
+  }
+
+  return 'talking_photo';
 }
 
 export async function renderPresenter({
