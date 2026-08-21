@@ -117,6 +117,37 @@ async function main() {
     }
   }
 
+  // A 403 on /v1/tts.generate was read as "this plan is not entitled". That is the
+  // likeliest reading, but it is not the only one: some HeyGen routes take a
+  // Bearer token rather than the X-Api-Key header this client sends everywhere
+  // else, and a route that wants Bearer will refuse an X-Api-Key with 403 too.
+  // Worth ruling out before telling anyone to spend money.
+  if (!winner) {
+    console.log(`\n  ${dim('Same path, the other auth header')}`);
+    for (const header of ['Authorization: Bearer', 'Authorization: raw', 'X-Api-Key']) {
+      const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
+      if (header === 'Authorization: Bearer') headers.Authorization = `Bearer ${config.apiKey}`;
+      else if (header === 'Authorization: raw') headers.Authorization = config.apiKey;
+      else headers['X-Api-Key'] = config.apiKey;
+
+      try {
+        const res = await fetch('https://api.heygen.com/v1/tts.generate', {
+          method: 'POST', headers, body: JSON.stringify(body),
+        });
+        const text = (await res.text()).slice(0, 180);
+        const mark = res.ok ? ok(String(res.status)) : (res.status === 403 ? bad('403') : ok(String(res.status)));
+        console.log(`  ${mark}   ${header} ${dim(text)}`);
+        if (res.ok) {
+          const parsed = JSON.parse(text);
+          const data = parsed?.data || parsed;
+          if (data?.audio_url) winner = { host: SPEECH_HOSTS[0], path: '/v1/tts.generate', data, auth: header };
+        }
+      } catch (err) {
+        console.log(`  ${dim(`err   ${header} ${String(err.message).slice(0, 60)}`)}`);
+      }
+    }
+  }
+
   // 405 on /v2/voice/generate says that path is real and POST is not its verb.
   // Worth settling, because a live route is a far better lead than another guess.
   if (!winner) {
