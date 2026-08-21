@@ -26,6 +26,7 @@ import { renderPresenter } from './src/presenter/segment.js';
 import { renderVoice } from './src/presenter/voice.js';
 import { renderEdgeVoice } from './src/presenter/edge-voice.js';
 import { fetchStock } from './src/stock/index.js';
+import { generateSpec } from './src/script/generate.js';
 import { run } from './src/assemble/encode.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -131,7 +132,8 @@ async function buildPresenterBeat({ segment, workDir, tag, useAvatar }) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const spec = JSON.parse(await fs.readFile(args.spec || path.join(HERE, 'specs', 'default.json'), 'utf8'));
+  const specPath = args.spec || path.join(HERE, 'specs', 'default.json');
+  let spec = JSON.parse(await fs.readFile(specPath, 'utf8'));
 
   const workDir = path.join(HERE, 'out', 'build');
   const out = path.resolve(args.out || path.join(HERE, 'out', 'reel-final.mp4'));
@@ -167,7 +169,29 @@ async function main() {
       note(`no live market data — ${failures.join('; ')} — fell back to sample data`);
     }
   }
-  const chartData = { ...series, summary: summarise(series), verdict: spec.verdict || '' };
+  const summary = summarise(series);
+
+  // Without this the pipeline posts the same reel every morning: the checked-in
+  // spec is a fixture, not a brief. Generating it from the day's numbers is the
+  // difference between a scheduled job and a daily show.
+  if (args.generate) {
+    console.log('Writing today\'s script');
+    try {
+      const written = await generateSpec({
+        market: { name: series.name, source: series.source, summary, recent: series.candles.slice(-10) },
+        news: spec.news,
+        onAttempt: (n, model) => console.log(`  ${model}, attempt ${n}`),
+      });
+      // Keep the parts of the checked-in spec that are staging, not content.
+      spec = { ...spec, ...written.spec, disclaimer: spec.disclaimer, music: spec.music };
+      note(`script written by ${written.model} in ${written.attempts} attempt(s)`);
+      await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
+    } catch (err) {
+      note(`script generation failed (${err.message.slice(0, 110)}) — using the checked-in spec`);
+    }
+  }
+
+  const chartData = { ...series, summary, verdict: spec.verdict || '' };
   console.log(`  ${chartData.name}  ${chartData.summary.last.toFixed(2)}  ${chartData.summary.changePct >= 0 ? '+' : ''}${chartData.summary.changePct.toFixed(2)}%`);
 
   const useAvatar = !args['no-avatar'];

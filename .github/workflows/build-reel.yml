@@ -18,6 +18,10 @@ on:
         description: Publish to Instagram after building
         type: boolean
         default: false
+      generate:
+        description: Write today's script with Claude (off = use the checked-in spec)
+        type: boolean
+        default: true
   schedule:
     # 07:00 IST. Actions cron is UTC, and IST is UTC+5:30.
     - cron: '30 1 * * 1-5'
@@ -63,6 +67,7 @@ jobs:
 
       - name: Build the reel
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
           HEYGEN_AVATAR_ID: ${{ vars.HEYGEN_AVATAR_ID }}
           HEYGEN_VOICE_ID: ${{ vars.HEYGEN_VOICE_ID }}
@@ -72,7 +77,8 @@ jobs:
           node pipeline/build-reel.js \
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/default.json' }}" \
             ${{ github.event.inputs.fixture == 'true' && '--fixture' || '' }} \
-            ${{ github.event.inputs.no_avatar == 'true' && '--no-avatar' || '' }}
+            ${{ github.event.inputs.no_avatar == 'true' && '--no-avatar' || '' }} \
+            ${{ github.event_name == 'schedule' || github.event.inputs.generate != 'false' && '--generate' || '' }}
 
       - name: Summarise the run
         if: always()

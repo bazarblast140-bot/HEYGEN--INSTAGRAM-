@@ -94,3 +94,15 @@ happened, including anything that fell back:
 
 `publishable` is `true` only with real market data and a real voiceover, and the
 publish step refuses anything else. A broken reel cannot reach your feed.
+
+---
+
+## One more secret, for the daily script
+
+Add `ANTHROPIC_API_KEY` to the repository secrets.
+
+Without it the pipeline still runs, but it falls back to the checked-in spec — and
+that means **the same reel every morning**. With it, Claude writes each day's brief
+from that day's actual numbers.
+
+Get one at console.anthropic.com → API keys.
