@@ -49,8 +49,10 @@ workflows keep running either way.
 
 | Name | Value |
 | --- | --- |
-| `HEYGEN_AVATAR_ID` | `976292674ea5406591a36443e2feb17f` |
-| `HEYGEN_VOICE_ID` | `a1b2ea9b4b3c443fb3b87d32c9794516` |
+| `HEYGEN_AVATAR_ID` | `43ea820171e04d0eb3c4e457124c3828` |
+| `HEYGEN_AVATAR_KIND` | `avatar` |
+| `HEYGEN_ENGINE` | `avatar_v` |
+| `HEYGEN_VOICE_ID` | `ad3099687f824940811e3fb3ec3e3beb` |
 | `IG_USER_ID` | `17841410293109609` |
 | `IG_SURFACE` | `facebook` |
 | `FB_APP_ID` | `1690836568687131` |

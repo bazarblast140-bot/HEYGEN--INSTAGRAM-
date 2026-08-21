@@ -41,6 +41,9 @@ export async function resolveCharacterKind(id) {
     // A listing failure must not decide whether the presenter appears.
   }
 
+  // The account now holds both a photo avatar and a video clone, and the two take
+  // different fields — so guessing is worse than it was when there was only one
+  // kind. HEYGEN_AVATAR_KIND is the answer; this is only the last resort.
   return 'talking_photo';
 }
 
@@ -49,6 +52,7 @@ export async function renderPresenter({
   avatarId = env('HEYGEN_AVATAR_ID') || config.defaultAvatarId,
   voiceId = env('HEYGEN_VOICE_ID') || config.defaultVoiceId,
   characterKind,
+  engine = env('HEYGEN_ENGINE') || undefined,
   speed = 1,
   width = PANEL.width,
   height = PANEL.height,
@@ -69,6 +73,7 @@ export async function renderPresenter({
     avatarId,
     voiceId,
     characterKind: kind,
+    engine,
     speed,
     width,
     height,

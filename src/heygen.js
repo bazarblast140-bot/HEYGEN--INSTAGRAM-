@@ -79,6 +79,7 @@ export async function generateVideo({
   voiceId,
   characterKind = 'avatar',
   avatarStyle = 'normal',
+  engine,
   speed = 1,
   width = 720,
   height = 1280,
@@ -96,6 +97,9 @@ export async function generateVideo({
     ],
     dimension: { width, height },
     caption: Boolean(captionsBurnedIn),
+    // A digital twin supports higher-quality engines than a photo avatar; which
+    // ones is a property of the look, so it is passed in rather than assumed.
+    ...(engine ? { engine: { type: engine } } : {}),
     ...(title ? { title } : {}),
   };
 

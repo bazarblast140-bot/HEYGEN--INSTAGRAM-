@@ -79,6 +79,8 @@ jobs:
           SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
           HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
           HEYGEN_AVATAR_ID: ${{ vars.HEYGEN_AVATAR_ID }}
+          HEYGEN_AVATAR_KIND: ${{ vars.HEYGEN_AVATAR_KIND }}
+          HEYGEN_ENGINE: ${{ vars.HEYGEN_ENGINE }}
           HEYGEN_VOICE_ID: ${{ vars.HEYGEN_VOICE_ID }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}

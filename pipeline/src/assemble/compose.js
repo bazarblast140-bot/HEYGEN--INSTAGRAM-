@@ -18,9 +18,24 @@ export const TOP = { width: 1080, height: 1140 };
 export const BOTTOM = { width: 1080, height: 780 };
 export const DIVIDER = { height: 2, colour: '0x1E2A3A' };
 
-export async function composeHybrid({ chart, presenter, out, dividerColour = DIVIDER.colour }) {
+/**
+ * Where to take the crop from vertically, as a fraction of the overflow.
+ *
+ * The panel is wider than it is tall; a portrait source scaled to fill it
+ * overflows enormously in height, and a centre crop lands on the chest. Portrait
+ * framings put the face in the upper third, so the crop is anchored up there
+ * instead. Landscape sources are already close to the panel's shape and stay
+ * centred.
+ */
+function verticalAnchor(info) {
+  const portrait = info.height > info.width;
+  return portrait ? 0.22 : 0.5;
+}
+
+export async function composeHybrid({ chart, presenter, out, dividerColour = DIVIDER.colour, anchor }) {
   const [chartInfo, presenterInfo] = await Promise.all([probe(chart), probe(presenter)]);
   const target = presenterInfo.duration;
+  const cropAnchor = anchor ?? verticalAnchor(presenterInfo);
 
   const filter = [
     // Chart: fit the top panel, pad rather than crop so no data leaves the frame,
@@ -30,10 +45,11 @@ export async function composeHybrid({ chart, presenter, out, dividerColour = DIV
       `tpad=stop_mode=clone:stop_duration=${Math.max(0, target - chartInfo.duration).toFixed(3)},` +
       `trim=duration=${target.toFixed(3)},setpts=PTS-STARTPTS,fps=30[top]`,
 
-    // Presenter: cover the bottom panel and centre-crop, so any aspect HeyGen
-    // returns fills the panel without letterboxing.
+    // Presenter: cover the bottom panel, then crop at an anchor chosen from the
+    // source's own shape rather than always from the middle.
     `[1:v]scale=${BOTTOM.width}:${BOTTOM.height}:force_original_aspect_ratio=increase,` +
-      `crop=${BOTTOM.width}:${BOTTOM.height},setpts=PTS-STARTPTS,fps=30[bottom]`,
+      `crop=${BOTTOM.width}:${BOTTOM.height}:(iw-ow)/2:(ih-oh)*${cropAnchor.toFixed(3)},` +
+      `setpts=PTS-STARTPTS,fps=30[bottom]`,
 
     `color=c=${dividerColour}:s=${FRAME.width}x${DIVIDER.height}:d=${target.toFixed(3)},fps=30[rule]`,
 
