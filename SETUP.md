@@ -27,10 +27,16 @@ The quota block reports `tts_free_credit: 572`, which looks like plenty of voice
 left — but those credits are spendable from the HeyGen web app, not from an API
 key. That is what the 403 means: right path, wrong entitlement.
 
-**So: a paid HeyGen plan is what turns this on.** Everything else is built and
-waiting. Until then the pipeline still runs and still produces a reel every
-morning; it just has no voice, and it marks itself not publishable rather than
-posting a silent video.
+**The voice no longer waits for this.** Synthesis moved to ElevenLabs, which the
+API key does reach, so the reel is narrated in Rajesh's cloned voice on the free
+HeyGen plan. A paid HeyGen plan now buys only the *face* — the few seconds of
+avatar on screen — which is the least urgent part.
+
+What does still block posting is market data. No keyless source reaches a CI
+runner: Stooq answers HTML to every URL variant on both hosts, and Yahoo answers
+429 on both. Set `TWELVEDATA_API_KEY` or `ALPHAVANTAGE_API_KEY` (either, both
+free) and the reel becomes publishable. Until then it builds every morning and
+marks itself not publishable rather than narrating invented numbers.
 
 Run **Actions → HeyGen doctor → Run workflow** any time to re-check. It spends no
 credits and prints no secrets, and it will say plainly which of these have
@@ -76,6 +82,9 @@ workflows keep running either way.
 | `HEYGEN_API_KEY` | HeyGen → Settings → API |
 | `FB_APP_SECRET` | Meta app → Settings → Basic → Show |
 | `IG_ACCESS_TOKEN` | filled in by step 4 |
+| `ELEVENLABS_API_KEY` | elevenlabs.io → Settings → API Keys |
+| `TWELVEDATA_API_KEY` | twelvedata.com — free (or use Alpha Vantage) |
+| `ALPHAVANTAGE_API_KEY` | alphavantage.co — free (or use Twelve Data) |
 | `PEXELS_API_KEY` | pexels.com/api — free |
 | `PIXABAY_API_KEY` | pixabay.com/api/docs — free |
 
