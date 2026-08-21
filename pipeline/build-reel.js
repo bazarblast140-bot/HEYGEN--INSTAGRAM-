@@ -24,6 +24,7 @@ import { buildReel } from './src/assemble/timeline.js';
 import { burnCaptions } from './src/assemble/captions.js';
 import { renderPresenter } from './src/presenter/segment.js';
 import { renderVoice } from './src/presenter/voice.js';
+import { renderEdgeVoice } from './src/presenter/edge-voice.js';
 import { fetchStock } from './src/stock/index.js';
 import { run } from './src/assemble/encode.js';
 
@@ -56,14 +57,24 @@ async function silence(seconds, out) {
   return out;
 }
 
-/** TTS, or silence of the same length when HeyGen is unavailable. */
+/**
+ * Narration, in order of preference: the cloned HeyGen voice, then a free Edge
+ * hi-IN voice, then silence. Silence was the loudest fault in the first cut, so
+ * the free voice earns its place purely by never leaving the reel mute.
+ */
 async function speakOrSilence({ text, seconds, out, label }) {
   try {
     const voice = await renderVoice({ text, out });
     return { file: voice.file, narrated: true, wordTimestamps: voice.wordTimestamps };
-  } catch (err) {
-    note(`voiceover unavailable for ${label} (${err.message.slice(0, 80)}) — silent for ${seconds.toFixed(1)}s`);
-    return { file: await silence(seconds, out), narrated: false, wordTimestamps: [] };
+  } catch (heygenErr) {
+    try {
+      const voice = await renderEdgeVoice({ text, out });
+      note(`${label}: HeyGen voice unavailable (${heygenErr.message.slice(0, 60)}) — used ${voice.voice}`);
+      return { file: voice.file, narrated: true, wordTimestamps: voice.wordTimestamps };
+    } catch (edgeErr) {
+      note(`voiceover unavailable for ${label} (HeyGen: ${heygenErr.message.slice(0, 50)}; Edge: ${edgeErr.message.slice(0, 50)}) — silent for ${seconds.toFixed(1)}s`);
+      return { file: await silence(seconds, out), narrated: false, wordTimestamps: [] };
+    }
   }
 }
 
