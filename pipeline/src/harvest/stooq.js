@@ -8,7 +8,11 @@
 // which is exactly what a scheduled job needs. It carries daily bars only, which
 // is all the pre-market brief uses.
 
-const BASE = 'https://stooq.com/q/d/l/';
+const HOSTS = ['https://stooq.com', 'https://stooq.pl'];
+
+// A browser User-Agent, because a bare fetch is what several of these hosts
+// answer with an HTML interstitial instead of the CSV they advertise.
+const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 export const SYMBOLS = {
   nifty: '^nsei',
@@ -22,18 +26,53 @@ export function resolveSymbol(nameOrTicker) {
   return SYMBOLS[nameOrTicker] || String(nameOrTicker).toLowerCase().replace(/\.ns$/, '.in');
 }
 
-export async function fetchCandles(nameOrTicker, { bars = 90 } = {}) {
+/**
+ * Index symbols start with a caret, and that caret is the whole problem.
+ *
+ * encodeURIComponent turns it into %5E, and Stooq answered that with an HTML
+ * page rather than the CSV it advertises — which read like "Stooq is broken"
+ * when it was really "that is not the symbol you meant". So the caret is sent
+ * as-is first, and the encoded form is kept only as a fallback in case a host
+ * disagrees.
+ */
+function urlVariants(symbol) {
+  const raw = `s=${symbol}&i=d`;
+  const encoded = `s=${encodeURIComponent(symbol)}&i=d`;
+  return HOSTS.flatMap((host) => [
+    `${host}/q/d/l/?${raw}`,
+    `${host}/q/d/l/?${encoded}`,
+  ]);
+}
+
+export async function fetchCandles(nameOrTicker, { bars = 90, onAttempt } = {}) {
   const symbol = resolveSymbol(nameOrTicker);
-  const res = await fetch(`${BASE}?s=${encodeURIComponent(symbol)}&i=d`, {
-    headers: { Accept: 'text/csv' },
-  });
-  if (!res.ok) throw new Error(`Stooq returned ${res.status} for ${symbol}`);
 
-  const text = await res.text();
+  let text = null;
+  const refusals = [];
 
-  // Stooq answers a bad symbol with a 200 and the body "No data", so the status
-  // code alone proves nothing.
-  if (/no data/i.test(text.slice(0, 200))) throw new Error(`Stooq has no data for ${symbol}`);
+  for (const url of urlVariants(symbol)) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/csv,*/*' } });
+      if (!res.ok) { refusals.push(`${res.status} ${url}`); continue; }
+
+      const body = await res.text();
+
+      // Three different non-answers, all arriving as HTTP 200: an HTML page, the
+      // literal words "No data", and anything that is not a CSV header. None of
+      // them is a reason to stop trying the other hosts.
+      if (/^\s*</.test(body)) { refusals.push(`HTML ${url}`); continue; }
+      if (/no data/i.test(body.slice(0, 200))) { refusals.push(`"No data" ${url}`); continue; }
+      if (!/^date,/i.test(body)) { refusals.push(`not CSV ${url}`); continue; }
+
+      onAttempt?.(url);
+      text = body;
+      break;
+    } catch (err) {
+      refusals.push(`${String(err.message).slice(0, 40)} ${url}`);
+    }
+  }
+
+  if (!text) throw new Error(`Stooq gave no CSV for ${symbol} — ${refusals.join('; ')}`);
 
   const lines = text.trim().split('\n');
   const header = lines[0].toLowerCase();
