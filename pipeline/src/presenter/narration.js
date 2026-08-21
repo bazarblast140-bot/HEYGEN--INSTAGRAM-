@@ -23,7 +23,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { run, probe } from '../assemble/encode.js';
-import { createSpeech, isQuotaRefusal } from '../../../src/heygen.js';
+import { isQuotaRefusal } from '../../../src/heygen.js';
+import { synthesise } from './voice-providers.js';
 import { config, env } from '../../../src/config.js';
 import { renderPresenter } from './segment.js';
 
@@ -36,28 +37,23 @@ async function toNarrationWav(input, out) {
   return out;
 }
 
-async function download(url, dest) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetching narration audio failed (${res.status})`);
-  await fs.writeFile(dest, Buffer.from(await res.arrayBuffer()));
-  return dest;
-}
-
 /**
  * Speech only, in the cloned voice. No avatar credits are spent here.
  */
-async function recordVoiceOnly({ script, workDir, speed, voiceId }) {
-  const speech = await createSpeech({
+async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote }) {
+  const speech = await synthesise({
     text: script,
-    voiceId: voiceId || env('HEYGEN_VOICE_ID') || config.defaultVoiceId,
+    voiceId,
     speed,
-    // Hinglish reads as Hindi to the synthesiser; saying so keeps English words
+    // Hinglish reads as Hindi to a synthesiser; saying so keeps English words
     // from being pronounced as though they were Hindi spellings.
     language: env('HEYGEN_TTS_LANGUAGE') || 'hi',
   });
 
-  const raw = path.join(workDir, 'speech-raw');
-  await download(speech.audioUrl, raw);
+  onNote?.(`voice by ${speech.provider}`);
+
+  const raw = path.join(workDir, `speech-raw.${speech.format}`);
+  await fs.writeFile(raw, speech.audio);
 
   const audio = path.join(workDir, 'narration.wav');
   await toNarrationWav(raw, audio);
@@ -66,9 +62,12 @@ async function recordVoiceOnly({ script, workDir, speed, voiceId }) {
   return {
     audio,
     video: null,
-    duration: speech.duration || info.duration,
-    words: speech.wordTimestamps || [],
+    // Trust the file over the provider: ElevenLabs reports no duration of its
+    // own, and a provider's figure can disagree with the audio it sent.
+    duration: info.duration || speech.duration,
+    words: speech.words || [],
     source: 'speech',
+    provider: speech.provider,
   };
 }
 
@@ -129,7 +128,7 @@ export async function renderNarration({
     }
   }
 
-  return recordVoiceOnly({ script, workDir, speed, voiceId: presenterOptions.voiceId });
+  return recordVoiceOnly({ script, workDir, speed, voiceId: presenterOptions.voiceId, onNote });
 }
 
 /**

@@ -81,6 +81,10 @@ jobs:
           HEYGEN_VOICE_ID: ${{ vars.HEYGEN_VOICE_ID }}
           HEYGEN_SPEECH_PATH: ${{ vars.HEYGEN_SPEECH_PATH }}
           HEYGEN_TTS_LANGUAGE: ${{ vars.HEYGEN_TTS_LANGUAGE }}
+          VOICE_PROVIDER: ${{ vars.VOICE_PROVIDER }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: |
