@@ -45,16 +45,22 @@ export async function probe(file) {
     child.on('close', (code) => (code === 0 ? resolve(JSON.parse(stdout)) : reject(new Error(stderr))));
   });
 
+  // An audio-only file has no video stream, and reaching through the missing one
+  // for r_frame_rate threw "Cannot read properties of undefined" from inside the
+  // narration step — which read as the voice having failed when the voice had in
+  // fact been synthesised successfully a second earlier. Duration is the only
+  // field a WAV can answer, and it is the only field the caller wanted.
   const video = json.streams.find((s) => s.codec_type === 'video');
-  const [num, den] = String(video.r_frame_rate).split('/').map(Number);
+  const [num, den] = video ? String(video.r_frame_rate).split('/').map(Number) : [0, 0];
 
   return {
     duration: Number(json.format.duration),
     sizeBytes: Number(json.format.size),
-    width: video.width,
-    height: video.height,
-    fps: den ? num / den : num,
-    frames: video.nb_frames ? Number(video.nb_frames) : null,
+    width: video?.width ?? null,
+    height: video?.height ?? null,
+    fps: video ? (den ? num / den : num) : null,
+    frames: video?.nb_frames ? Number(video.nb_frames) : null,
+    hasVideo: Boolean(video),
     hasAudio: json.streams.some((s) => s.codec_type === 'audio'),
   };
 }

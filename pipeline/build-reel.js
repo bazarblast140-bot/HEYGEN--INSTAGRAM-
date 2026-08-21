@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { fetchCandles, summarise } from './src/harvest/yahoo.js';
 import { fetchCandles as fetchFromStooq } from './src/harvest/stooq.js';
+import { fetchCandles as fetchFromApi, configuredProviders } from './src/harvest/apis.js';
 import { syntheticSeries } from './src/harvest/fixture.js';
 import { captureScene } from './src/render/capture.js';
 import { encodeFrames, probe } from './src/assemble/encode.js';
@@ -127,11 +128,19 @@ async function main() {
     series = syntheticSeries();
     note('synthetic sample data — this reel must not be published');
   } else {
-    // Two independent sources before giving up. Yahoo has the richer payload but
-    // refuses CI address ranges outright; Stooq is plainer and answers.
+    // A keyed provider first, then the keyless ones.
+    //
+    // The order is the wrong way round from how this started, and deliberately
+    // so: swept from inside Actions, Yahoo answers 429 and Stooq answers HTML,
+    // every time. They stay in the chain because they cost nothing to try and
+    // they do work from a laptop, but a scheduled 7am job cannot depend on them.
+    const symbol = spec.chartSymbol || 'nifty';
     const sources = [
-      ['Yahoo', () => fetchCandles(spec.chartSymbol || 'nifty', { range: spec.chartRange || '3mo' })],
-      ['Stooq', () => fetchFromStooq(spec.chartSymbol || 'nifty')],
+      ...(configuredProviders().length
+        ? [['Data API', () => fetchFromApi(symbol, { onAttempt: (n) => process.stdout.write(`  trying ${n}\n`) })]]
+        : []),
+      ['Yahoo', () => fetchCandles(symbol, { range: spec.chartRange || '3mo' })],
+      ['Stooq', () => fetchFromStooq(symbol)],
     ];
 
     const failures = [];
@@ -148,6 +157,9 @@ async function main() {
     if (!series) {
       series = syntheticSeries();
       note(`no live market data — ${failures.join('; ')} — fell back to sample data`);
+      if (!configuredProviders().length) {
+        note('set TWELVEDATA_API_KEY or ALPHAVANTAGE_API_KEY — no keyless source reaches a CI runner');
+      }
     }
   }
   const summary = summarise(series);
