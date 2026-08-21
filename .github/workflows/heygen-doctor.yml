@@ -33,6 +33,8 @@ jobs:
           ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
         run: |
           node pipeline/heygen-doctor.js 2>&1 | tee doctor.log
           echo >> doctor.log

@@ -59,6 +59,36 @@ function verdict(body) {
   }
 }
 
+import { configuredProviders, fetchCandles } from './src/harvest/apis.js';
+
+// A configured provider is the only one expected to work here, so it is checked
+// first and reported in full: which one answered, how many candles, and the last
+// close. Without that, "the key is set" and "the key returns Indian index data"
+// look identical until 7am.
+async function checkKeyedProviders() {
+  const providers = configuredProviders();
+  if (!providers.length) {
+    console.log(`  ${dim('No TWELVEDATA_API_KEY or ALPHAVANTAGE_API_KEY — the reel stays on sample data.')}`);
+    return false;
+  }
+
+  try {
+    const series = await fetchCandles('nifty', {
+      onAttempt: (name) => console.log(`  ${dim(`trying ${name}`)}`),
+    });
+    const last = series.candles.at(-1);
+    console.log(`  ${ok('WORKS')} ${series.source.padEnd(20)} ${dim(
+      `${series.name}, ${series.candles.length} candles, last close ${last.c} on ${new Date(last.t).toISOString().slice(0, 10)}`,
+    )}`);
+    return true;
+  } catch (err) {
+    console.log(`  ${bad('fail ')} keyed providers      ${dim(String(err.message).slice(0, 200))}`);
+    return false;
+  }
+}
+
+const keyed = await checkKeyedProviders();
+
 const winners = [];
 
 for (const [label, url] of CANDIDATES) {
@@ -73,8 +103,12 @@ for (const [label, url] of CANDIDATES) {
   }
 }
 
-console.log(
-  winners.length
-    ? `\n${ok(`${winners.length} source(s) usable from CI:`)}\n${winners.map((w) => `  ${w.label}  ${w.url}`).join('\n')}`
-    : `\n${bad('No source answered with usable data. The reel stays on sample data and unpublishable.')}`,
-);
+if (keyed) {
+  console.log(`\n${ok('A keyed provider answered — the reel can carry real numbers.')}`);
+} else if (winners.length) {
+  console.log(`\n${ok(`${winners.length} keyless source(s) usable from CI:`)}\n${winners.map((w) => `  ${w.label}  ${w.url}`).join('\n')}`);
+} else {
+  console.log(`\n${bad('No source answered with usable data.')}`);
+  console.log(dim('  Set TWELVEDATA_API_KEY or ALPHAVANTAGE_API_KEY (either, both free).'));
+  console.log(dim('  The keyless rows above are why: this is a sourcing limit, not a bug.'));
+}
