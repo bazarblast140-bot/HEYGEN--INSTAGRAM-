@@ -53,7 +53,7 @@ in a row on the same kind of subject is itself a repeat, even when the facts dif
 The reel is 9:16, roughly 26 to 32 seconds, posted at 7:00 AM IST before the market opens.
 Structure, in order:
   1. One "hook" beat — Rajesh on camera, opens the reel, states what the viewer is about to learn.
-  2. Three to five middle beats — a chart beat and several card beats carrying the story.
+  2. Three to five middle beats — a chart beat, one "stock" footage beat, and card beats.
   3. One "cutin" beat — Rajesh on camera again for two to three seconds, right before the most important number.
   4. One final card beat — the call to action.
 
@@ -66,6 +66,10 @@ Beat types:
   "cutin" — presenter on camera again, 6 to 12 words, right before the biggest number.
   "chart" — the price chart renders itself from real data. No card.
   "card"  — a full-frame statement or statistic.
+  "stock" — real footage, searched from a free stock library. Give it a "query".
+            Include one, at most two. A reel built entirely from cards reads as
+            one static thing however good the cards are; a cut to real footage is
+            what breaks that up.
 </context>
 
 <input_data>
@@ -101,6 +105,16 @@ Per beat:
   card.stat      — optional { value, label, direction: "up" | "down" | "flat" }.
                    value max 10 characters. label max 5 words.
   card.footnote  — the source, or a one-line qualifier.
+  query    — ONLY on a "stock" beat; null everywhere else. Two to four plain
+             visual words naming what is literally on screen: "stock market
+             screen", "office workers walking", "gold bars", "shipping port".
+             The stock library matches pictures, not meaning — a phrase like
+             "investor confidence returning" finds nothing.
+             Never search for a named person, a company logo, or a brand: the
+             licence forbids implying anyone shown endorses anything, and a
+             stranger's face beside a stock tip is exactly that.
+             Give the beat a "card" as well — it is what renders if the search
+             comes back empty.
 
 Total spoken length across all beats: 70 to 95 words. That lands the reel near
 30 seconds when read aloud.

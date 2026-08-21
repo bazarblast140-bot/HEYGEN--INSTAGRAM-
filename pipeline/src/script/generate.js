@@ -27,12 +27,16 @@ const Card = z.object({
 });
 
 const Beat = z.object({
-  type: z.enum(['hook', 'cutin', 'chart', 'card']),
+  type: z.enum(['hook', 'cutin', 'chart', 'card', 'stock']),
   seconds: z.number().nullable(),
   say: z.string(),
   caption: z.string(),
   power: z.string(),
   card: Card.nullable(),
+  // Only a "stock" beat uses this: the search phrase sent to Pexels. Every other
+  // beat leaves it null. The card stays optional on a stock beat too, because it
+  // is what gets rendered if the footage search comes back empty.
+  query: z.string().nullable(),
 });
 
 const ReelSpec = z.object({
@@ -70,6 +74,21 @@ function validateShape(spec, recentTopics = []) {
   if (words < 55 || words > 115) problems.push(`${words} spoken words is outside 55–115 (about 22–40 seconds)`);
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
   if (!spec.segments.some((s) => s.type === 'chart')) problems.push('no chart beat');
+
+  // Footage is what stops the reel being eight dark cards in a row, but a reel
+  // that is mostly footage stops being about the numbers. One or two beats.
+  const stock = spec.segments.filter((s) => s.type === 'stock');
+  if (!stock.length) problems.push('no stock beat — at least one beat must be real footage, not a card');
+  if (stock.length > 2) problems.push(`${stock.length} stock beats is too many; use one or two`);
+  for (const beat of stock) {
+    if (!beat.query?.trim()) problems.push('a stock beat has no "query" to search footage with');
+    else if (beat.query.trim().split(/\s+/).length > 4) {
+      // Pexels matches on plain visual nouns. "Indian retail investors reacting
+      // to a mutual fund inflow record" returns nothing; "stock market screen"
+      // returns a hundred usable clips.
+      problems.push(`stock query "${beat.query}" is too specific — use 2 to 4 plain visual words`);
+    }
+  }
 
   for (const [i, beat] of spec.segments.entries()) {
     const where = `beat ${i} (${beat.type})`;

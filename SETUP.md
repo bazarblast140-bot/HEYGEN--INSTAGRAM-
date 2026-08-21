@@ -83,14 +83,17 @@ workflows keep running either way.
 
 | Name | Value |
 | --- | --- |
-| `HEYGEN_AVATAR_ID` | `43ea820171e04d0eb3c4e457124c3828` |
-| `HEYGEN_AVATAR_KIND` | `avatar` |
-| `HEYGEN_ENGINE` | `avatar_v` |
-| `HEYGEN_VOICE_ID` | `ad3099687f824940811e3fb3ec3e3beb` |
 | `IG_USER_ID` | `17841410293109609` |
 | `IG_SURFACE` | `facebook` |
 | `FB_APP_ID` | `1690836568687131` |
 | `FB_PAGE_ID` | `691172017411768` |
+
+The four `HEYGEN_*` variables are gone from this list on purpose. They are now
+defaults in `src/config.js`, verified against the live account, because a
+variable pasted with a trailing newline already cost one morning's reel its face
+— HeyGen reported "avatar look not found" and blamed the id rather than the
+invisible character after it. Set them only if the avatar or voice ever changes;
+an environment value still wins over the default.
 
 ## 4. Turn your token into one that lasts
 

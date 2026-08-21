@@ -18,13 +18,15 @@
         "headline": "Market kholne se pehle",
         "power": "TEEN BAATEIN",
         "footnote": "Rajesh Technical Traders"
-      }
+      },
+      "query": null
     },
     {
       "type": "chart",
       "caption": "bada move kisi taraf nahi",
       "power": "FLAT BAND",
-      "say": "Nifty ne aaj flat band diya, bada move kisi taraf nahi aaya."
+      "say": "Nifty ne aaj flat band diya, bada move kisi taraf nahi aaya.",
+      "query": null
     },
     {
       "type": "card",
@@ -44,7 +46,8 @@
         },
         "footnote": "Source: NSE"
       },
-      "say": "Lekin volume pichhle hafte se pachees percent zyada tha, matlab kaam chalu tha."
+      "say": "Lekin volume pichhle hafte se pachees percent zyada tha, matlab kaam chalu tha.",
+      "query": null
     },
     {
       "type": "cutin",
@@ -59,7 +62,8 @@
         "headline": "Lagataar teesre din",
         "power": "KHAREEDARI",
         "footnote": "Source: NSE provisional"
-      }
+      },
+      "query": null
     },
     {
       "type": "card",
@@ -74,15 +78,16 @@
         "power": "KHAREEDARI",
         "stat": {
           "value": "+2,847 Cr",
-          "label": "Net buy · 3 din",
+          "label": "Net buy \u00b7 3 din",
           "direction": "up"
         },
         "footnote": "Source: NSE provisional"
       },
-      "say": "F I I ne cash market me lagataar teesre din kharidari ki hai."
+      "say": "F I I ne cash market me lagataar teesre din kharidari ki hai.",
+      "query": null
     },
     {
-      "type": "card",
+      "type": "stock",
       "caption": "sabse bada trigger",
       "power": "RBI POLICY",
       "card": {
@@ -94,7 +99,8 @@
         "power": "IS HAFTE",
         "footnote": "Banking stocks pehle se position bana rahe hain"
       },
-      "say": "Aur is hafte R B I ki policy meeting hai, jo sabse bada trigger hai."
+      "say": "Aur is hafte R B I ki policy meeting hai, jo sabse bada trigger hai.",
+      "query": "stock market screen"
     },
     {
       "type": "card",
@@ -109,29 +115,31 @@
         "power": "BAN RAHI HAI",
         "stat": {
           "value": "+1.2%",
-          "label": "Bank Nifty · 5 din",
+          "label": "Bank Nifty \u00b7 5 din",
           "direction": "up"
         },
         "footnote": "Source: NSE"
       },
-      "say": "Banking stocks pehle se hi position bana rahe hain."
+      "say": "Banking stocks pehle se hi position bana rahe hain.",
+      "query": null
     },
     {
       "type": "card",
       "caption": "comment karo MARKET",
-      "power": "comment “MARKET”",
+      "power": "comment \u201cMARKET\u201d",
       "card": {
         "chips": [
           "ROZ SUBAH 7 BAJE"
         ],
         "headline": "Poori list aur levels ke liye",
-        "power": "comment “MARKET”",
-        "footnote": "Educational content · Investment advice nahi"
+        "power": "comment \u201cMARKET\u201d",
+        "footnote": "Educational content \u00b7 Investment advice nahi"
       },
-      "say": "Poori list aur levels ke liye comment karo MARKET."
+      "say": "Poori list aur levels ke liye comment karo MARKET.",
+      "query": null
     }
   ],
-  "caption": "Aaj ka pre-market brief — Nifty ka volume, FII flow, aur is hafte ki RBI policy meeting.\n\nPoori list aur levels chahiye? Comment karo \"MARKET\".",
+  "caption": "Aaj ka pre-market brief \u2014 Nifty ka volume, FII flow, aur is hafte ki RBI policy meeting.\n\nPoori list aur levels chahiye? Comment karo \"MARKET\".",
   "hashtags": [
     "#nifty50",
     "#stockmarketindia",
@@ -144,5 +152,6 @@
     "#investing",
     "#rajeshtechnicaltraders"
   ],
-  "disclaimer": "Ye content sirf education ke liye hai. Investment advice nahi hai. Main SEBI registered research analyst nahi hoon. Apna research karo ya registered advisor se baat karo."
+  "disclaimer": "Ye content sirf education ke liye hai. Investment advice nahi hai. Main SEBI registered research analyst nahi hoon. Apna research karo ya registered advisor se baat karo.",
+  "topic": "F I I cash market buying streak"
 }
