@@ -33,6 +33,22 @@ export const PRESENTER = {
   voiceId: 'ad3099687f824940811e3fb3ec3e3beb',
 };
 
+/**
+ * The ElevenLabs voice, for the days HeyGen's plan will not synthesise.
+ *
+ * A voice id is not a credential — it names a voice on the account and is
+ * useless without the API key — so it lives here for the same reason the HeyGen
+ * ids do: a repository variable is one more place for a stray newline to hide,
+ * and that has already cost this project a morning.
+ *
+ * Setting this also removes the need for the key to carry "voices_read": the
+ * voice never has to be looked up, so the key needs only "text_to_speech".
+ */
+export const ELEVEN = {
+  voiceId: 'dqdRKSzyiQodrYo9UFzG',
+  model: 'eleven_multilingual_v2',
+};
+
 export const config = {
   apiKey: env('HEYGEN_API_KEY'),
   port: Number(env('PORT')) || 3000,

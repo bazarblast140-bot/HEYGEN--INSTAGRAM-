@@ -15,7 +15,7 @@
 // boundary in a pause instead of in the middle of a word.
 
 import { createSpeech } from '../../../src/heygen.js';
-import { env } from '../../../src/config.js';
+import { env, ELEVEN as ELEVEN_DEFAULTS } from '../../../src/config.js';
 
 async function fetchBuffer(url) {
   const res = await fetch(url);
@@ -94,7 +94,7 @@ function elevenHeaders(extra = {}) {
 let discoveredVoice = null;
 
 export async function discoverElevenVoice() {
-  const configured = env('ELEVENLABS_VOICE_ID');
+  const configured = env('ELEVENLABS_VOICE_ID') || ELEVEN_DEFAULTS.voiceId;
   if (configured) return { id: configured, name: null, category: 'configured' };
   if (discoveredVoice) return discoveredVoice;
 
@@ -136,7 +136,7 @@ const elevenlabs = {
   configured: () => Boolean(env('ELEVENLABS_API_KEY')),
   async synth({ text, speed, voiceId }) {
     const voice = voiceId || (await discoverElevenVoice()).id;
-    const model = env('ELEVENLABS_MODEL') || 'eleven_multilingual_v2';
+    const model = env('ELEVENLABS_MODEL') || ELEVEN_DEFAULTS.model;
 
     // The with-timestamps variant costs the same and returns the alignment that
     // the plain endpoint throws away.
