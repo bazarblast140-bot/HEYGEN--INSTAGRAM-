@@ -14,7 +14,8 @@
     "hybrid": "node pipeline/compose-hybrid.js",
     "card": "node pipeline/render-card.js",
     "reel": "node pipeline/build-reel.js",
-    "publish": "node pipeline/publish-reel.js"
+    "publish": "node pipeline/publish-reel.js",
+    "token": "node pipeline/token-tool.js"
   },
   "engines": {
     "node": ">=20"

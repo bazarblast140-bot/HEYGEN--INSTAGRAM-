@@ -27,8 +27,14 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.whoami) {
-    const me = await whoami();
-    console.log(JSON.stringify(me, null, 2));
+    const { working, results } = await whoami();
+    for (const r of results) {
+      console.log(r.ok
+        ? `  ${r.surface.padEnd(10)} OK   ${r.account.username || r.account.id} (${r.account.account_type || 'type unknown'}, ${r.account.media_count ?? '?'} posts)`
+        : `  ${r.surface.padEnd(10)} —    ${r.error}`);
+    }
+    if (!working) { console.error('\nNeither surface accepted this token and account id.'); process.exit(1); }
+    console.log(`\nUse IG_SURFACE=${working}`);
     return;
   }
 

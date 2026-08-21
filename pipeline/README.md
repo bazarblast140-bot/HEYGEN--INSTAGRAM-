@@ -254,3 +254,33 @@ repo used only as a media host.
 environment, so the host, API version and field names are inferred rather than
 confirmed. `IG_API_HOST` and `IG_API_VERSION` override them, and every failure
 prints the exact URL it called so a mismatch is obvious.
+
+## Tokens
+
+The Graph API Explorer hands out a token that expires in an hour or two. A daily
+poster on that token works once and then fails every morning after, so exchange it:
+
+```bash
+node pipeline/token-tool.js inspect      # what you currently have, and when it dies
+node pipeline/token-tool.js longlived    # short-lived -> ~60 day user token
+node pipeline/token-tool.js page         # long-lived user token -> Page token
+```
+
+A Page token derived from a **long-lived** user token carries no expiry, which is
+what a scheduled job needs. Derived from a short-lived one it expires too, so run
+`longlived` first.
+
+`token-tool.js` runs locally, reads `IG_ACCESS_TOKEN` from `.env`, prints the new
+token to your terminal, and writes nothing anywhere. Copy the result into `.env`
+and into the repository secret.
+
+### Which surface
+
+```bash
+node pipeline/publish-reel.js --whoami
+```
+
+Tries both `graph.facebook.com` and `graph.instagram.com` with your token and
+account id, and tells you which answers. Set `IG_SURFACE` to that. Worth running
+before any scheduled post — a token that was never going to publish otherwise
+wastes a full build.

@@ -14,6 +14,10 @@ on:
         description: Skip HeyGen avatar (saves credits)
         type: boolean
         default: false
+      publish:
+        description: Publish to Instagram after building
+        type: boolean
+        default: false
   schedule:
     # 07:00 IST. Actions cron is UTC, and IST is UTC+5:30.
     - cron: '30 1 * * 1-5'
@@ -42,6 +46,14 @@ jobs:
 
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
+
+      - name: Check the Instagram token
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: node pipeline/publish-reel.js --whoami
 
       - name: Build the reel
         env:
