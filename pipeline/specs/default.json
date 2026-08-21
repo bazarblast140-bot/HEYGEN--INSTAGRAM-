@@ -4,12 +4,13 @@
   "chartRange": "3mo",
   "verdict": "FLAT BAND",
   "music": "assets/music/bed.wav",
-  "body": "Pehli baat — Nifty ne aaj flat band diya, lekin volume pichhle hafte se pachees percent zyada tha. Doosri — F I I ne cash market me lagataar teesre din buying ki hai. Aur teesri baat, jo sabse important hai — R B I ki policy meeting is hafte hai, aur banking stocks pehle se hi position bana rahe hain.",
   "segments": [
     {
       "type": "hook",
-      "seconds": 7.4,
-      "say": "Namaste, main Rajesh. Aaj market kholne se pehle teen cheezein aapko pata honi chahiye. Teesri wali sabse zaroori hai.",
+      "seconds": 5.5,
+      "say": "Namaste, main Rajesh. Market kholne se pehle teen baatein.",
+      "caption": "Namaste, main Rajesh. Market kholne se pehle teen baatein.",
+      "power": "TEEN BAATEIN",
       "card": {
         "chips": [
           "PRE-MARKET",
@@ -22,17 +23,36 @@
     },
     {
       "type": "chart",
-      "seconds": 5
+      "seconds": 3.5,
+      "caption": "Nifty ne flat band diya",
+      "power": "FLAT BAND"
     },
     {
-      "type": "stock",
-      "seconds": 4,
-      "query": "stock market trading screen"
+      "type": "card",
+      "seconds": 2.8,
+      "caption": "lekin volume pachees percent zyada tha",
+      "power": "VOLUME",
+      "card": {
+        "chips": [
+          "VOLUME",
+          "vs LAST WEEK"
+        ],
+        "headline": "Pichhle hafte se",
+        "power": "+25%",
+        "stat": {
+          "value": "+25%",
+          "label": "Average daily volume",
+          "direction": "up"
+        },
+        "footnote": "Source: NSE"
+      }
     },
     {
       "type": "cutin",
-      "seconds": 2.6,
+      "seconds": 2.5,
       "say": "Ab is number ko dhyan se dekhiye.",
+      "caption": "Ab is number ko dhyan se dekhiye",
+      "power": "DHYAN SE",
       "card": {
         "chips": [
           "FII FLOW",
@@ -45,7 +65,9 @@
     },
     {
       "type": "card",
-      "seconds": 7,
+      "seconds": 3.0,
+      "caption": "F I I ne teesre din buying ki hai",
+      "power": "KHAREEDARI",
       "card": {
         "chips": [
           "FII FLOW",
@@ -63,7 +85,44 @@
     },
     {
       "type": "card",
-      "seconds": 5,
+      "seconds": 3.0,
+      "caption": "aur is hafte R B I ki policy meeting hai",
+      "power": "RBI POLICY",
+      "card": {
+        "chips": [
+          "RBI",
+          "IS HAFTE"
+        ],
+        "headline": "Policy meeting",
+        "power": "IS HAFTE",
+        "footnote": "Banking stocks pehle se position bana rahe hain"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": 2.8,
+      "caption": "Banking stocks pehle se position bana rahe hain",
+      "power": "BANKING",
+      "card": {
+        "chips": [
+          "BANK NIFTY",
+          "SECTOR"
+        ],
+        "headline": "Position pehle se",
+        "power": "BAN RAHI HAI",
+        "stat": {
+          "value": "+1.2%",
+          "label": "Bank Nifty · 5 din",
+          "direction": "up"
+        },
+        "footnote": "Source: NSE"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": 3.4,
+      "caption": "Poori list aur levels ke liye comment karo MARKET",
+      "power": "comment “MARKET”",
       "card": {
         "chips": [
           "ROZ SUBAH 7 BAJE"
@@ -74,6 +133,7 @@
       }
     }
   ],
+  "body": "Nifty ne aaj flat band diya, lekin volume pichhle hafte se pachees percent zyada tha. F I I ne cash market me lagataar teesre din buying ki hai. Aur is hafte R B I ki policy meeting hai — banking stocks pehle se hi position bana rahe hain.",
   "caption": "Aaj ka pre-market brief — Nifty ka volume, FII flow, aur is hafte ki RBI policy meeting.\n\nPoori list aur levels chahiye? Comment karo \"MARKET\".",
   "hashtags": [
     "#nifty50",

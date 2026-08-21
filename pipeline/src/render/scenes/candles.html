@@ -109,18 +109,18 @@
   };
 
   const FPS = 30;
-  const TOTAL = 150;                       // 5 seconds
+  let TOTAL = 150;                         // overridden per beat by load()
 
   // Every beat is [startFrame, endFrame]. Nothing here reads a clock, so the
   // same frame index always paints the same pixels.
   const BEAT = {
-    header:  [0, 14],
-    candles: [6, 58],
-    volume:  [40, 75],
-    ma:      [50, 78],
-    price:   [62, 92],
-    pill:    [80, 104],
-    verdict: [96, 124],
+    header:  [0, 10],
+    candles: [3, 40],
+    volume:  [26, 52],
+    ma:      [34, 56],
+    price:   [42, 66],
+    pill:    [56, 74],
+    verdict: [68, 88],
   };
 
   const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -133,8 +133,8 @@
   // the top half of a hybrid frame with the presenter composited beneath it.
   const LAYOUTS = {
     full:  { stageH: 1280, headerTop: 52, numberTop: 132, priceSize: 104,
-             chartTop: 372, chartH: 700, priceH: 470, volTop: 540, volH: 118,
-             verdictTop: 1082, safeTop: 1152, showVerdict: true },
+             chartTop: 300, chartH: 560, priceH: 390, volTop: 440, volH: 95,
+             verdictTop: 1082, safeTop: 860, showVerdict: false },
     panel: { stageH: 760,  headerTop: 30, numberTop: 96,  priceSize: 74,
              chartTop: 272, chartH: 488, priceH: 344, volTop: 386, volH: 84,
              verdictTop: 0, safeTop: 760, showVerdict: false },
@@ -358,6 +358,12 @@
   }
 
   function paintDom(f) {
+    // Same slow push as the cards, so the two scene types share one sense of motion.
+    const progress = TOTAL > 1 ? f / (TOTAL - 1) : 0;
+    const stage = document.getElementById('stage');
+    stage.style.transform = `scale(${(1 + progress * 0.028).toFixed(4)})`;
+    stage.style.transformOrigin = 'center center';
+
     const s = data.summary;
     const rising = s.direction === 'up';
     const colour = rising ? C.up : C.down;
@@ -399,11 +405,12 @@
 
   window.__scene = {
     fps: FPS,
-    totalFrames: TOTAL,
+    get totalFrames() { return TOTAL; },
 
     /** Install the dataset. Called once, before any seek. */
     load(payload) {
       data = payload;
+      TOTAL = payload.totalFrames || TOTAL;
       applyLayout(payload.layout || 'full');
       sizeCanvas();
       scale = computeScale(data.candles);

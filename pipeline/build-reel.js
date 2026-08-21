@@ -21,6 +21,7 @@ import { captureScene } from './src/render/capture.js';
 import { encodeFrames, probe } from './src/assemble/encode.js';
 import { composeHybrid } from './src/assemble/compose.js';
 import { buildReel } from './src/assemble/timeline.js';
+import { burnCaptions } from './src/assemble/captions.js';
 import { renderPresenter } from './src/presenter/segment.js';
 import { renderVoice } from './src/presenter/voice.js';
 import { fetchStock } from './src/stock/index.js';
@@ -161,6 +162,8 @@ async function main() {
   const useAvatar = !args['no-avatar'];
   const segments = [];
   const voiceParts = [];
+  const captionBeats = [];
+  let cursor = 0;
   let avatarSeconds = 0;
   let narrated = true;
 
@@ -169,10 +172,20 @@ async function main() {
     const tag = `${String(i).padStart(2, '0')}-${segment.type}`;
     process.stdout.write(`  ${tag} … `);
 
+    // Caption timings are laid against the cut, not the source clips, so the
+    // running cursor has to advance for every beat that survives.
+    const captionFor = (duration) => {
+      if (segment.caption) {
+        captionBeats.push({ start: cursor, duration, text: segment.caption, power: segment.power });
+      }
+      cursor += duration;
+    };
+
     if (segment.type === 'hook' || segment.type === 'cutin') {
       const beat = await buildPresenterBeat({ segment, workDir, tag, useAvatar });
       segments.push({ kind: 'hybrid', file: beat.file, duration: beat.duration });
-      voiceParts.push(beat.voice);
+      voiceParts.push({ file: beat.voice, start: cursor });
+      captionFor(beat.duration);
       avatarSeconds += beat.avatarSeconds;
       if (beat.narrated === false) narrated = false;
 
@@ -182,6 +195,7 @@ async function main() {
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
       segments.push({ kind: 'scene', file, duration: segment.seconds });
+      captionFor(segment.seconds);
 
     } else if (segment.type === 'card') {
       const file = await renderSceneClip({
@@ -189,11 +203,13 @@ async function main() {
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
       segments.push({ kind: 'scene', file, duration: segment.seconds });
+      captionFor(segment.seconds);
 
     } else if (segment.type === 'stock') {
       try {
         const clip = await fetchStock(segment.query, { outDir: path.join(workDir, 'stock') });
         segments.push({ kind: 'stock', file: clip.file, duration: segment.seconds });
+        captionFor(segment.seconds);
       } catch (err) {
         note(`no stock footage for "${segment.query}" (${err.message.slice(0, 70)}) — beat dropped`);
         process.stdout.write('skipped\n');
@@ -210,13 +226,16 @@ async function main() {
     console.log('Voiceover');
     // The body narration spans the beats between the hook and the cut-in, so its
     // silent fallback must be that long too.
-    const bodySeconds = segments.slice(1, -3).reduce((n, s) => n + s.duration, 0) || 10;
+    const cutinIndex = spec.segments.findIndex((seg) => seg.type === 'cutin');
+    const spanEnd = cutinIndex > 0 ? cutinIndex : segments.length;
+    const bodySeconds = segments.slice(1, spanEnd).reduce((n, seg) => n + seg.duration, 0) || 10;
     const bodyVoice = await speakOrSilence({
       text: spec.body, seconds: bodySeconds,
       out: path.join(workDir, 'body-voice.wav'), label: 'body narration',
     });
     if (!bodyVoice.narrated) narrated = false;
-    voiceParts.splice(1, 0, bodyVoice.file);
+    // The body narration starts where the hook's picture ends.
+    voiceParts.push({ file: bodyVoice.file, start: segments[0]?.duration || 0 });
     if (bodyVoice.wordTimestamps.length) {
       await fs.writeFile(path.join(workDir, 'word-timestamps.json'), JSON.stringify(bodyVoice.wordTimestamps, null, 2));
       console.log(`  ${bodyVoice.wordTimestamps.length} word timings saved for the caption pass`);
@@ -225,7 +244,24 @@ async function main() {
 
   console.log('Assembling');
   const music = spec.music ? path.resolve(HERE, spec.music) : undefined;
-  const info = await buildReel({ segments, voiceParts, music, out, workDir: path.join(workDir, 'assemble') });
+  const silentCut = path.join(workDir, 'cut.mp4');
+  await buildReel({ segments, voiceParts, music, out: silentCut, workDir: path.join(workDir, 'assemble') });
+
+  let info;
+  if (captionBeats.length) {
+    console.log(`Captions (${captionBeats.length} beats)`);
+    await burnCaptions({
+      video: silentCut,
+      beats: captionBeats,
+      out,
+      fontsDir: path.join(HERE, 'assets', 'fonts-ttf'),
+    });
+    info = await probe(out);
+  } else {
+    await fs.copyFile(silentCut, out);
+    info = await probe(out);
+    note('no caption text in the spec — nothing burned in');
+  }
 
   const report = {
     out,

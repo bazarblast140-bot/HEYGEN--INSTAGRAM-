@@ -93,7 +93,7 @@
              powerGap: 10, statGap: 40, statSize: 100, footnoteTop: 664 },
   };
 
-  const BEAT = { bg: [0, 14], chips: [1, 12], headline: [6, 30], power: [26, 44], stat: [40, 60] };
+  const BEAT = { bg: [0, 10], chips: [0, 8], headline: [3, 20], power: [16, 30], stat: [26, 40] };
 
   const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
   const p = (f, [a, b]) => clamp01((f - a) / (b - a));
@@ -161,8 +161,15 @@
   }
 
   function paintDom(f) {
+    // Continuous drift across the beat, so a card that has finished revealing is
+    // still moving. Held frames were the main reason the cut read as a slideshow.
+    const progress = TOTAL > 1 ? f / (TOTAL - 1) : 0;
+    const content = document.getElementById('content');
+    content.style.transform = `scale(${(1 + progress * 0.035).toFixed(4)}) translateY(${(-progress * 10).toFixed(2)}px)`;
+    content.style.transformOrigin = 'center center';
+
     document.querySelectorAll('#chips .chip').forEach((chip, i) => {
-      const t = outCubic(p(f - i * 2, BEAT.chips));
+      const t = outCubic(p(f - i * 1.5, BEAT.chips));
       chip.style.opacity = t;
       chip.style.transform = `translateY(${(1 - t) * 14}px)`;
     });
@@ -170,7 +177,7 @@
     // Headline reveals word by word, the way the reference captions do.
     const words = document.querySelectorAll('#headline .w');
     words.forEach((w, i) => {
-      const t = outQuint(p(f - i * 1.6, BEAT.headline));
+      const t = outQuint(p(f - i * 1.1, BEAT.headline));
       w.style.opacity = t;
       w.style.transform = `translateY(${(1 - t) * 18}px)`;
     });

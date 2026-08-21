@@ -65,26 +65,40 @@ export async function buildVideo({ segments, out }) {
 }
 
 /**
- * Voice track: the avatar clip's own audio for the hook, then the TTS render for
- * the rest. Both come from the same cloned voice id, so the join is a continuation
- * rather than a change of speaker.
+ * Voice track, with every part pinned to the timestamp its picture appears at.
+ *
+ * Concatenating the parts end to end was wrong, and wrong in a way that only
+ * showed up on screen: the hook's audio lined up because it starts at zero, but
+ * everything after it slid by however much the preceding audio's length differed
+ * from its shot's length. The cut-in avatar ended up speaking over the wrong
+ * frames — read as broken lip-sync, caused by arithmetic.
+ *
+ * Each part now carries the offset it belongs at and is delayed into place, so a
+ * part that is shorter than its shot leaves quiet rather than dragging everything
+ * after it out of position.
+ *
+ * @param {Array} parts [{ file, start }] — start in seconds on the finished cut
  */
-export async function buildVoice({ parts, out }) {
-  const present = parts.filter(Boolean);
-  if (!present.length) throw new Error('buildVoice needs at least one audio part');
+export async function buildVoice({ parts, out, duration }) {
+  const placed = parts.filter((p) => p?.file);
+  if (!placed.length) throw new Error('buildVoice needs at least one audio part');
 
-  if (present.length === 1) {
-    await run('ffmpeg', ['-y', '-v', 'error', '-i', present[0], '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2', out]);
-    return out;
-  }
+  const chains = placed.map((p, i) =>
+    `[${i}:a]aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo,` +
+    `adelay=${Math.round(p.start * 1000)}|${Math.round(p.start * 1000)}[a${i}]`,
+  );
 
-  const filter =
-    present.map((_, i) => `[${i}:a]aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo[a${i}]`).join(';') +
-    ';' + present.map((_, i) => `[a${i}]`).join('') + `concat=n=${present.length}:v=0:a=1[a]`;
+  // amix would scale each input down by the number of inputs; the parts never
+  // overlap, so summing them keeps every line at its recorded level.
+  const filter = [
+    ...chains,
+    `${placed.map((_, i) => `[a${i}]`).join('')}amix=inputs=${placed.length}:duration=longest:normalize=0,` +
+      `apad=whole_dur=${duration.toFixed(3)},atrim=duration=${duration.toFixed(3)}[a]`,
+  ].join(';');
 
   await run('ffmpeg', [
     '-y', '-v', 'error',
-    ...present.flatMap((p) => ['-i', p]),
+    ...placed.flatMap((p) => ['-i', p.file]),
     '-filter_complex', filter,
     '-map', '[a]', '-c:a', 'pcm_s16le',
     out,
@@ -155,7 +169,7 @@ export async function buildReel({ segments, voiceParts, music, out, workDir }) {
   await buildVideo({ segments, out: silent });
   const videoInfo = await probe(silent);
 
-  await buildVoice({ parts: voiceParts, out: voice });
+  await buildVoice({ parts: voiceParts, out: voice, duration: videoInfo.duration });
   await mixAudio({ voice, music, out: audio, duration: videoInfo.duration });
   await mux({ video: silent, audio, out });
 
