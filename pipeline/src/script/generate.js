@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
+import { resolveProvider, callOpenAICompatible, VENDORS } from './providers.js';
 
 const Stat = z.object({
   value: z.string(),
@@ -67,48 +68,76 @@ function validateShape(spec) {
   return problems;
 }
 
+async function callAnthropic({ system, user, model, effort }) {
+  const client = new Anthropic();
+
+  const response = await client.messages.parse({
+    model,
+    max_tokens: 16000,
+    system,
+    // Fable 5 thinks by default; effort is the depth control, and budget_tokens
+    // and temperature are both rejected on this model.
+    output_config: { effort, format: zodOutputFormat(ReelSpec) },
+    // A policy decline would otherwise end the run with no brief at all.
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    messages: [{ role: 'user', content: user }],
+  });
+
+  if (response.stop_reason === 'refusal') {
+    throw new Error(`Script generation was declined (${response.stop_details?.category || 'no category'})`);
+  }
+
+  return { output: response.parsed_output, model };
+}
+
 export async function generateSpec({
   market,
   news,
   date = new Date().toISOString().slice(0, 10),
-  model = MODEL,
+  model,
   effort = 'high',
   onAttempt,
 }) {
-  const client = new Anthropic();
+  const provider = resolveProvider();
+  if (!provider) {
+    throw new Error(
+      'No script model configured. Set ANTHROPIC_API_KEY, or one of ' +
+      `${Object.values(VENDORS).map((v) => v.key).join(' / ')}, or SCRIPT_BASE_URL + SCRIPT_API_KEY.`,
+    );
+  }
+
+  const chosenModel = model || provider.model;
+  if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   let lastProblems = [];
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     let userPrompt = buildUserPrompt({ market, news, date });
 
-    // A second pass is given the specific structural complaints rather than being
-    // asked again and hoped at.
+    // A second pass is given the specific complaints rather than being asked
+    // again and hoped at.
     if (lastProblems.length) {
       userPrompt += `\n\nYour previous attempt was rejected:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nFix exactly these and return the full spec again.`;
     }
 
-    onAttempt?.(attempt, model);
+    onAttempt?.(attempt, `${provider.name}/${chosenModel}`);
 
-    const response = await client.messages.parse({
-      model,
-      max_tokens: 16000,
-      system: SYSTEM,
-      // Fable 5 thinks by default; effort is the depth control, and budget_tokens
-      // and temperature are both rejected on this model.
-      output_config: { effort, format: zodOutputFormat(ReelSpec) },
-      // A policy decline would otherwise end the run with no brief at all.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      messages: [{ role: 'user', content: userPrompt }],
-    });
+    try {
+      const { output, model: used } = provider.kind === 'anthropic'
+        ? await callAnthropic({ system: SYSTEM, user: userPrompt, model: chosenModel, effort })
+        : await callOpenAICompatible({
+            provider: { ...provider, model: chosenModel },
+            system: SYSTEM, user: userPrompt, schema: ReelSpec,
+          });
 
-    if (response.stop_reason === 'refusal') {
-      throw new Error(`Script generation was declined (${response.stop_details?.category || 'no category'})`);
+      lastProblems = validateShape(output);
+      if (!lastProblems.length) return { spec: output, provider: provider.name, model: used, attempts: attempt };
+    } catch (err) {
+      // A schema mismatch is worth one more pass with the field paths attached;
+      // an auth or model-name failure is not going to fix itself.
+      if (!err.schemaIssues || attempt === 2) throw err;
+      lastProblems = err.schemaIssues;
     }
-
-    const spec = response.parsed_output;
-    lastProblems = validateShape(spec);
-    if (!lastProblems.length) return { spec, model, attempts: attempt };
   }
 
   throw new Error(`Generated spec still invalid after 2 attempts: ${lastProblems.join('; ')}`);

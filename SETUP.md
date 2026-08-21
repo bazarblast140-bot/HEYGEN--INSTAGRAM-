@@ -99,10 +99,25 @@ publish step refuses anything else. A broken reel cannot reach your feed.
 
 ## One more secret, for the daily script
 
-Add `ANTHROPIC_API_KEY` to the repository secrets.
+Without a script model the pipeline still runs, but it falls back to the checked-in
+spec — which means **the same reel every morning**. With one, each day's brief is
+written from that day's actual numbers.
 
-Without it the pipeline still runs, but it falls back to the checked-in spec — and
-that means **the same reel every morning**. With it, Claude writes each day's brief
-from that day's actual numbers.
+Add whichever you have as a repository **secret**. The first one found is used:
 
-Get one at console.anthropic.com → API keys.
+| Secret | Vendor | Default model |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Claude | `claude-fable-5` |
+| `MOONSHOT_API_KEY` | Moonshot / Kimi | `kimi-k2-0711-preview` |
+| `DEEPSEEK_API_KEY` | DeepSeek | `deepseek-chat` |
+| `GROQ_API_KEY` | Groq | `llama-3.3-70b-versatile` |
+| `OPENROUTER_API_KEY` | OpenRouter | `deepseek/deepseek-chat` |
+| `TOGETHER_API_KEY` | Together | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+
+**To use a specific model** — e.g. DeepSeek v4 Flash — add the repository
+**variable** `SCRIPT_MODEL` with that model's exact id. It overrides the default
+above. If the id is wrong, the run says so by name instead of failing vaguely.
+
+**Any other vendor** that speaks the OpenAI chat-completions API: set the variables
+`SCRIPT_BASE_URL` and `SCRIPT_MODEL`, and the secret `SCRIPT_API_KEY`. No code
+change needed.
