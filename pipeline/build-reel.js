@@ -23,7 +23,7 @@ import { composeHybrid } from './src/assemble/compose.js';
 import { buildReel } from './src/assemble/timeline.js';
 import { burnCaptions } from './src/assemble/captions.js';
 import { renderPresenter } from './src/presenter/segment.js';
-import { renderNarration, cutPresenterWindow } from './src/presenter/narration.js';
+import { renderNarration, cutPresenterWindow, alignBeats } from './src/presenter/narration.js';
 import { fetchStock } from './src/stock/index.js';
 import { generateSpec } from './src/script/generate.js';
 import { run } from './src/assemble/encode.js';
@@ -91,8 +91,10 @@ async function buildPresenterBeat({ segment, workDir, tag, narration, start, dur
     layout: 'panel', out: path.join(workDir, `${tag}-card.mp4`), workDir, tag: `${tag}-card`,
   });
 
-  if (!narration) {
-    // No presenter render — show the card full frame instead of a blank panel.
+  if (!narration?.video) {
+    // No presenter footage — either no narration at all, or narration that came
+    // from speech synthesis rather than an avatar render. Either way there is no
+    // face to stack, so show the card full frame instead of a blank panel.
     const full = await renderSceneClip({
       scene: 'card.html', data: segment.card, seconds: duration,
       layout: 'full', out: path.join(workDir, `${tag}-full.mp4`), workDir, tag: `${tag}-full`,
@@ -173,31 +175,44 @@ async function main() {
   const chartData = { ...series, summary, verdict: spec.verdict || '' };
   console.log(`  ${chartData.name}  ${chartData.summary.last.toFixed(2)}  ${chartData.summary.changePct >= 0 ? '+' : ''}${chartData.summary.changePct.toFixed(2)}%`);
 
-  const useAvatar = !args['no-avatar'];
+  // Two separate switches. --no-avatar drops the face and keeps the voice, which
+  // is what an exhausted HeyGen allowance does anyway; --no-voice is for offline
+  // builds where nothing can reach the API at all.
+  const wantFace = !args['no-avatar'];
+  const wantVoice = !args['no-voice'];
 
-  // Every spoken word in the reel, in the order it is heard. One render, one voice.
+  // Every spoken word in the reel, in the order it is heard. One voice throughout.
   const spokenPerBeat = spec.segments.map((seg) => String(seg.say || seg.caption || '').trim());
   const fullScript = spokenPerBeat.filter(Boolean).join(' ');
 
   let narration = null;
-  if (useAvatar && fullScript) {
+  if (wantVoice && fullScript) {
     console.log('Recording the narration');
     try {
       narration = await renderNarration({
         script: fullScript,
+        wantFace,
         workDir: path.join(workDir, 'narration'),
         onStatus: (st) => process.stdout.write(`\r  ${st.status}      `),
+        onNote: note,
       });
       process.stdout.write('\n');
-      console.log(`  ${narration.duration.toFixed(1)}s in Rajesh's voice, ${narration.width}x${narration.height}`);
+      const how = narration.source === 'avatar' ? 'avatar render' : 'speech synthesis';
+      console.log(`  ${narration.duration.toFixed(1)}s in Rajesh's voice via ${how}`);
     } catch (err) {
       note(`narration unavailable (${err.message.slice(0, 110)}) — the reel will be silent`);
     }
   }
 
-  // Beat lengths follow the narration, so the picture lands on the words.
+  // Beat lengths follow the narration, so the picture lands on the words. Prefer
+  // the synthesiser's own word timings; fall back to word-share estimation when
+  // it did not give any.
   const durations = narration
-    ? allocateDurations(spec.segments, narration.duration)
+    ? (alignBeats({
+        words: narration.words,
+        spokenPerBeat,
+        totalDuration: narration.duration,
+      }) || allocateDurations(spec.segments, narration.duration))
     : spec.segments.map((seg) => seg.seconds || 3);
 
   const segments = [];
@@ -284,6 +299,10 @@ async function main() {
   }
 
   const narrated = Boolean(narration);
+  // Losing the face is a downgrade worth posting; losing the voice is not.
+  if (narrated && narration.source === 'speech') {
+    note("no avatar allowance left — Rajesh's voice over cards, no face this time");
+  }
 
   console.log('Assembling');
   const music = spec.music ? path.resolve(HERE, spec.music) : undefined;
@@ -320,6 +339,7 @@ async function main() {
     hasAudio: info.hasAudio,
     avatarSeconds: Number(avatarSeconds.toFixed(2)),
     narrated,
+    voiceSource: narration?.source || null,
     synthetic: Boolean(series.synthetic),
     publishable: narrated && !series.synthetic,
     notes,
@@ -337,7 +357,7 @@ async function main() {
 
   console.log(
     `\n${path.relative(process.cwd(), out)}  ${info.width}x${info.height}  ${info.fps}fps  ` +
-    `${report.duration}s  ${report.sizeMB}MB  avatar ${report.avatarSeconds}s`,
+    `${report.duration}s  ${report.sizeMB}MB  avatar ${report.avatarSeconds}s  voice ${report.voiceSource || 'none'}`,
   );
 
   const problems = [];

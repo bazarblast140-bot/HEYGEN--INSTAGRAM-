@@ -79,6 +79,8 @@ jobs:
           HEYGEN_AVATAR_KIND: ${{ vars.HEYGEN_AVATAR_KIND }}
           HEYGEN_ENGINE: ${{ vars.HEYGEN_ENGINE }}
           HEYGEN_VOICE_ID: ${{ vars.HEYGEN_VOICE_ID }}
+          HEYGEN_SPEECH_PATH: ${{ vars.HEYGEN_SPEECH_PATH }}
+          HEYGEN_TTS_LANGUAGE: ${{ vars.HEYGEN_TTS_LANGUAGE }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: |

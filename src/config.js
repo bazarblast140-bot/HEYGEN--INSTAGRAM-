@@ -13,11 +13,31 @@ export function env(name, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
+/**
+ * The presenter, verified against the live HeyGen account rather than typed from
+ * memory. These are defaults in code, not repository variables, for a reason: the
+ * ids are not secret, they change about once a year, and every time they lived in
+ * a GitHub variable somebody pasted one with a trailing newline and the morning's
+ * reel lost its face to an error message that blamed the id.
+ *
+ * Environment values still win, so a new clone needs no code change.
+ *
+ *   avatar  "Rajesh Video 1"  digital_twin, 720x1280 portrait
+ *           supports avatar_v / avatar_iv / avatar_iii
+ *   voice   the twin's own cloned voice (Hindi, male)
+ */
+export const PRESENTER = {
+  avatarId: '43ea820171e04d0eb3c4e457124c3828',
+  avatarKind: 'avatar',
+  engine: 'avatar_v',
+  voiceId: 'ad3099687f824940811e3fb3ec3e3beb',
+};
+
 export const config = {
   apiKey: env('HEYGEN_API_KEY'),
   port: Number(env('PORT')) || 3000,
-  defaultAvatarId: env('DEFAULT_AVATAR_ID'),
-  defaultVoiceId: env('DEFAULT_VOICE_ID'),
+  defaultAvatarId: env('DEFAULT_AVATAR_ID') || PRESENTER.avatarId,
+  defaultVoiceId: env('DEFAULT_VOICE_ID') || PRESENTER.voiceId,
 };
 
 // Instagram-friendly output sizes. Reels/Stories are 9:16, feed posts are 1:1.

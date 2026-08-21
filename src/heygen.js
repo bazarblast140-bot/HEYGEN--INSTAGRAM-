@@ -53,6 +53,45 @@ export async function listAvatars() {
   };
 }
 
+/**
+ * Find an avatar look by id, including looks that live inside avatar groups.
+ *
+ * This exists because /v2/avatars does not list them. Rajesh's video clone is a
+ * `digital_twin` inside the group "Rajesh Video 1", so the flat listing reports
+ * a perfectly valid id as "not found" — which is what made the presenter beat
+ * silently disappear from earlier reels.
+ *
+ * Returns null rather than throwing: this informs a decision, it does not gate one.
+ */
+export async function findAvatarLook(lookId) {
+  try {
+    const { data } = await request('/v2/avatar_group.list');
+    const groups = data?.avatar_group_list || data?.avatar_groups || [];
+
+    for (const group of groups) {
+      const groupId = group.id || group.group_id;
+      if (!groupId) continue;
+
+      const { data: looks } = await request(`/v2/avatar_group/${encodeURIComponent(groupId)}/avatars`);
+      const found = (looks?.avatar_list || looks?.avatars || []).find(
+        (a) => (a.id || a.avatar_id) === lookId,
+      );
+      if (found) {
+        return {
+          id: lookId,
+          groupId,
+          type: found.avatar_type || found.type || null,
+          defaultVoiceId: found.default_voice_id || group.default_voice_id || null,
+          engines: found.supported_api_engines || [],
+        };
+      }
+    }
+  } catch {
+    // A listing failure must not decide whether the presenter appears.
+  }
+  return null;
+}
+
 export async function listVoices() {
   const { data } = await request('/v2/voices');
   return (data?.voices || []).map((v) => ({
@@ -115,43 +154,70 @@ export async function getVideoStatus(videoId) {
     videoUrl: data?.video_url,
     thumbnailUrl: data?.thumbnail_url,
     captionUrl: data?.caption_url,
+    subtitleUrl: data?.subtitle_url,
     duration: data?.duration,
     error: data?.error || null,
+    // Both spellings appear depending on which API family answered.
+    errorCode: data?.error?.code || data?.failure_code || null,
+    errorMessage: data?.error?.message || data?.failure_message || null,
   };
 }
 
 /**
- * Text to speech. Far cheaper than avatar video, so it carries every second of a
- * reel the avatar is not on screen. Returns word-level timestamps, which is what
- * lets captions be cut to the word without a separate alignment pass.
+ * Text to speech in Rajesh's own cloned voice.
  *
- * The first guess at the REST path, /v3/speech, returned 404 in production. Rather
- * than guess again, try the plausible paths in order and keep whichever answers.
- * The winner is logged so it can be pinned with HEYGEN_SPEECH_PATH, which skips
- * the probing entirely on later runs.
+ * This is now the backbone of the reel, not a side feature. Avatar video is
+ * metered — the account's monthly avatar allowance runs out and every engine
+ * then refuses — but speech synthesis keeps working, so the voice survives a
+ * quota wall that the face does not.
+ *
+ * Returns word-level timestamps, which is what lets captions land on the word
+ * and beats land on the sentence without a separate alignment pass.
+ *
+ * The REST path is probed rather than assumed: an earlier guess at /v3/speech
+ * came back 404 in production, and this container cannot reach api.heygen.com
+ * to settle it. Whichever candidate answers is remembered for the rest of the
+ * run and logged, so it can be pinned with HEYGEN_SPEECH_PATH afterwards.
  */
 const SPEECH_PATHS = process.env.HEYGEN_SPEECH_PATH
   ? [process.env.HEYGEN_SPEECH_PATH.trim()]
-  : ['/v2/speech', '/v1/speech', '/v3/speech', '/v2/audio/generate', '/v1/audio/generate'];
+  : [
+      '/v3/speech',
+      '/v2/speech',
+      '/v1/speech',
+      '/v3/text_to_speech',
+      '/v2/text_to_speech',
+      '/v3/tts',
+      '/v2/audio/generate',
+      '/v1/audio/generate',
+    ];
 
 let resolvedSpeechPath = null;
 
-export async function createSpeech({ text, voiceId, speed = 1, locale, inputType = 'text' }) {
+export async function createSpeech({ text, voiceId, speed = 1, locale, language, inputType = 'text' }) {
   if (!text?.trim()) throw new Error('createSpeech needs text');
   if (!voiceId) throw new Error('createSpeech needs a voiceId');
 
-  const body = { text: text.trim(), voice_id: voiceId, speed, input_type: inputType, ...(locale ? { locale } : {}) };
+  const body = {
+    text: text.trim(),
+    voice_id: voiceId,
+    speed,
+    input_type: inputType,
+    ...(locale ? { locale } : {}),
+    ...(language ? { language } : {}),
+  };
+
   const candidates = resolvedSpeechPath ? [resolvedSpeechPath] : SPEECH_PATHS;
 
   let payload;
   const tried = [];
 
-  for (const path of candidates) {
+  for (const candidate of candidates) {
     try {
-      payload = await request(path, { method: 'POST', body });
-      if (resolvedSpeechPath !== path) {
-        resolvedSpeechPath = path;
-        console.log(`HeyGen TTS endpoint resolved to ${path} — pin it with HEYGEN_SPEECH_PATH to skip probing.`);
+      payload = await request(candidate, { method: 'POST', body });
+      if (resolvedSpeechPath !== candidate) {
+        resolvedSpeechPath = candidate;
+        console.log(`HeyGen TTS endpoint resolved to ${candidate} — pin it with HEYGEN_SPEECH_PATH to skip probing.`);
       }
       break;
     } catch (err) {
@@ -159,7 +225,7 @@ export async function createSpeech({ text, voiceId, speed = 1, locale, inputType
       // status means the endpoint exists and rejected the request, which must
       // surface rather than be masked by further probing.
       if (err.status !== 404) throw err;
-      tried.push(path);
+      tried.push(candidate);
     }
   }
 
@@ -170,14 +236,39 @@ export async function createSpeech({ text, voiceId, speed = 1, locale, inputType
     );
   }
 
+  // The v3 shape returns these at the top level; older shapes nest them in data.
   const data = payload?.data || payload;
   if (!data?.audio_url) throw new Error('HeyGen TTS returned no audio_url');
 
   return {
     audioUrl: data.audio_url,
     duration: data.duration,
-    wordTimestamps: data.word_timestamps || [],
+    // <start> and <end> markers are bookkeeping, not words.
+    wordTimestamps: (data.word_timestamps || []).filter((w) => !/^<.*>$/.test(w.word || '')),
   };
+}
+
+/**
+ * Did HeyGen refuse because the account is out of allowance, rather than because
+ * the request was wrong?
+ *
+ * This matters because the two deserve opposite handling. A malformed request is
+ * a bug to fix; an exhausted quota is a fact about the plan, and the reel should
+ * carry on without the face rather than fail the morning's post. Observed codes:
+ *
+ *   MOVIO_PAYMENT_INSUFFICIENT_CREDIT                 (avatar_iii, needs a paid plan)
+ *   AVATAR_IV_VIDEO_GENERATION_DURATION_LIMIT_REACHED (avatar_iv and avatar_v, monthly cap)
+ */
+export function isQuotaRefusal(err) {
+  const haystack = [
+    err?.message,
+    err?.errorCode,
+    err?.details?.error?.code,
+    err?.details?.failure_code,
+    err?.code,
+  ].filter(Boolean).join(' ').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+
+  return /INSUFFICIENT_CREDIT|LIMIT_REACHED|MONTHLY_LIMIT|REACHED_YOUR|OUT_OF_CREDIT|NOT_ENOUGH_CREDIT|QUOTA|EXCEEDED/.test(haystack);
 }
 
 export async function getQuota() {

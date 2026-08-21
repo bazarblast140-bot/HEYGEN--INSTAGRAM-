@@ -6,8 +6,8 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { generateVideo, getVideoStatus, listAvatars } from '../../../src/heygen.js';
-import { config, env } from '../../../src/config.js';
+import { generateVideo, getVideoStatus, listAvatars, findAvatarLook, isQuotaRefusal } from '../../../src/heygen.js';
+import { config, env, PRESENTER } from '../../../src/config.js';
 
 // The bottom half of a 1080x1920 hybrid frame.
 export const PANEL = { width: 1080, height: 780 };
@@ -30,7 +30,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * out than a lookup that quietly disagrees with reality.
  */
 export async function resolveCharacterKind(id) {
-  const configured = env('HEYGEN_AVATAR_KIND');
+  const configured = env('HEYGEN_AVATAR_KIND') || PRESENTER.avatarKind;
   if (configured) return configured;
 
   try {
@@ -41,10 +41,17 @@ export async function resolveCharacterKind(id) {
     // A listing failure must not decide whether the presenter appears.
   }
 
-  // The account now holds both a photo avatar and a video clone, and the two take
-  // different fields — so guessing is worse than it was when there was only one
-  // kind. HEYGEN_AVATAR_KIND is the answer; this is only the last resort.
-  return 'talking_photo';
+  // The flat listing does not include looks that live inside an avatar group,
+  // which is exactly where Rajesh's video clone lives. Ask the group endpoints
+  // before falling back to a guess.
+  const look = await findAvatarLook(id);
+  if (look?.type === 'photo_avatar') return 'talking_photo';
+  if (look?.type) return 'avatar';
+
+  // Last resort. A digital twin is the configured character, and a twin takes
+  // `avatar_id`; guessing talking_photo here sent the wrong field for a year of
+  // mornings. HEYGEN_AVATAR_KIND overrides this if the account ever changes.
+  return 'avatar';
 }
 
 export async function renderPresenter({
@@ -52,7 +59,7 @@ export async function renderPresenter({
   avatarId = env('HEYGEN_AVATAR_ID') || config.defaultAvatarId,
   voiceId = env('HEYGEN_VOICE_ID') || config.defaultVoiceId,
   characterKind,
-  engine = env('HEYGEN_ENGINE') || undefined,
+  engine = env('HEYGEN_ENGINE') || PRESENTER.engine,
   speed = 1,
   width = PANEL.width,
   height = PANEL.height,
@@ -91,7 +98,13 @@ export async function renderPresenter({
     onStatus?.(status);
 
     if (status.status === 'failed') {
-      throw new Error(`HeyGen render failed: ${status.error?.message || 'no reason given'}`);
+      const reason = status.errorMessage || status.error?.message || 'no reason given';
+      // Attach the machine code so the caller can distinguish "out of allowance"
+      // from "bad request" without reading prose.
+      throw Object.assign(new Error(`HeyGen render failed: ${reason}`), {
+        errorCode: status.errorCode,
+        quota: isQuotaRefusal({ message: reason, errorCode: status.errorCode }),
+      });
     }
     if (status.status === 'completed') {
       const file = out || path.join(process.cwd(), `${videoId}.mp4`);
