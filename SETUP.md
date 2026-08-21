@@ -19,10 +19,17 @@ private even on a public repository.
 variable `MEDIA_REPO`, and add a personal access token with `contents:write` as the
 secret `MEDIA_REPO_TOKEN`. Everything else is the same.
 
-## 2. Merge this branch into `main`
+## 2. Nothing to do — already done
 
 Scheduled workflows only run from the default branch, and the **Run workflow**
 button only appears for workflows on it.
+
+This repository has a single branch, `claude/heygen-avatar-new-project-x7kfed`,
+and GitHub made it the default when it was first pushed. There is no `main` to
+merge into, and nothing to merge — the workflows are already where they need to be.
+
+Rename it to `main` later if you like: **Settings → Branches → pencil icon**. The
+workflows keep running either way.
 
 ## 3. Add the secrets and variables
 
