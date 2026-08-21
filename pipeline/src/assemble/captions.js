@@ -42,8 +42,13 @@ function header() {
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     // Alignment 2 = bottom-centre. MarginV lifts the line clear of Instagram's own UI.
-    `Style: Body,${STYLE.sans.font},${STYLE.sans.size},${STYLE.sans.primary},${STYLE.sans.outline},&H80000000,-1,0,1,5,2,2,80,80,300,1`,
-    `Style: Power,${STYLE.serif.font},${STYLE.serif.size},${STYLE.serif.primary},${STYLE.serif.outline},&H80000000,0,-1,1,5,2,2,80,80,430,1`,
+    // Two style pairs, because a caption is drawn over whatever ground the beat
+    // uses. White text with a dark edge disappears on the cream card — the light
+    // variants invert both so every line stays readable on its own background.
+    `Style: Body,${STYLE.sans.font},${STYLE.sans.size},&H00F8FAFC,&H00020617,&H80000000,-1,0,1,5,2,2,80,80,300,1`,
+    `Style: Power,${STYLE.serif.font},${STYLE.serif.size},&H004CA1EF,&H00020617,&H80000000,0,-1,1,5,2,2,80,80,430,1`,
+    `Style: BodyLight,${STYLE.sans.font},${STYLE.sans.size},&H001F1814,&H00ECF1F4,&H80FFFFFF,-1,0,1,5,2,2,80,80,300,1`,
+    `Style: PowerLight,${STYLE.serif.font},${STYLE.serif.size},&H000A53B4,&H00ECF1F4,&H80FFFFFF,0,-1,1,5,2,2,80,80,430,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -71,9 +76,10 @@ function estimateTimings(words, start, duration) {
 }
 
 /**
- * @param {Array} beats  [{ start, duration, text, power }]
+ * @param {Array} beats  [{ start, duration, text, power, theme }]
  *   text  — spoken words for this beat
  *   power — the one word to set in display serif above the line, optional
+ *   theme — the beat's ground, so the caption can invert on the light card
  */
 export function buildAss(beats) {
   const lines = [header()];
@@ -82,20 +88,24 @@ export function buildAss(beats) {
     const words = String(beat.text || '').trim().split(/\s+/).filter(Boolean);
     if (!words.length) continue;
 
+    const light = beat.theme === 'light';
+    const bodyStyle = light ? 'BodyLight' : 'Body';
+    const powerStyle = light ? 'PowerLight' : 'Power';
+
     const timed = beat.timings?.length
       ? beat.timings
       : estimateTimings(words, beat.start, beat.duration);
 
     for (const group of groupWords(timed)) {
       const text = group.map((t) => t.word).join(' ').replace(/[{}]/g, '');
-      lines.push(`Dialogue: 0,${ts(group[0].start)},${ts(group[group.length - 1].end)},Body,,0,0,0,,${text}`);
+      lines.push(`Dialogue: 0,${ts(group[0].start)},${ts(group[group.length - 1].end)},${bodyStyle},,0,0,0,,${text}`);
     }
 
     if (beat.power) {
       // The power word holds for the whole beat rather than flashing per group —
       // it is the thing the viewer should still be reading when the shot changes.
       lines.push(
-        `Dialogue: 1,${ts(beat.start)},${ts(beat.start + beat.duration)},Power,,0,0,0,,${String(beat.power).replace(/[{}]/g, '')}`,
+        `Dialogue: 1,${ts(beat.start)},${ts(beat.start + beat.duration)},${powerStyle},,0,0,0,,${String(beat.power).replace(/[{}]/g, '')}`,
       );
     }
   }

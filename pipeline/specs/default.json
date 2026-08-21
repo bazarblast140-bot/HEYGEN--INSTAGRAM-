@@ -7,9 +7,8 @@
   "segments": [
     {
       "type": "hook",
-      "seconds": 5.5,
-      "say": "Namaste, main Rajesh. Market kholne se pehle teen baatein.",
-      "caption": "Namaste, main Rajesh. Market kholne se pehle teen baatein.",
+      "say": "Namaste, main Rajesh. Market kholne se pehle aaj teen baatein aapko pata honi chahiye.",
+      "caption": "Namaste, main Rajesh",
       "power": "TEEN BAATEIN",
       "card": {
         "chips": [
@@ -23,14 +22,13 @@
     },
     {
       "type": "chart",
-      "seconds": 3.5,
-      "caption": "Nifty ne flat band diya",
-      "power": "FLAT BAND"
+      "caption": "bada move kisi taraf nahi",
+      "power": "FLAT BAND",
+      "say": "Nifty ne aaj flat band diya, bada move kisi taraf nahi aaya."
     },
     {
       "type": "card",
-      "seconds": 2.8,
-      "caption": "lekin volume pachees percent zyada tha",
+      "caption": "pichhle hafte se zyada",
       "power": "VOLUME",
       "card": {
         "chips": [
@@ -45,13 +43,13 @@
           "direction": "up"
         },
         "footnote": "Source: NSE"
-      }
+      },
+      "say": "Lekin volume pichhle hafte se pachees percent zyada tha, matlab kaam chalu tha."
     },
     {
       "type": "cutin",
-      "seconds": 2.5,
       "say": "Ab is number ko dhyan se dekhiye.",
-      "caption": "Ab is number ko dhyan se dekhiye",
+      "caption": "is number ko dhyan se",
       "power": "DHYAN SE",
       "card": {
         "chips": [
@@ -65,8 +63,7 @@
     },
     {
       "type": "card",
-      "seconds": 3.0,
-      "caption": "F I I ne teesre din buying ki hai",
+      "caption": "cash market me, teen din se",
       "power": "KHAREEDARI",
       "card": {
         "chips": [
@@ -81,12 +78,12 @@
           "direction": "up"
         },
         "footnote": "Source: NSE provisional"
-      }
+      },
+      "say": "F I I ne cash market me lagataar teesre din kharidari ki hai."
     },
     {
       "type": "card",
-      "seconds": 3.0,
-      "caption": "aur is hafte R B I ki policy meeting hai",
+      "caption": "sabse bada trigger",
       "power": "RBI POLICY",
       "card": {
         "chips": [
@@ -96,12 +93,12 @@
         "headline": "Policy meeting",
         "power": "IS HAFTE",
         "footnote": "Banking stocks pehle se position bana rahe hain"
-      }
+      },
+      "say": "Aur is hafte R B I ki policy meeting hai, jo sabse bada trigger hai."
     },
     {
       "type": "card",
-      "seconds": 2.8,
-      "caption": "Banking stocks pehle se position bana rahe hain",
+      "caption": "pehle se position bani hui",
       "power": "BANKING",
       "card": {
         "chips": [
@@ -116,12 +113,12 @@
           "direction": "up"
         },
         "footnote": "Source: NSE"
-      }
+      },
+      "say": "Banking stocks pehle se hi position bana rahe hain."
     },
     {
       "type": "card",
-      "seconds": 3.4,
-      "caption": "Poori list aur levels ke liye comment karo MARKET",
+      "caption": "comment karo MARKET",
       "power": "comment “MARKET”",
       "card": {
         "chips": [
@@ -130,10 +127,10 @@
         "headline": "Poori list aur levels ke liye",
         "power": "comment “MARKET”",
         "footnote": "Educational content · Investment advice nahi"
-      }
+      },
+      "say": "Poori list aur levels ke liye comment karo MARKET."
     }
   ],
-  "body": "Nifty ne aaj flat band diya, lekin volume pichhle hafte se pachees percent zyada tha. F I I ne cash market me lagataar teesre din buying ki hai. Aur is hafte R B I ki policy meeting hai — banking stocks pehle se hi position bana rahe hain.",
   "caption": "Aaj ka pre-market brief — Nifty ka volume, FII flow, aur is hafte ki RBI policy meeting.\n\nPoori list aur levels chahiye? Comment karo \"MARKET\".",
   "hashtags": [
     "#nifty50",

@@ -169,8 +169,19 @@ export async function buildReel({ segments, voiceParts, music, out, workDir }) {
   await buildVideo({ segments, out: silent });
   const videoInfo = await probe(silent);
 
-  await buildVoice({ parts: voiceParts, out: voice, duration: videoInfo.duration });
-  await mixAudio({ voice, music, out: audio, duration: videoInfo.duration });
+  // No narration is a degraded run, not a failed one — the bed still carries it.
+  if (voiceParts.some((p) => p?.file)) {
+    await buildVoice({ parts: voiceParts, out: voice, duration: videoInfo.duration });
+    await mixAudio({ voice, music, out: audio, duration: videoInfo.duration });
+  } else {
+    await run('ffmpeg', [
+      '-y', '-v', 'error',
+      '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+      '-t', videoInfo.duration.toFixed(3), '-c:a', 'pcm_s16le', voice,
+    ]);
+    await mixAudio({ voice, music, out: audio, duration: videoInfo.duration });
+  }
+
   await mux({ video: silent, audio, out });
 
   return probe(out);

@@ -41,11 +41,15 @@ Structure, in order:
   3. One "cutin" beat — Rajesh on camera again for two to three seconds, right before the most important number.
   4. One final card beat — the call to action.
 
+Every beat has a "say" — the reel is narrated end to end in one continuous voice,
+and each beat's picture is held for exactly as long as its own words take. A beat
+with no words would be a silent gap, so there are none.
+
 Beat types:
-  "hook"  — presenter panel. Needs "say" (spoken aloud) and "card".
-  "cutin" — presenter panel. Needs "say" and "card". Keep "say" under 12 words.
-  "chart" — the price chart renders itself from real data. No card. No "say".
-  "card"  — a full-frame statement or statistic. Needs "card". No "say".
+  "hook"  — presenter on camera over a card. Opens the reel.
+  "cutin" — presenter on camera again, 6 to 12 words, right before the biggest number.
+  "chart" — the price chart renders itself from real data. No card.
+  "card"  — a full-frame statement or statistic.
 </context>
 
 <input_data>
@@ -66,12 +70,13 @@ ${JSON.stringify(news ?? [], null, 2)}
 Respond with JSON only — no preamble, no markdown fences.
 
 Per beat:
-  seconds  — 2.4 to 5.5. Total across all beats between 26 and 32.
-  say      — spoken aloud, hook and cutin only. TTS-safe: write acronyms spaced
-             ("F I I", "R B I"), spell symbols ("pachees percent", not "25%"),
-             no emoji, no brackets.
-  caption  — the burned-in line for this beat. Max 9 words. Same words as "say"
-             where a "say" exists.
+  say      — what is spoken over this beat. 6 to 22 words. Read consecutively,
+             every beat's "say" must join into one natural paragraph.
+             TTS-safe: acronyms spaced ("F I I", "R B I"), symbols spelled
+             ("pachees percent", not "25%"), no emoji, no brackets.
+  caption  — the burned-in line. Max 9 words, drawn from that beat's "say".
+             On a "card" beat, do NOT repeat the card's own headline or power —
+             the card already says it, and printing it twice is clutter.
   power    — one or two words from that caption, set large in display serif. The
              number or the verdict, never a connecting word.
   card.chips     — one or two labels, max 2 words each, UPPERCASE.
@@ -81,20 +86,23 @@ Per beat:
                    value max 10 characters. label max 5 words.
   card.footnote  — the source, or a one-line qualifier.
 
+Total spoken length across all beats: 70 to 95 words. That lands the reel near
+30 seconds when read aloud.
+
 Also produce:
   verdict    — two or three words describing the session, for the chart beat.
-  body       — the narration covering every beat between the hook and the cutin.
-               TTS-safe, 45 to 70 words.
   caption    — the Instagram caption. 2 to 3 sentences, then the comment prompt.
   hashtags   — 8 to 12, lowercase, Indian market relevant.
 </output_format>
 
 <example>
-A beat carrying an FII flow figure:
+A beat carrying an FII flow figure. Note the caption adds the detail the card
+does not show, rather than echoing the headline:
 {
-  "type": "card", "seconds": 3.0,
-  "caption": "F I I ne teesre din kharidari ki",
-  "power": "KHAREEDARI",
+  "type": "card",
+  "say": "F I I ne cash market me lagataar teesre din kharidari ki hai",
+  "caption": "cash market me, teen din se",
+  "power": "TEEN DIN",
   "card": {
     "chips": ["FII FLOW", "CASH MARKET"],
     "headline": "Lagataar teesre din",

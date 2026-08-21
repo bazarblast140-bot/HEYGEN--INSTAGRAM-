@@ -23,8 +23,7 @@ import { composeHybrid } from './src/assemble/compose.js';
 import { buildReel } from './src/assemble/timeline.js';
 import { burnCaptions } from './src/assemble/captions.js';
 import { renderPresenter } from './src/presenter/segment.js';
-import { renderVoice } from './src/presenter/voice.js';
-import { renderEdgeVoice } from './src/presenter/edge-voice.js';
+import { renderNarration, cutPresenterWindow } from './src/presenter/narration.js';
 import { fetchStock } from './src/stock/index.js';
 import { generateSpec } from './src/script/generate.js';
 import { run } from './src/assemble/encode.js';
@@ -47,36 +46,25 @@ function parseArgs(argv) {
 const notes = [];
 const note = (msg) => { notes.push(msg); console.log(`  · ${msg}`); };
 
-/** Silence of a known length, so a missing voice leaves a gap of the right size
- *  rather than collapsing the timeline or crashing the run. */
-async function silence(seconds, out) {
-  await run('ffmpeg', [
-    '-y', '-v', 'error',
-    '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
-    '-t', seconds.toFixed(3), '-c:a', 'pcm_s16le', out,
-  ]);
-  return out;
-}
-
 /**
- * Narration, in order of preference: the cloned HeyGen voice, then a free Edge
- * hi-IN voice, then silence. Silence was the loudest fault in the first cut, so
- * the free voice earns its place purely by never leaving the reel mute.
+ * Beat lengths follow the speech, not the other way round.
+ *
+ * A beat's share of the reel is its share of the spoken words. That is what makes
+ * the picture land on the words: a beat with twice the words gets twice the time,
+ * and the totals match the narration exactly rather than approximately.
  */
-async function speakOrSilence({ text, seconds, out, label }) {
-  try {
-    const voice = await renderVoice({ text, out });
-    return { file: voice.file, narrated: true, wordTimestamps: voice.wordTimestamps };
-  } catch (heygenErr) {
-    try {
-      const voice = await renderEdgeVoice({ text, out });
-      note(`${label}: HeyGen voice unavailable (${heygenErr.message.slice(0, 60)}) — used ${voice.voice}`);
-      return { file: voice.file, narrated: true, wordTimestamps: voice.wordTimestamps };
-    } catch (edgeErr) {
-      note(`voiceover unavailable for ${label} (HeyGen: ${heygenErr.message.slice(0, 50)}; Edge: ${edgeErr.message.slice(0, 50)}) — silent for ${seconds.toFixed(1)}s`);
-      return { file: await silence(seconds, out), narrated: false, wordTimestamps: [] };
-    }
-  }
+function allocateDurations(beats, totalSeconds) {
+  const words = beats.map((b) => Math.max(1, String(b.say || b.caption || '').trim().split(/\s+/).filter(Boolean).length));
+  const totalWords = words.reduce((a, b) => a + b, 0);
+
+  // A minimum stops a three-word beat from flashing past unreadably; the surplus
+  // it takes is reclaimed from the longer beats in proportion.
+  const MIN = 1.9;
+  let raw = words.map((w) => (w / totalWords) * totalSeconds);
+  const shortfall = raw.reduce((acc, d) => acc + Math.max(0, MIN - d), 0);
+  const spare = raw.reduce((acc, d) => acc + Math.max(0, d - MIN), 0);
+
+  return raw.map((d) => (d < MIN ? MIN : d - (spare ? (shortfall * (d - MIN)) / spare : 0)));
 }
 
 async function renderSceneClip({ scene, data, seconds, layout, out, workDir, tag }) {
@@ -97,37 +85,28 @@ async function renderSceneClip({ scene, data, seconds, layout, out, workDir, tag
  * insufficient credit, plan restriction — the beat is rebuilt as a full-frame
  * card and the line is spoken by TTS instead. The reel loses the face, not the day.
  */
-async function buildPresenterBeat({ segment, workDir, tag, useAvatar }) {
+async function buildPresenterBeat({ segment, workDir, tag, narration, start, duration }) {
   const cardPanel = await renderSceneClip({
-    scene: 'card.html', data: segment.card, seconds: segment.seconds,
+    scene: 'card.html', data: segment.card, seconds: duration,
     layout: 'panel', out: path.join(workDir, `${tag}-card.mp4`), workDir, tag: `${tag}-card`,
   });
 
-  if (useAvatar) {
-    try {
-      const avatar = await renderPresenter({
-        script: segment.say,
-        out: path.join(workDir, `${tag}-avatar.mp4`),
-        width: 1280, height: 720,
-      });
-      const out = path.join(workDir, `${tag}.mp4`);
-      await composeHybrid({ chart: cardPanel, presenter: avatar.file, out });
-      const info = await probe(out);
-      return { file: out, duration: info.duration, voice: out, avatarSeconds: info.duration };
-    } catch (err) {
-      note(`avatar unavailable for "${tag}" (${err.message.slice(0, 90)}) — using a full-frame card instead`);
-    }
+  if (!narration) {
+    // No presenter render — show the card full frame instead of a blank panel.
+    const full = await renderSceneClip({
+      scene: 'card.html', data: segment.card, seconds: duration,
+      layout: 'full', out: path.join(workDir, `${tag}-full.mp4`), workDir, tag: `${tag}-full`,
+    });
+    return { file: full, avatarSeconds: 0 };
   }
 
-  const full = await renderSceneClip({
-    scene: 'card.html', data: segment.card, seconds: segment.seconds,
-    layout: 'full', out: path.join(workDir, `${tag}-full.mp4`), workDir, tag: `${tag}-full`,
+  const window = await cutPresenterWindow({
+    narration, start, duration, out: path.join(workDir, `${tag}-presenter.mp4`),
   });
-  const voice = await speakOrSilence({
-    text: segment.say, seconds: segment.seconds,
-    out: path.join(workDir, `${tag}-voice.wav`), label: tag,
-  });
-  return { file: full, duration: segment.seconds, voice: voice.file, avatarSeconds: 0, narrated: voice.narrated };
+
+  const out = path.join(workDir, `${tag}.mp4`);
+  await composeHybrid({ chart: cardPanel, presenter: window, out });
+  return { file: out, avatarSeconds: duration };
 }
 
 async function main() {
@@ -195,92 +174,127 @@ async function main() {
   console.log(`  ${chartData.name}  ${chartData.summary.last.toFixed(2)}  ${chartData.summary.changePct >= 0 ? '+' : ''}${chartData.summary.changePct.toFixed(2)}%`);
 
   const useAvatar = !args['no-avatar'];
+
+  // Every spoken word in the reel, in the order it is heard. One render, one voice.
+  const spokenPerBeat = spec.segments.map((seg) => String(seg.say || seg.caption || '').trim());
+  const fullScript = spokenPerBeat.filter(Boolean).join(' ');
+
+  let narration = null;
+  if (useAvatar && fullScript) {
+    console.log('Recording the narration');
+    try {
+      narration = await renderNarration({
+        script: fullScript,
+        workDir: path.join(workDir, 'narration'),
+        onStatus: (st) => process.stdout.write(`\r  ${st.status}      `),
+      });
+      process.stdout.write('\n');
+      console.log(`  ${narration.duration.toFixed(1)}s in Rajesh's voice, ${narration.width}x${narration.height}`);
+    } catch (err) {
+      note(`narration unavailable (${err.message.slice(0, 110)}) — the reel will be silent`);
+    }
+  }
+
+  // Beat lengths follow the narration, so the picture lands on the words.
+  const durations = narration
+    ? allocateDurations(spec.segments, narration.duration)
+    : spec.segments.map((seg) => seg.seconds || 3);
+
   const segments = [];
-  const voiceParts = [];
   const captionBeats = [];
-  let cursor = 0;
   let avatarSeconds = 0;
-  let narrated = true;
+  let cursor = 0;
+  let cardIndex = -1;
 
   console.log('Segments');
   for (const [i, segment] of spec.segments.entries()) {
     const tag = `${String(i).padStart(2, '0')}-${segment.type}`;
-    process.stdout.write(`  ${tag} … `);
+    const duration = durations[i];
+    process.stdout.write(`  ${tag} ${duration.toFixed(1)}s … `);
 
-    // Caption timings are laid against the cut, not the source clips, so the
-    // running cursor has to advance for every beat that survives.
-    const captionFor = (duration) => {
-      if (segment.caption) {
-        captionBeats.push({ start: cursor, duration, text: segment.caption, power: segment.power });
-      }
-      cursor += duration;
-    };
+    let file = null;
+    let beatTheme = 'dark';
 
     if (segment.type === 'hook' || segment.type === 'cutin') {
-      const beat = await buildPresenterBeat({ segment, workDir, tag, useAvatar });
-      segments.push({ kind: 'hybrid', file: beat.file, duration: beat.duration });
-      voiceParts.push({ file: beat.voice, start: cursor });
-      captionFor(beat.duration);
+      const beat = await buildPresenterBeat({ segment, workDir, tag, narration, start: cursor, duration });
+      file = beat.file;
       avatarSeconds += beat.avatarSeconds;
-      if (beat.narrated === false) narrated = false;
 
     } else if (segment.type === 'chart') {
-      const file = await renderSceneClip({
-        scene: 'candles.html', data: chartData, seconds: segment.seconds,
+      file = await renderSceneClip({
+        scene: 'candles.html', data: chartData, seconds: duration,
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
-      segments.push({ kind: 'scene', file, duration: segment.seconds });
-      captionFor(segment.seconds);
 
     } else if (segment.type === 'card') {
-      const file = await renderSceneClip({
-        scene: 'card.html', data: segment.card, seconds: segment.seconds,
+      // Rotate the ground so no two full-frame cards in a row look alike. Assigned
+      // here rather than asked for, because a model choosing themes freely produces
+      // runs of the same one, which is the failure this exists to prevent.
+      const THEMES = ['dark', 'light', 'ink'];
+      cardIndex += 1;
+      beatTheme = segment.card?.theme || THEMES[cardIndex % THEMES.length];
+      file = await renderSceneClip({
+        scene: 'card.html',
+        data: { ...segment.card, theme: beatTheme },
+        seconds: duration,
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
-      segments.push({ kind: 'scene', file, duration: segment.seconds });
-      captionFor(segment.seconds);
 
     } else if (segment.type === 'stock') {
       try {
         const clip = await fetchStock(segment.query, { outDir: path.join(workDir, 'stock') });
-        segments.push({ kind: 'stock', file: clip.file, duration: segment.seconds });
-        captionFor(segment.seconds);
+        file = clip.file;
       } catch (err) {
-        note(`no stock footage for "${segment.query}" (${err.message.slice(0, 70)}) — beat dropped`);
-        process.stdout.write('skipped\n');
-        continue;
+        note(`no stock footage for "${segment.query}" (${err.message.slice(0, 70)}) — card instead`);
+        file = await renderSceneClip({
+          scene: 'card.html', data: segment.card || { chips: [], headline: segment.caption || '', power: segment.power || '', footnote: '' },
+          seconds: duration, layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
+        });
       }
 
     } else {
       throw new Error(`Unknown segment type "${segment.type}" at index ${i}`);
     }
+
+    segments.push({ kind: segment.type === 'stock' ? 'stock' : 'scene', file, duration });
+
+    // A caption that repeats the card word for word is clutter, not emphasis —
+    // the previous cut showed the same phrase twice on screen. Presenter beats and
+    // chart beats have no card text of their own, so those are the ones captioned.
+    // The card already prints its headline and its power word. Repeating either in
+    // the caption puts the same phrase on screen twice, which is what made the
+    // previous cut look cluttered — so the caption keeps only what the card omits.
+    const cardText = `${segment.card?.headline || ''} ${segment.card?.power || ''}`.toLowerCase();
+    const captionText = String(segment.caption || '').trim();
+    const captionEchoes = captionText && cardText.includes(captionText.toLowerCase().slice(0, 14));
+
+    const power = String(segment.power || '').trim();
+    const powerEchoes = power && cardText.includes(power.toLowerCase());
+
+    if (captionText && !captionEchoes) {
+      captionBeats.push({
+        start: cursor, duration, text: captionText,
+        power: powerEchoes ? null : segment.power,
+        theme: beatTheme,
+      });
+    }
+
+    cursor += duration;
     process.stdout.write('ok\n');
   }
 
-  if (spec.body) {
-    console.log('Voiceover');
-    // The body narration spans the beats between the hook and the cut-in, so its
-    // silent fallback must be that long too.
-    const cutinIndex = spec.segments.findIndex((seg) => seg.type === 'cutin');
-    const spanEnd = cutinIndex > 0 ? cutinIndex : segments.length;
-    const bodySeconds = segments.slice(1, spanEnd).reduce((n, seg) => n + seg.duration, 0) || 10;
-    const bodyVoice = await speakOrSilence({
-      text: spec.body, seconds: bodySeconds,
-      out: path.join(workDir, 'body-voice.wav'), label: 'body narration',
-    });
-    if (!bodyVoice.narrated) narrated = false;
-    // The body narration starts where the hook's picture ends.
-    voiceParts.push({ file: bodyVoice.file, start: segments[0]?.duration || 0 });
-    if (bodyVoice.wordTimestamps.length) {
-      await fs.writeFile(path.join(workDir, 'word-timestamps.json'), JSON.stringify(bodyVoice.wordTimestamps, null, 2));
-      console.log(`  ${bodyVoice.wordTimestamps.length} word timings saved for the caption pass`);
-    }
-  }
+  const narrated = Boolean(narration);
 
   console.log('Assembling');
   const music = spec.music ? path.resolve(HERE, spec.music) : undefined;
   const silentCut = path.join(workDir, 'cut.mp4');
-  await buildReel({ segments, voiceParts, music, out: silentCut, workDir: path.join(workDir, 'assemble') });
+  await buildReel({
+    segments,
+    voiceParts: narration ? [{ file: narration.audio, start: 0 }] : [],
+    music,
+    out: silentCut,
+    workDir: path.join(workDir, 'assemble'),
+  });
 
   let info;
   if (captionBeats.length) {

@@ -27,8 +27,8 @@ const Card = z.object({
 
 const Beat = z.object({
   type: z.enum(['hook', 'cutin', 'chart', 'card']),
-  seconds: z.number(),
-  say: z.string().nullable(),
+  seconds: z.number().nullable(),
+  say: z.string(),
   caption: z.string(),
   power: z.string(),
   card: Card.nullable(),
@@ -51,16 +51,19 @@ export const MODEL = env('SCRIPT_MODEL') || 'claude-fable-5';
  */
 function validateShape(spec) {
   const problems = [];
-  const total = spec.segments.reduce((n, s) => n + s.seconds, 0);
+  // Runtime is set by how long the narration actually takes, so the check is on
+  // the words rather than on numbers the model guessed.
+  const words = spec.segments.reduce((n, s) => n + String(s.say || '').trim().split(/\s+/).filter(Boolean).length, 0);
 
-  if (total < 22 || total > 36) problems.push(`total runtime ${total.toFixed(1)}s is outside 22–36s`);
+  if (words < 55 || words > 115) problems.push(`${words} spoken words is outside 55–115 (about 22–40 seconds)`);
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
   if (!spec.segments.some((s) => s.type === 'chart')) problems.push('no chart beat');
 
   for (const [i, beat] of spec.segments.entries()) {
     const where = `beat ${i} (${beat.type})`;
-    if (beat.seconds < 2 || beat.seconds > 6) problems.push(`${where}: ${beat.seconds}s is outside 2–6s`);
-    if ((beat.type === 'hook' || beat.type === 'cutin') && !beat.say?.trim()) problems.push(`${where}: needs "say"`);
+    const beatWords = String(beat.say || '').trim().split(/\s+/).filter(Boolean).length;
+    if (beatWords > 26) problems.push(`${where}: ${beatWords} spoken words is too long for one shot`);
+    if (!beat.say?.trim()) problems.push(`${where}: needs "say" — every beat is narrated`);
     if (beat.type !== 'chart' && !beat.card) problems.push(`${where}: needs a card`);
     if (beat.caption.split(/\s+/).length > 12) problems.push(`${where}: caption is over 12 words`);
   }
