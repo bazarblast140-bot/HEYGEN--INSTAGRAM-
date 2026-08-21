@@ -100,7 +100,16 @@ export async function discoverElevenVoice() {
 
   const res = await fetch(`${ELEVEN}/voices`, { headers: elevenHeaders() });
   if (!res.ok) {
-    const detail = (await res.text()).slice(0, 200);
+    const detail = (await res.text()).slice(0, 300);
+    // A restricted key is the common case and looks exactly like a wrong key
+    // from the outside. Say which switch to flip rather than "unauthorized".
+    if (/missing_permissions|permission/i.test(detail)) {
+      throw Object.assign(new Error(
+        'The ElevenLabs key is valid but restricted: it lacks the "voices_read" permission. ' +
+        'Either enable Voices > Read on the key, or set ELEVENLABS_VOICE_ID so the voice ' +
+        'never has to be looked up. Synthesis additionally needs "text_to_speech".',
+      ), { status: res.status, permissions: true });
+    }
     throw Object.assign(new Error(`ElevenLabs /voices returned ${res.status}: ${detail}`), { status: res.status });
   }
 
@@ -147,7 +156,13 @@ const elevenlabs = {
     );
 
     if (!res.ok) {
-      const detail = (await res.text()).slice(0, 200);
+      const detail = (await res.text()).slice(0, 300);
+      if (/missing_permissions|permission/i.test(detail)) {
+        throw Object.assign(new Error(
+          'The ElevenLabs key is valid but restricted: it lacks the "text_to_speech" permission. ' +
+          'Enable it on the key at elevenlabs.io > Settings > API Keys.',
+        ), { status: res.status, permissions: true });
+      }
       throw Object.assign(new Error(`ElevenLabs returned ${res.status}: ${detail}`), { status: res.status });
     }
 

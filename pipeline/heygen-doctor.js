@@ -15,6 +15,7 @@
 import { heygenRequest, findAvatarLook, listAvatars, getQuota } from '../src/heygen.js';
 import { config, env, PRESENTER } from '../src/config.js';
 import { discoverElevenVoice, synthesise } from './src/presenter/voice-providers.js';
+import { searchStock } from './src/stock/index.js';
 
 const ok = (s) => `\x1b[32m${s}\x1b[0m`;
 const bad = (s) => `\x1b[31m${s}\x1b[0m`;
@@ -200,7 +201,9 @@ async function main() {
     try {
       const res = await fetch('https://api.elevenlabs.io/v1/user', { headers: { 'xi-api-key': elevenKey } });
       const text = await res.text();
-      console.log(`  ${res.ok ? ok(String(res.status)) : bad(String(res.status))}   /v1/user ${dim(text.slice(0, 400))}`);
+      const missing = /missing_permissions/.test(text);
+      console.log(`  ${res.ok ? ok(String(res.status)) : (missing ? dim('401') : bad(String(res.status)))}   /v1/user ${dim(text.slice(0, 400))}`);
+      if (missing) console.log(dim('        (user_read is only for this check — the pipeline never calls /v1/user)'));
     } catch (err) {
       console.log(`  ${bad('err')}   /v1/user ${dim(String(err.message).slice(0, 200))}`);
     }
@@ -221,6 +224,21 @@ async function main() {
         }
         console.log(`  ${ok('The reel can be narrated in Rajesh\'s voice, without HeyGen.')}`);
       }
+    }
+  }
+
+  // Footage is what stops the reel being eight cards in a row, so it is worth
+  // knowing the key works before 7am rather than after.
+  console.log('\nStock footage');
+  if (!env('PEXELS_API_KEY') && !env('PIXABAY_API_KEY')) {
+    console.log(dim('  No PEXELS_API_KEY or PIXABAY_API_KEY — the reel will be all cards.'));
+  } else {
+    const clips = await attempt('search "stock market screen"', () =>
+      searchStock('stock market screen', { limit: 3, minDuration: 4 }));
+    if (clips?.length) {
+      const best = clips[0];
+      console.log(`        ${dim(`${clips.length} usable, best: ${best.provider} ${best.width}x${best.height} ${best.duration}s by ${best.credit}`)}`);
+      console.log(`  ${ok('The reel can cut to real footage.')}`);
     }
   }
 
