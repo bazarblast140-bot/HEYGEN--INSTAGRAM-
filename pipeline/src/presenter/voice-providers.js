@@ -75,24 +75,67 @@ export function wordsFromCharacterAlignment(alignment) {
   return words;
 }
 
+const ELEVEN = 'https://api.elevenlabs.io/v1';
+
+function elevenHeaders(extra = {}) {
+  return { 'xi-api-key': env('ELEVENLABS_API_KEY'), Accept: 'application/json', ...extra };
+}
+
+/**
+ * Find the cloned voice on the account, so nobody has to copy an id by hand.
+ *
+ * ELEVENLABS_VOICE_ID still wins when set. Without it, the account is asked:
+ * a voice the user cloned or had professionally cloned is what we want, and
+ * ElevenLabs marks those with a category. The stock "premade" voices are
+ * explicitly not what this reel is for — the whole complaint that started this
+ * was that a generic voice ruins it — so they are chosen only as a last resort,
+ * and the caller is told when that happens.
+ */
+let discoveredVoice = null;
+
+export async function discoverElevenVoice() {
+  const configured = env('ELEVENLABS_VOICE_ID');
+  if (configured) return { id: configured, name: null, category: 'configured' };
+  if (discoveredVoice) return discoveredVoice;
+
+  const res = await fetch(`${ELEVEN}/voices`, { headers: elevenHeaders() });
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 200);
+    throw Object.assign(new Error(`ElevenLabs /voices returned ${res.status}: ${detail}`), { status: res.status });
+  }
+
+  const voices = (await res.json())?.voices || [];
+  if (!voices.length) throw new Error('The ElevenLabs account has no voices at all.');
+
+  const byCategory = (want) => voices.find((v) => String(v.category || '').toLowerCase() === want);
+  const cloned = byCategory('professional') || byCategory('cloned') || byCategory('generated');
+
+  if (!cloned) {
+    throw Object.assign(new Error(
+      `No cloned voice on the ElevenLabs account — found only ${voices.map((v) => v.category).join(', ')}. ` +
+      'Clone Rajesh\'s voice at elevenlabs.io (Voices -> Add voice -> Instant voice clone) ' +
+      'and it will be picked up automatically, or set ELEVENLABS_VOICE_ID.',
+    ), { noClonedVoice: true });
+  }
+
+  discoveredVoice = { id: cloned.voice_id, name: cloned.name, category: cloned.category };
+  return discoveredVoice;
+}
+
 const elevenlabs = {
   name: 'elevenlabs',
-  configured: () => Boolean(env('ELEVENLABS_API_KEY') && env('ELEVENLABS_VOICE_ID')),
+  configured: () => Boolean(env('ELEVENLABS_API_KEY')),
   async synth({ text, speed, voiceId }) {
-    const voice = voiceId || env('ELEVENLABS_VOICE_ID');
+    const voice = voiceId || (await discoverElevenVoice()).id;
     const model = env('ELEVENLABS_MODEL') || 'eleven_multilingual_v2';
 
     // The with-timestamps variant costs the same and returns the alignment that
     // the plain endpoint throws away.
     const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/with-timestamps`,
+      `${ELEVEN}/text-to-speech/${encodeURIComponent(voice)}/with-timestamps`,
       {
         method: 'POST',
-        headers: {
-          'xi-api-key': env('ELEVENLABS_API_KEY'),
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
+        headers: elevenHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           text,
           model_id: model,
@@ -150,7 +193,7 @@ export async function synthesise(options) {
   if (!chain.length) {
     throw new Error(
       'No voice provider configured. Set HEYGEN_API_KEY (needs a plan entitled to ' +
-      '/v1/tts.generate), or ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID.',
+      '/v1/tts.generate), or ELEVENLABS_API_KEY.',
     );
   }
 

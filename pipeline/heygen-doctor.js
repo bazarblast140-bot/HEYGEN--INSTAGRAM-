@@ -14,6 +14,7 @@
 
 import { heygenRequest, findAvatarLook, listAvatars, getQuota } from '../src/heygen.js';
 import { config, env, PRESENTER } from '../src/config.js';
+import { discoverElevenVoice, synthesise } from './src/presenter/voice-providers.js';
 
 const ok = (s) => `\x1b[32m${s}\x1b[0m`;
 const bad = (s) => `\x1b[31m${s}\x1b[0m`;
@@ -176,6 +177,32 @@ async function main() {
     console.log(dim('  /v1/tts.generate is the real endpoint, and synthesising speech over'));
     console.log(dim('  the REST API needs a paid HeyGen plan. tts_free_credit in the quota'));
     console.log(dim('  block is spendable from the HeyGen web app, not from an API key.'));
+  }
+
+  // ElevenLabs is the way the voice stops depending on HeyGen's plan, so it gets
+  // the same treatment: does the key work, is there a CLONED voice on the
+  // account, and does synthesis actually return audio and timings.
+  console.log('\nElevenLabs');
+  if (!env('ELEVENLABS_API_KEY')) {
+    console.log(dim('  No ELEVENLABS_API_KEY — skipped.'));
+  } else {
+    const voice = await attempt('find a cloned voice', discoverElevenVoice);
+    if (voice) {
+      console.log(`        ${dim(`${voice.name || voice.id} (${voice.category})`)}`);
+      if (voice.category === 'premade') {
+        console.log(`  ${bad('That is a stock ElevenLabs voice, not Rajesh.')}`);
+      }
+      const spoken = await attempt('synthesise a line with word timings', () =>
+        synthesise({ text: 'Namaste doston, aaj ka market update.', speed: 1 }));
+      if (spoken) {
+        console.log(`        ${dim(`${spoken.provider}, ${spoken.audio.length} bytes ${spoken.format}, ${spoken.words.length} words`)}`);
+        if (spoken.words.length) {
+          const last = spoken.words[spoken.words.length - 1];
+          console.log(`        ${dim(`last word "${last.word}" ends at ${last.end?.toFixed?.(2)}s`)}`);
+        }
+        console.log(`  ${ok('The reel can be narrated in Rajesh\'s voice, without HeyGen.')}`);
+      }
+    }
   }
 
   console.log('\nAvatar allowance');

@@ -28,6 +28,9 @@ jobs:
           HEYGEN_AVATAR_KIND: ${{ vars.HEYGEN_AVATAR_KIND }}
           HEYGEN_VOICE_ID: ${{ vars.HEYGEN_VOICE_ID }}
           HEYGEN_SPEECH_PATH: ${{ vars.HEYGEN_SPEECH_PATH }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
         run: |
           node pipeline/heygen-doctor.js 2>&1 | tee doctor.log
           {
