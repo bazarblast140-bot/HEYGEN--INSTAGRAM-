@@ -35,6 +35,9 @@ jobs:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: |
           node pipeline/heygen-doctor.js 2>&1 | tee doctor.log
+          echo >> doctor.log
+          echo "Market data" >> doctor.log
+          node pipeline/market-doctor.js 2>&1 | tee -a doctor.log
           {
             echo '## HeyGen doctor'
             echo '```'
