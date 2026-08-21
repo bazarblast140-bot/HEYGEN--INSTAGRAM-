@@ -1,6 +1,6 @@
 import { config, assertApiKey } from './config.js';
 
-const BASE_URL = 'https://api.heygen.com';
+const BASE_URL = (process.env.HEYGEN_API_BASE || 'https://api.heygen.com').trim().replace(/\/$/, '');
 const UPLOAD_URL = 'https://upload.heygen.com';
 
 async function request(path, { method = 'GET', body, baseUrl = BASE_URL } = {}) {
@@ -179,18 +179,21 @@ export async function getVideoStatus(videoId) {
  * to settle it. Whichever candidate answers is remembered for the rest of the
  * run and logged, so it can be pinned with HEYGEN_SPEECH_PATH afterwards.
  */
+export const SPEECH_CANDIDATES = [
+  '/v3/speech', '/v2/speech', '/v1/speech',
+  '/v3/speech/generate', '/v2/speech/generate',
+  '/v3/text_to_speech', '/v2/text_to_speech', '/v1/text_to_speech',
+  '/v3/text_to_speech/generate', '/v2/text_to_speech/generate',
+  '/v3/tts', '/v2/tts', '/v1/tts',
+  '/v3/tts/generate', '/v2/tts/generate',
+  '/v3/audio/generate', '/v2/audio/generate', '/v1/audio/generate',
+  '/v3/audio', '/v2/audio',
+  '/v2/voice/generate', '/v1/voice/generate',
+];
+
 const SPEECH_PATHS = process.env.HEYGEN_SPEECH_PATH
   ? [process.env.HEYGEN_SPEECH_PATH.trim()]
-  : [
-      '/v3/speech',
-      '/v2/speech',
-      '/v1/speech',
-      '/v3/text_to_speech',
-      '/v2/text_to_speech',
-      '/v3/tts',
-      '/v2/audio/generate',
-      '/v1/audio/generate',
-    ];
+  : SPEECH_CANDIDATES;
 
 let resolvedSpeechPath = null;
 
@@ -224,6 +227,11 @@ export async function createSpeech({ text, voiceId, speed = 1, locale, language,
       // Only a missing endpoint justifies trying the next candidate. Any other
       // status means the endpoint exists and rejected the request, which must
       // surface rather than be masked by further probing.
+      //
+      // Note this API answers 404 for a wrong-method request too (POST to the
+      // GET-only /v2/voices returns 404, not 405), so a 404 here is weaker
+      // evidence than it looks — hence the long candidate list rather than a
+      // confident single path.
       if (err.status !== 404) throw err;
       tried.push(candidate);
     }

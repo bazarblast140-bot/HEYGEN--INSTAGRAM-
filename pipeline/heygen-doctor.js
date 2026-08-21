@@ -12,7 +12,7 @@
 // It never prints the API key, and it spends no avatar credits: the only write it
 // makes is a two-word speech synthesis, which is metered far more generously.
 
-import { heygenRequest, findAvatarLook, listAvatars, getQuota, createSpeech } from '../src/heygen.js';
+import { heygenRequest, findAvatarLook, listAvatars, getQuota } from '../src/heygen.js';
 import { config, env, PRESENTER } from '../src/config.js';
 
 const ok = (s) => `\x1b[32m${s}\x1b[0m`;
@@ -30,10 +30,23 @@ async function attempt(label, fn) {
   }
 }
 
+// Probing with an empty body proved worthless: POST /v2/voices came back 404
+// even though that endpoint certainly exists, so on this API a 404 does not mean
+// "no such path" — it is also what you get for the wrong method or a body that
+// fails to parse. So the probe sends the REAL request instead, and reports the
+// exact status. Only a 404 to a well-formed request is evidence of absence.
+const SPEECH_HOSTS = ['https://api.heygen.com', 'https://api2.heygen.com'];
+
 const SPEECH_CANDIDATES = [
   '/v3/speech', '/v2/speech', '/v1/speech',
-  '/v3/text_to_speech', '/v2/text_to_speech',
-  '/v3/tts', '/v2/audio/generate', '/v1/audio/generate',
+  '/v3/speech/generate', '/v2/speech/generate',
+  '/v3/text_to_speech', '/v2/text_to_speech', '/v1/text_to_speech',
+  '/v3/text_to_speech/generate', '/v2/text_to_speech/generate',
+  '/v3/tts', '/v2/tts', '/v1/tts',
+  '/v3/tts/generate', '/v2/tts/generate',
+  '/v3/audio/generate', '/v2/audio/generate', '/v1/audio/generate',
+  '/v3/audio', '/v2/audio',
+  '/v2/voice/generate', '/v1/voice/generate',
 ];
 
 async function main() {
@@ -75,34 +88,43 @@ async function main() {
     );
   }
 
-  // Which speech path exists? A 404 means "no such endpoint"; anything else —
-  // including a 400 about a malformed body — means the endpoint is real.
+  // A real body, so the answer means something.
   console.log('\nText to speech');
-  const survivors = [];
-  for (const path of SPEECH_CANDIDATES) {
-    try {
-      await heygenRequest(path, { method: 'POST', body: {} });
-      survivors.push(path);
-      console.log(`  ${ok('ok')}    ${path} ${dim('— accepted an empty body')}`);
-    } catch (err) {
-      if (err.status === 404) console.log(`  ${dim(`404   ${path}`)}`);
-      else {
-        survivors.push(path);
-        console.log(`  ${ok('ok')}    ${path} ${dim(`— exists (${err.status}: ${String(err.message).slice(0, 60)})`)}`);
+  const body = { text: 'Namaste doston.', voice_id: voiceId, speed: 1, input_type: 'text', language: 'hi' };
+  let winner = null;
+
+  for (const host of SPEECH_HOSTS) {
+    for (const candidate of SPEECH_CANDIDATES) {
+      if (winner) break;
+      try {
+        const payload = await heygenRequest(candidate, { method: 'POST', body, baseUrl: host });
+        const data = payload?.data || payload;
+        if (data?.audio_url) {
+          winner = { host, path: candidate, data };
+          console.log(`  ${ok('FOUND')} ${host}${candidate}`);
+          break;
+        }
+        console.log(`  ${dim(`200 but no audio_url  ${candidate}`)}`);
+      } catch (err) {
+        const status = err.status || '?';
+        // 404 to a well-formed request is the only real "not here". Anything
+        // else — 401, 403, 422, 429 — means the path is live and worth reporting.
+        if (status === 404) continue;
+        console.log(`  ${ok(String(status))}   ${host}${candidate} ${dim(String(err.message).slice(0, 80))}`);
       }
     }
   }
 
-  if (!survivors.length) {
-    console.log(`  ${bad('None of the candidates exist. The reel will be silent.')}`);
+  if (winner) {
+    console.log(`\n  ${ok(`HEYGEN_SPEECH_PATH=${winner.path}`)}`);
+    if (winner.host !== SPEECH_HOSTS[0]) console.log(`  ${ok(`HEYGEN_API_BASE=${winner.host}`)}`);
+    const words = (winner.data.word_timestamps || []).length;
+    console.log(`  ${dim(`${winner.data.duration}s, ${words} word timestamps`)}`);
+    console.log(`  ${ok('The voice works. The reel can always be narrated.')}`);
   } else {
-    console.log(`\n  Pin the winner: ${ok(`HEYGEN_SPEECH_PATH=${survivors[0]}`)}`);
-    const speech = await attempt(`synthesise two words in voice ${dim(voiceId)}`, () =>
-      createSpeech({ text: 'Namaste doston.', voiceId, language: 'hi' }));
-    if (speech) {
-      console.log(`        ${dim(`${speech.duration?.toFixed?.(2)}s, ${speech.wordTimestamps.length} word timestamps`)}`);
-      console.log(`  ${ok('The voice works. The reel can always be narrated.')}`);
-    }
+    console.log(`  ${bad('No speech endpoint answered on either host with a well-formed request.')}`);
+    console.log(dim('  Quota shows tts_free_credit, so the capability exists on this plan —'));
+    console.log(dim('  the REST path is simply not among the candidates tried above.'));
   }
 
   console.log('\nAvatar allowance');
