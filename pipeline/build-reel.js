@@ -224,6 +224,15 @@ async function main() {
   };
   await fs.writeFile(path.join(path.dirname(out), 'run-report.json'), JSON.stringify(report, null, 2));
 
+  // The caption is written next to the video so the publish step never has to
+  // reconstruct it, and so a bad caption is visible in the artifact before it ships.
+  const caption = [
+    spec.caption?.trim(),
+    spec.hashtags?.length ? spec.hashtags.join(' ') : null,
+    spec.disclaimer?.trim(),
+  ].filter(Boolean).join('\n\n');
+  await fs.writeFile(path.join(path.dirname(out), 'caption.txt'), caption);
+
   console.log(
     `\n${path.relative(process.cwd(), out)}  ${info.width}x${info.height}  ${info.fps}fps  ` +
     `${report.duration}s  ${report.sizeMB}MB  avatar ${report.avatarSeconds}s`,

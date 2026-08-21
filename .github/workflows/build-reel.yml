@@ -22,6 +22,9 @@ on:
     # 07:00 IST. Actions cron is UTC, and IST is UTC+5:30.
     - cron: '30 1 * * 1-5'
 
+permissions:
+  contents: write
+
 concurrency:
   group: build-reel
   cancel-in-progress: false
@@ -84,6 +87,27 @@ jobs:
               echo "**Not publishable** — see \`notes\` above."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Host the video where Instagram can fetch it
+        id: host
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MEDIA_REPO: ${{ vars.MEDIA_REPO }}
+          MEDIA_REPO_TOKEN: ${{ secrets.MEDIA_REPO_TOKEN }}
+        run: node pipeline/host-video.js --file pipeline/out/reel-final.mp4
+
+      - name: Publish to Instagram
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: |
+          node pipeline/publish-reel.js \
+            --url "${{ steps.host.outputs.url }}" \
+            --report pipeline/out/run-report.json \
+            --caption-file pipeline/out/caption.txt
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -11,20 +11,33 @@
       "seconds": 7.4,
       "say": "Namaste, main Rajesh. Aaj market kholne se pehle teen cheezein aapko pata honi chahiye. Teesri wali sabse zaroori hai.",
       "card": {
-        "chips": ["PRE-MARKET", "NSE"],
+        "chips": [
+          "PRE-MARKET",
+          "NSE"
+        ],
         "headline": "Market kholne se pehle",
         "power": "TEEN BAATEIN",
         "footnote": "Rajesh Technical Traders"
       }
     },
-    { "type": "chart", "seconds": 5 },
-    { "type": "stock", "seconds": 4, "query": "stock market trading screen" },
+    {
+      "type": "chart",
+      "seconds": 5
+    },
+    {
+      "type": "stock",
+      "seconds": 4,
+      "query": "stock market trading screen"
+    },
     {
       "type": "cutin",
       "seconds": 2.6,
       "say": "Ab is number ko dhyan se dekhiye.",
       "card": {
-        "chips": ["FII FLOW", "CASH MARKET"],
+        "chips": [
+          "FII FLOW",
+          "CASH MARKET"
+        ],
         "headline": "Lagataar teesre din",
         "power": "KHAREEDARI",
         "footnote": "Source: NSE provisional"
@@ -34,10 +47,17 @@
       "type": "card",
       "seconds": 7,
       "card": {
-        "chips": ["FII FLOW", "CASH MARKET"],
+        "chips": [
+          "FII FLOW",
+          "CASH MARKET"
+        ],
         "headline": "Lagataar teesre din",
         "power": "KHAREEDARI",
-        "stat": { "value": "+2,847 Cr", "label": "Net buy · 3 din", "direction": "up" },
+        "stat": {
+          "value": "+2,847 Cr",
+          "label": "Net buy · 3 din",
+          "direction": "up"
+        },
         "footnote": "Source: NSE provisional"
       }
     },
@@ -45,11 +65,27 @@
       "type": "card",
       "seconds": 5,
       "card": {
-        "chips": ["ROZ SUBAH 7 BAJE"],
+        "chips": [
+          "ROZ SUBAH 7 BAJE"
+        ],
         "headline": "Poori list aur levels ke liye",
         "power": "comment “MARKET”",
         "footnote": "Educational content · Investment advice nahi"
       }
     }
-  ]
+  ],
+  "caption": "Aaj ka pre-market brief — Nifty ka volume, FII flow, aur is hafte ki RBI policy meeting.\n\nPoori list aur levels chahiye? Comment karo \"MARKET\".",
+  "hashtags": [
+    "#nifty50",
+    "#stockmarketindia",
+    "#sharemarket",
+    "#intraday",
+    "#nse",
+    "#trading",
+    "#niftyanalysis",
+    "#stockmarketnews",
+    "#investing",
+    "#rajeshtechnicaltraders"
+  ],
+  "disclaimer": "Ye content sirf education ke liye hai. Investment advice nahi hai. Main SEBI registered research analyst nahi hoon. Apna research karo ya registered advisor se baat karo."
 }

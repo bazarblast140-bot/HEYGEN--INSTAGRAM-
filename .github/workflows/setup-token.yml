@@ -1,0 +1,82 @@
+name: Set up Instagram token
+
+# Run this once. It turns the short-lived token from the Graph API Explorer into a
+# Page token that does not expire, and hands it back as a private artifact rather
+# than printing it — workflow logs are not a safe place for a credential.
+
+on:
+  workflow_dispatch:
+    inputs:
+      short_lived_token:
+        description: Paste the token from Graph API Explorer (used once, not stored)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  exchange:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Exchange for a long-lived Page token
+        env:
+          SHORT_LIVED: ${{ github.event.inputs.short_lived_token }}
+          FB_APP_ID: ${{ vars.FB_APP_ID }}
+          FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+        run: |
+          mkdir -p token-out
+          node --input-type=module -e '
+            import { exchangeForLongLived, pageToken, inspect } from "./pipeline/src/publish/token.js";
+            import { writeFileSync } from "node:fs";
+
+            const short = process.env.SHORT_LIVED;
+            const long = await exchangeForLongLived({
+              token: short,
+              appId: process.env.FB_APP_ID,
+              appSecret: process.env.FB_APP_SECRET,
+            });
+            console.log(`long-lived user token: ${Math.round((long.expiresIn || 0) / 86400)} days`);
+
+            let final = long.token, kind = "long-lived user token";
+            if (process.env.FB_PAGE_ID) {
+              try {
+                const page = await pageToken({ token: long.token, pageId: process.env.FB_PAGE_ID });
+                final = page.token;
+                kind = `page token for "${page.name}"`;
+              } catch (err) {
+                console.log(`page token step skipped: ${err.message}`);
+              }
+            }
+
+            const info = await inspect({ token: final }).catch(() => null);
+            console.log(`result: ${kind}${info ? `, expires ${info.expiresAt}` : ""}`);
+            console.log(`first/last: ${final.slice(0, 6)}…${final.slice(-6)}`);
+
+            writeFileSync("token-out/IG_ACCESS_TOKEN.txt", final);
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instagram-token
+          path: token-out/IG_ACCESS_TOKEN.txt
+          retention-days: 1
+
+      - name: What to do next
+        run: |
+          {
+            echo "## Token ready"
+            echo "1. Download the **instagram-token** artifact from this run."
+            echo "2. Open the file, copy the whole line."
+            echo "3. Settings → Secrets and variables → Actions → new secret **IG_ACCESS_TOKEN**."
+            echo "4. Delete the downloaded file."
+            echo ""
+            echo "The artifact is deleted automatically after a day."
+          } >> "$GITHUB_STEP_SUMMARY"
