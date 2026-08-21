@@ -179,10 +179,14 @@ export async function getVideoStatus(videoId) {
  * to settle it. Whichever candidate answers is remembered for the rest of the
  * run and logged, so it can be pinned with HEYGEN_SPEECH_PATH afterwards.
  */
+// /v1/tts.generate is the real endpoint. It was found by noticing that the v1
+// family uses dot-notation verbs (/v1/video_status.get was already in use here)
+// rather than REST nouns, which is why eight guesses at /v2/speech and friends
+// all came back 404. It is listed first so the usual case costs one request.
+//
+// On a free plan it answers 403 "forbidden": the path is right, the key is not
+// entitled. See the error thrown below.
 export const SPEECH_CANDIDATES = [
-  // The v1 family uses dot-notation verbs -- /v1/video_status.get is the one
-  // already in use here -- so the v1 speech route, if there is one, looks like
-  // this rather than like a REST noun.
   '/v1/tts.generate', '/v1/speech.generate', '/v1/voice.generate',
   '/v1/audio.generate', '/v1/text_to_speech.generate',
   '/v3/speech', '/v2/speech', '/v1/speech',
@@ -237,6 +241,14 @@ export async function createSpeech({ text, voiceId, speed = 1, locale, language,
       // GET-only /v2/voices returns 404, not 405), so a 404 here is weaker
       // evidence than it looks — hence the long candidate list rather than a
       // confident single path.
+      if (err.status === 403) {
+        throw Object.assign(new Error(
+          `HeyGen refused text-to-speech at ${candidate} (403). The path is correct — ` +
+          'the API key is not entitled to it. Speech synthesis over the REST API needs ' +
+          'a paid HeyGen plan; on the free plan the key can list voices and generate ' +
+          'avatar video, but not synthesise speech.',
+        ), { status: 403, entitlement: true });
+      }
       if (err.status !== 404) throw err;
       tried.push(candidate);
     }

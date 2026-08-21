@@ -1,6 +1,40 @@
-# Setup — five steps, then it runs itself
+# Setup — one purchase, five steps, then it runs itself
 
 Do these once. Everything after is automatic at 7:00 AM IST on weekdays.
+
+---
+
+## 0. The HeyGen plan — read this first
+
+The account is on the **free** plan, and that is currently the one thing stopping
+the reel from sounding like you. Measured against the live account, not guessed:
+
+| What the reel needs | Endpoint | Free plan |
+|---|---|---|
+| Your face | `/v2/video/generate` | monthly avatar allowance **exhausted** |
+| Your voice | `/v1/tts.generate` | **403 forbidden** — API keys are not entitled |
+| Voices, avatars, quota | `/v2/voices`, `/v2/avatars` | fine |
+
+All three avatar engines refuse, each in its own words:
+
+```
+avatar_iii  MOVIO_PAYMENT_INSUFFICIENT_CREDIT        needs a paid plan
+avatar_iv   AVATAR_IV_..._DURATION_LIMIT_REACHED     monthly cap, used up
+avatar_v    AVATAR_IV_..._DURATION_LIMIT_REACHED     same cap
+```
+
+The quota block reports `tts_free_credit: 572`, which looks like plenty of voice
+left — but those credits are spendable from the HeyGen web app, not from an API
+key. That is what the 403 means: right path, wrong entitlement.
+
+**So: a paid HeyGen plan is what turns this on.** Everything else is built and
+waiting. Until then the pipeline still runs and still produces a reel every
+morning; it just has no voice, and it marks itself not publishable rather than
+posting a silent video.
+
+Run **Actions → HeyGen doctor → Run workflow** any time to re-check. It spends no
+credits and prints no secrets, and it will say plainly which of these have
+cleared.
 
 ---
 

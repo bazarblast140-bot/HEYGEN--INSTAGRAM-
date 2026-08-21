@@ -28,10 +28,26 @@ Voice: direct, confident, no hype. You are the trader who read the data before a
  * spaced out and symbols are spelled: "FII" read as a word becomes noise, and "%"
  * is silently dropped by most engines.
  */
-export function buildUserPrompt({ market, news, date }) {
+export function buildUserPrompt({ market, news, date, recentTopics = [] }) {
+  const alreadyCovered = recentTopics.length
+    ? `\n\n<already_covered>
+These are the subjects the last ${recentTopics.length} reels covered, newest last.
+Today's topic must be a DIFFERENT subject — not a fresh angle on one of these, and
+not the same company, scheme or policy seen from another side. Pick something the
+list does not contain at all.
+
+${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}
+</already_covered>`
+    : '';
+
   return `<task>
 Write today's pre-market reel as a JSON reel spec. One topic, told in a sequence of short beats.
-</task>
+
+Rotate across the whole beat: index moves, a single company's numbers, a government
+or SEBI or RBI decision, mutual funds and SIP flows, an AI or technology stock story,
+commodities and currency. The viewer sees one of these every weekday, so two reels
+in a row on the same kind of subject is itself a repeat, even when the facts differ.
+</task>${alreadyCovered}
 
 <context>
 The reel is 9:16, roughly 26 to 32 seconds, posted at 7:00 AM IST before the market opens.
@@ -90,6 +106,10 @@ Total spoken length across all beats: 70 to 95 words. That lands the reel near
 30 seconds when read aloud.
 
 Also produce:
+  topic      — the day's subject in 3 to 7 words, written so it can be compared
+               against the list above: name the company, scheme, policy or asset.
+               "H D F C Bank Q2 margins", not "aaj ka bada move". This is a label
+               for the ledger, not a headline, so no hype and no punctuation.
   verdict    — two or three words describing the session, for the chart beat.
   caption    — the Instagram caption. 2 to 3 sentences, then the comment prompt.
   hashtags   — 8 to 12, lowercase, Indian market relevant.

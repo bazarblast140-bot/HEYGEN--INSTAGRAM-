@@ -140,9 +140,11 @@ async function main() {
     console.log(`  ${dim(`${winner.data.duration}s, ${words} word timestamps`)}`);
     console.log(`  ${ok('The voice works. The reel can always be narrated.')}`);
   } else {
-    console.log(`  ${bad('No speech endpoint answered on either host with a well-formed request.')}`);
-    console.log(dim('  Quota shows tts_free_credit, so the capability exists on this plan —'));
-    console.log(dim('  the REST path is simply not among the candidates tried above.'));
+    console.log(`  ${bad('No speech endpoint returned audio.')}`);
+    console.log(dim('  A 403 above means the path is right and the key is not entitled:'));
+    console.log(dim('  /v1/tts.generate is the real endpoint, and synthesising speech over'));
+    console.log(dim('  the REST API needs a paid HeyGen plan. tts_free_credit in the quota'));
+    console.log(dim('  block is spendable from the HeyGen web app, not from an API key.'));
   }
 
   console.log('\nAvatar allowance');

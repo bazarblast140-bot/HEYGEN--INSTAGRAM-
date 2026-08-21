@@ -107,6 +107,24 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Remember today's topic
+        # The ledger is what stops the reel telling the same story twice. It only
+        # works if it outlives the runner, so it is committed back to the branch.
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.generate != 'false' }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/topic-history.json
+          git diff --cached --quiet && { echo "No new topic to record."; exit 0; }
+          git commit -m "Record $(date -u +%Y-%m-%d) topic"
+          # A concurrent run may have recorded its own topic first; take theirs
+          # and replay ours on top rather than clobbering the ledger.
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the topic — the next run may repeat it." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Host the video where Instagram can fetch it
         id: host
         if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}

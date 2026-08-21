@@ -10,6 +10,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 import { resolveProvider, callOpenAICompatible, VENDORS } from './providers.js';
+import { readHistory, findRepeat, recordTopic } from './topics.js';
 
 const Stat = z.object({
   value: z.string(),
@@ -35,6 +36,7 @@ const Beat = z.object({
 });
 
 const ReelSpec = z.object({
+  topic: z.string(),
   verdict: z.string(),
   segments: z.array(Beat),
   body: z.string(),
@@ -49,8 +51,18 @@ export const MODEL = env('SCRIPT_MODEL') || 'claude-fable-5';
  * runs to fifty seconds, or has no presenter beat, is still not a reel — and
  * finding that out here costs one retry rather than a whole render.
  */
-function validateShape(spec) {
+function validateShape(spec, recentTopics = []) {
   const problems = [];
+
+  // The prompt asks for a new subject; this is what makes it a rule. A model
+  // that has been handed similar numbers five days running will otherwise find
+  // the same story in them five times.
+  const repeat = findRepeat(spec.topic, recentTopics);
+  if (repeat) {
+    problems.push(
+      `topic "${spec.topic}" repeats ${repeat.date}'s reel ("${repeat.topic}") — pick a different subject entirely`,
+    );
+  }
   // Runtime is set by how long the narration actually takes, so the check is on
   // the words rather than on numbers the model guessed.
   const words = spec.segments.reduce((n, s) => n + String(s.say || '').trim().split(/\s+/).filter(Boolean).length, 0);
@@ -113,9 +125,14 @@ export async function generateSpec({
   const chosenModel = model || provider.model;
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
+  const recentTopics = await readHistory();
+
   let lastProblems = [];
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    let userPrompt = buildUserPrompt({ market, news, date });
+  // Three attempts rather than two: a rejected topic costs a pass on its own,
+  // and it would be a shame to spend the retry budget on that and have none
+  // left for a genuine schema slip.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let userPrompt = buildUserPrompt({ market, news, date, recentTopics });
 
     // A second pass is given the specific complaints rather than being asked
     // again and hoped at.
@@ -133,15 +150,20 @@ export async function generateSpec({
             system: SYSTEM, user: userPrompt, schema: ReelSpec,
           });
 
-      lastProblems = validateShape(output);
-      if (!lastProblems.length) return { spec: output, provider: provider.name, model: used, attempts: attempt };
+      lastProblems = validateShape(output, recentTopics);
+      if (!lastProblems.length) {
+        // Written down only once the spec is accepted, so a rejected draft does
+        // not burn a subject the reel never actually covered.
+        await recordTopic({ topic: output.topic, angle: output.verdict, date });
+        return { spec: output, provider: provider.name, model: used, attempts: attempt };
+      }
     } catch (err) {
       // A schema mismatch is worth one more pass with the field paths attached;
       // an auth or model-name failure is not going to fix itself.
-      if (!err.schemaIssues || attempt === 2) throw err;
+      if (!err.schemaIssues || attempt === 3) throw err;
       lastProblems = err.schemaIssues;
     }
   }
 
-  throw new Error(`Generated spec still invalid after 2 attempts: ${lastProblems.join('; ')}`);
+  throw new Error(`Generated spec still invalid after 3 attempts: ${lastProblems.join('; ')}`);
 }
