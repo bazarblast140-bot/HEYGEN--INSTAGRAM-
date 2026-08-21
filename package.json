@@ -15,7 +15,8 @@
     "card": "node pipeline/render-card.js",
     "reel": "node pipeline/build-reel.js",
     "publish": "node pipeline/publish-reel.js",
-    "token": "node pipeline/token-tool.js"
+    "token": "node pipeline/token-tool.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"

@@ -51,6 +51,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Run the unit tests
+        run: npm test
+
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
