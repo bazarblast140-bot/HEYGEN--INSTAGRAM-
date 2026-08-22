@@ -70,6 +70,11 @@ Beat types:
             running with one headline reads as a stall.
   "chart" — the price chart renders itself from real data. No card.
   "card"  — a full-frame statement or statistic.
+  "article" — a document on screen: source strip, headline, body paragraphs. It
+            scrolls down and then marks one phrase. Use it on a day whose story
+            IS a report or a decision — an A M F I release, an R B I statement,
+            a company filing. At most one per reel; skip it when there is no
+            real document behind the day.
   "stock" — real footage, searched from a free stock library. Give it a "query".
             Include one, at most two. A reel built entirely from cards reads as
             one static thing however good the cards are; a cut to real footage is
@@ -111,6 +116,19 @@ Per beat:
                    MUST differ from card.power. Setting both to "+25%" prints the
                    same figure twice on one card, once in serif and once large.
   card.footnote  — the source, or a one-line qualifier.
+  article  — ONLY on an "article" beat; null everywhere else.
+             { source, date, headline, body: [4 to 6 lines], highlight }
+             source   — who published or released it, named plainly ("A M F I
+                        monthly data", "R B I policy statement"). Required: the
+                        scene credits it on screen. Never invent a source, and
+                        never attribute a sentence to a publication that did not
+                        write it.
+             body     — plain reported sentences, 12 to 24 words each.
+             highlight — a phrase copied EXACTLY from one of the body lines, and
+                        that line must be the THIRD or later. A phrase in the
+                        first two paragraphs is already on screen when the shot
+                        opens, so the scroll travels nowhere and the beat reads
+                        as a still.
   query    — ONLY on a "stock" beat; null everywhere else. Two to four plain
              visual words naming what is literally on screen: "stock market
              screen", "office workers walking", "gold bars", "shipping port".

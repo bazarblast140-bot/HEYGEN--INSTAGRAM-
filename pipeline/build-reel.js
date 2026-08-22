@@ -267,6 +267,9 @@ async function main() {
     let beatTheme = 'dark';
     let captionSuppressed = false;
     let showsPresenter = false;
+    // An article beat is already dense with type. A burned-in caption on top of
+    // a scrolling document is two things asking to be read at once.
+    if (segment.type === 'article') captionSuppressed = true;
 
     if (segment.type === 'hook' || segment.type === 'cutin') {
       // Without a face, a cut-in falls back to a full-frame card — and its card
@@ -327,6 +330,16 @@ async function main() {
       file = await renderSceneClip({
         scene: 'card.html',
         data: { ...dedupeCard(segment.card), theme: beatTheme, motif },
+        seconds: duration,
+        layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
+      });
+
+    } else if (segment.type === 'article') {
+      // The document beat: it scrolls to the sentence the narration is about and
+      // marks it. Its own attribution strip is part of the scene, not an overlay.
+      file = await renderSceneClip({
+        scene: 'article.html',
+        data: { ...segment.article, theme: beatTheme },
         seconds: duration,
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });

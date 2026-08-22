@@ -140,7 +140,7 @@
       TOTAL = payload.totalFrames || 150;
       theme = payload.theme === 'ink' ? 'ink' : 'dark';
       document.body.className = `theme-${theme}`;
-      document.documentElement.style.setProperty('--stage-h', (payload.stageH || 1280) + 'px');
+      document.documentElement.style.setProperty('--stage-h', (payload.layout === 'panel' ? 760 : 1280) + 'px');
 
       document.getElementById('sourceName').textContent =
         [payload.source, payload.date].filter(Boolean).join(' · ');

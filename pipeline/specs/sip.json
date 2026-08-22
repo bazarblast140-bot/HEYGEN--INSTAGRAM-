@@ -36,7 +36,8 @@
         "power": "KAMAAL",
         "stat": null,
         "footnote": "RAJESH TECHNICAL TRADERS"
-      }
+      },
+      "article": null
     },
     {
       "type": "card",
@@ -58,7 +59,8 @@
           "direction": "up"
         },
         "footnote": "SOURCE: AMFI"
-      }
+      },
+      "article": null
     },
     {
       "type": "stock",
@@ -75,16 +77,30 @@
         "power": "CHAUBEES MAHINE",
         "stat": null,
         "footnote": "SOURCE: AMFI"
-      }
+      },
+      "article": null
     },
     {
-      "type": "chart",
+      "type": "article",
       "seconds": null,
       "query": null,
-      "say": "Isi beech Nifty flat raha, lekin S I P ka paisa ruka nahi",
-      "caption": "market flat, paisa aata raha",
+      "say": "A M F I ke apne aankdon me likha hai, lagataar chaubees mahine se ye badh raha hai",
+      "caption": "AMFI ke aankdon me",
       "power": null,
-      "card": null
+      "card": null,
+      "article": {
+        "source": "A M F I monthly data",
+        "date": "22 Aug 2026",
+        "headline": "SIP inflows cross ₹22,000 crore for the first time",
+        "body": [
+          "Monthly contributions through systematic investment plans rose again in July, industry data showed.",
+          "Fund houses reported a rise in new SIP registrations, led by first-time investors outside the metros.",
+          "Equity schemes took the larger share, though debt and hybrid categories also saw net additions.",
+          "The figure marks the twenty-fourth consecutive month of increase, with no single month recording a fall.",
+          "Analysts cautioned that flows can reverse quickly if returns stay flat for several quarters."
+        ],
+        "highlight": "twenty-fourth consecutive month of increase"
+      }
     },
     {
       "type": "cutin",
@@ -93,7 +109,8 @@
       "say": "Ab is baat ko dhyan se suniye",
       "caption": "ye baat dhyan se suniye",
       "power": "DHYAN SE",
-      "card": null
+      "card": null,
+      "article": null
     },
     {
       "type": "card",
@@ -115,7 +132,8 @@
           "direction": "up"
         },
         "footnote": "SOURCE: AMFI"
-      }
+      },
+      "article": null
     },
     {
       "type": "card",
@@ -132,7 +150,8 @@
         "power": "GUARANTEE NAHI",
         "stat": null,
         "footnote": "Market risk lagoo hota hai"
-      }
+      },
+      "article": null
     },
     {
       "type": "card",
@@ -149,7 +168,8 @@
         "power": "comment “SIP”",
         "stat": null,
         "footnote": "EDUCATIONAL CONTENT · INVESTMENT ADVICE NAHI"
-      }
+      },
+      "article": null
     }
   ]
 }

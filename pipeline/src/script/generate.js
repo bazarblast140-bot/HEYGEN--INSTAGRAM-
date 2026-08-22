@@ -27,8 +27,18 @@ const Card = z.object({
   footnote: z.string(),
 });
 
+const Article = z.object({
+  // Attribution is required, not optional. This scene quotes a source and must
+  // never be mistaken for one — see article.html.
+  source: z.string(),
+  date: z.string(),
+  headline: z.string(),
+  body: z.array(z.string()),
+  highlight: z.string(),
+});
+
 const Beat = z.object({
-  type: z.enum(['hook', 'cutin', 'chart', 'card', 'stock']),
+  type: z.enum(['hook', 'cutin', 'chart', 'card', 'stock', 'article']),
   seconds: z.number().nullable(),
   say: z.string(),
   caption: z.string(),
@@ -38,6 +48,8 @@ const Beat = z.object({
   // beat leaves it null. The card stays optional on a stock beat too, because it
   // is what gets rendered if the footage search comes back empty.
   query: z.string().nullable(),
+  // Only an "article" beat uses this.
+  article: Article.nullable(),
 });
 
 const ReelSpec = z.object({
@@ -77,6 +89,27 @@ function validateShape(spec, recentTopics = []) {
   if (words < 55 || words > 115) problems.push(`${words} spoken words is outside 55–115 (about 22–40 seconds)`);
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
   if (!spec.segments.some((s) => s.type === 'chart')) problems.push('no chart beat');
+
+  // The article beat only works if reaching the highlight is a journey.
+  const articles = spec.segments.filter((s) => s.type === 'article');
+  if (articles.length > 1) problems.push(`${articles.length} article beats; use at most one`);
+  for (const [i, beat] of spec.segments.entries()) {
+    if (beat.type !== 'article') continue;
+    const a = beat.article;
+    if (!a) { problems.push(`beat ${i}: an article beat needs an "article"`); continue; }
+    if (!a.source?.trim()) problems.push(`beat ${i}: the article has no source to credit`);
+    if ((a.body || []).length < 4) problems.push(`beat ${i}: the article needs at least 4 body lines to scroll through`);
+
+    const at = (a.body || []).findIndex((line) =>
+      String(line).toLowerCase().includes(String(a.highlight || '').toLowerCase()));
+    if (!a.highlight?.trim() || at < 0) {
+      problems.push(`beat ${i}: the highlight "${a.highlight}" does not appear in the body`);
+    } else if (at < 2) {
+      // A phrase in the first two paragraphs is already on screen, so the scroll
+      // travels almost nothing and the shot reads as a still.
+      problems.push(`beat ${i}: the highlight is in paragraph ${at + 1}; put it third or later so the scroll has somewhere to go`);
+    }
+  }
 
   // Two ways a card prints the same thing twice, both seen in a finished reel.
   for (const [i, beat] of spec.segments.entries()) {
