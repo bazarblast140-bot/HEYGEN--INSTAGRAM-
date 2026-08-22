@@ -24,12 +24,19 @@ export function env(name, fallback = '') {
  *
  *   avatar  "Rajesh Video 1"  digital_twin, 720x1280 portrait
  *           supports avatar_v / avatar_iv / avatar_iii
+ *
+ * avatar_iii is the default because the API bills per second of output and the
+ * three engines are not priced alike: for a digital twin at 1080p it is about
+ * $1.00 a minute against roughly $4.00 for avatar_iv and avatar_v. The reel
+ * needs the face for about seven seconds -- the hook and the cut-in, with
+ * ElevenLabs carrying the rest -- so the choice is about 13 cents a reel
+ * against about 50. Same clone, same lip-sync path; four times the runway.
  *   voice   the twin's own cloned voice (Hindi, male)
  */
 export const PRESENTER = {
   avatarId: '43ea820171e04d0eb3c4e457124c3828',
   avatarKind: 'avatar',
-  engine: 'avatar_v',
+  engine: 'avatar_iii',
   voiceId: 'ad3099687f824940811e3fb3ec3e3beb',
 };
 
