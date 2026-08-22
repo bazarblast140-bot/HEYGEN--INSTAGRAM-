@@ -80,6 +80,11 @@ async function checkKeyedProviders() {
     console.log(`  ${ok('WORKS')} ${series.source.padEnd(20)} ${dim(
       `${series.name}, ${series.candles.length} candles, last close ${last.c} on ${new Date(last.t).toISOString().slice(0, 10)}`,
     )}`);
+    // Which rung answered is the whole question this doctor exists to settle,
+    // so it is said in words rather than left to be inferred from a symbol.
+    if (series.tracks) {
+      console.log(`  ${dim(`the index itself was refused; ${series.name} tracks ${series.tracks}, so the percentage holds and the level does not`)}`);
+    }
     return true;
   } catch (err) {
     console.log(`  ${bad('fail ')} keyed providers      ${dim(String(err.message).slice(0, 200))}`);

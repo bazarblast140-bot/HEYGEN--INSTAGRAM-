@@ -7,13 +7,21 @@ import assert from 'node:assert/strict';
 
 const MODULE = '../pipeline/src/harvest/apis.js';
 
-/** Load the module fresh with one provider configured and one canned response. */
-async function withProvider(env, payload) {
+/**
+ * Load the module fresh with one provider configured and one canned response.
+ * `payload` may be a function of the requested URL, for tests where the answer
+ * depends on which symbol was asked for.
+ */
+async function withProvider(env, payload, { onAttempt } = {}) {
   for (const k of ['TWELVEDATA_API_KEY', 'ALPHAVANTAGE_API_KEY']) delete process.env[k];
   Object.assign(process.env, env);
-  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => payload });
+  globalThis.fetch = async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => (typeof payload === 'function' ? payload(String(url)) : payload),
+  });
   const mod = await import(`${MODULE}?v=${Math.random()}`);
-  return mod.fetchCandles('nifty', { bars: 90 });
+  return mod.fetchCandles('nifty', { bars: 90, onAttempt });
 }
 
 const TWELVE = {
@@ -70,4 +78,64 @@ for (const [label, env, payload, expected] of [
 
 test('no key names the variable to set', async () => {
   await assert.rejects(() => withProvider({}, {}), /TWELVEDATA_API_KEY or ALPHAVANTAGE_API_KEY/);
+});
+
+// The ladder. A free tier that withholds the index but sells the E T F tracking
+// it is the ordinary case, not the exotic one -- an index is the product these
+// vendors are selling.
+test('falls back to the E T F when the index symbol is refused', async () => {
+  const tried = [];
+  const series = await withProvider(
+    { ALPHAVANTAGE_API_KEY: 'k' },
+    (url) => (url.includes('NSEI') ? { 'Error Message': 'Invalid API call.' } : ALPHA),
+    { onAttempt: (label) => tried.push(label) },
+  );
+
+  assert.deepEqual(tried, ['alphavantage NSEI', 'alphavantage NIFTYBEES.BSE']);
+  assert.equal(series.symbol, 'NIFTYBEES.BSE');
+  // The name is the E T F's own, and the relationship is stated rather than
+  // silently collapsed. A reel that prints an E T F price under an index label
+  // is making a false claim about the market.
+  assert.equal(series.name, 'NIFTYBEES');
+  assert.equal(series.tracks, 'NIFTY 50');
+});
+
+test('an index that answers never reaches the E T F rung', async () => {
+  const tried = [];
+  const series = await withProvider({ ALPHAVANTAGE_API_KEY: 'k' }, ALPHA,
+    { onAttempt: (label) => tried.push(label) });
+
+  assert.deepEqual(tried, ['alphavantage NSEI']);
+  assert.equal(series.name, 'NIFTY 50');
+  assert.equal(series.tracks, null, 'the index is not a proxy for itself');
+});
+
+// A throttle is about the key, not the symbol. Walking the ladder through one
+// spends another of the day's 25 requests to be told the same thing.
+test('a spent daily allowance stops the ladder instead of walking it', async () => {
+  const tried = [];
+  await assert.rejects(() => withProvider(
+    { ALPHAVANTAGE_API_KEY: 'k' },
+    { Note: 'Our standard API rate limit is 25 requests per day' },
+    { onAttempt: (label) => tried.push(label) },
+  ), /rate limit/);
+
+  assert.deepEqual(tried, ['alphavantage NSEI'], 'one request, not two');
+});
+
+test('twelve data stops the ladder on a credit limit too', async () => {
+  const tried = [];
+  await assert.rejects(() => withProvider(
+    { TWELVEDATA_API_KEY: 'k' },
+    { status: 'error', code: 429, message: 'You have run out of API credits' },
+    { onAttempt: (label) => tried.push(label) },
+  ), /API credits/);
+
+  assert.deepEqual(tried, ['twelvedata NIFTY 50']);
+});
+
+test('an unknown ticker is tried as written, with no invented proxy', async () => {
+  const { candidatesFor } = await import(`${MODULE}?v=${Math.random()}`);
+  assert.deepEqual(candidatesFor('alphavantage', 'TATAMOTORS.BSE'),
+    [{ symbol: 'TATAMOTORS.BSE', name: 'TATAMOTORS.BSE' }]);
 });
