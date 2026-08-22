@@ -87,12 +87,65 @@ async function checkKeyedProviders() {
     }
     return true;
   } catch (err) {
-    console.log(`  ${bad('fail ')} keyed providers      ${dim(String(err.message).slice(0, 200))}`);
+    // One line per rung. Joined and truncated, the second refusal is the one
+    // that gets cut -- and on a ladder the second refusal is the interesting
+    // one, because the first is the failure you already expected.
+    const refusals = String(err.message).replace(/^Every market data provider refused — /, '').split(' | ');
+    console.log(`  ${bad('fail ')} keyed providers`);
+    for (const line of refusals) console.log(`        ${dim(line)}`);
     return false;
   }
 }
 
+/**
+ * What does this Alpha Vantage key actually serve?
+ *
+ * "Invalid API call" is the same sentence for a symbol that does not exist and
+ * for one the plan does not sell, so the refusal alone cannot tell you whether
+ * to fix the symbol or change provider. IBM settles it: it is on every Alpha
+ * Vantage tier including the free one. If IBM answers and every Indian symbol
+ * refuses, the key is fine and the coverage is the problem.
+ *
+ * Costs one request per row against a 25-a-day allowance, so it runs only when
+ * the ladder above has already failed.
+ */
+async function probeAlphaVantageCoverage() {
+  const apiKey = process.env.ALPHAVANTAGE_API_KEY;
+  if (!apiKey) return;
+
+  const SYMBOLS = [
+    ['IBM', 'control — free tier definitely carries this'],
+    ['RELIANCE.BSE', 'B S E equity'],
+    ['NIFTYBEES.BSE', 'the E T F the ladder falls back to'],
+    ['INFY.BSE', 'second B S E equity, in case the first is delisted here'],
+    ['NSEI', 'the index itself'],
+  ];
+
+  console.log(`\n  ${dim('Alpha Vantage coverage sweep (1 request each, 5 of 25 daily)')}`);
+
+  for (const [symbol, why] of SYMBOLS) {
+    try {
+      const url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY'
+        + `&symbol=${encodeURIComponent(symbol)}&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
+      const body = await (await fetch(url, { headers: { Accept: 'application/json' } })).json();
+      const series = body?.['Time Series (Daily)'];
+
+      if (series) {
+        const dates = Object.keys(series).sort();
+        console.log(`  ${ok('WORKS')} ${symbol.padEnd(15)} ${dim(`${dates.length} days, last ${dates.at(-1)}, close ${series[dates.at(-1)]['4. close']}`)}`);
+      } else {
+        const complaint = body?.Note || body?.Information || body?.['Error Message'] || JSON.stringify(body).slice(0, 120);
+        console.log(`  ${bad('fail ')} ${symbol.padEnd(15)} ${dim(String(complaint).slice(0, 130))}`);
+      }
+    } catch (err) {
+      console.log(`  ${bad('err  ')} ${symbol.padEnd(15)} ${dim(String(err.message).slice(0, 130))}`);
+    }
+    console.log(`        ${dim(why)}`);
+  }
+}
+
 const keyed = await checkKeyedProviders();
+if (!keyed) await probeAlphaVantageCoverage();
 
 const winners = [];
 
