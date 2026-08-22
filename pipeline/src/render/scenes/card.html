@@ -227,6 +227,82 @@
     }
   }
 
+  /**
+   * Money moving — mutual funds, S I P flows, anything cumulative. Streaks rise
+   * and fade, so the eye reads direction rather than a static texture.
+   */
+  function paintFlow(f, paint, H) {
+    const fade = outCubic(p(f, BEAT.bg));
+    const LANES = 14;
+
+    for (let i = 0; i < LANES; i += 1) {
+      const x = 30 + (i / (LANES - 1)) * 660 + (seeded(i) - 0.5) * 26;
+      const speed = 0.55 + seeded(i + 21) * 0.9;
+      const len = 120 + seeded(i + 44) * 190;
+
+      // Each streak runs up its lane and wraps, offset so they never line up.
+      const travel = (f * speed + seeded(i + 3) * H) % (H + len);
+      const yTop = H + len - travel;
+
+      const g = ctx.createLinearGradient(x, yTop, x, yTop + len);
+      g.addColorStop(0, `rgba(${paint.dot},0)`);
+      g.addColorStop(0.55, `rgba(${paint.dot},${(0.34 * fade).toFixed(3)})`);
+      g.addColorStop(1, `rgba(${paint.pulse},0)`);
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.6 + seeded(i + 8) * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(x, yTop);
+      ctx.lineTo(x, yTop + len);
+      ctx.stroke();
+
+      // The head of the streak, where the money "is".
+      ctx.fillStyle = `rgba(${paint.pulse},${(0.5 * fade).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(x, yTop, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /**
+   * Ruled paper with a seal — budgets, R B I decisions, S E B I circulars.
+   * A document, drawn as texture rather than as a picture of one.
+   */
+  function paintLedger(f, paint, H) {
+    const fade = outCubic(p(f, BEAT.bg));
+    const step = 52;
+    const drift = (f * 0.35) % step;
+
+    ctx.lineWidth = 1;
+    for (let y = -step + drift; y < H + step; y += step) {
+      const depth = 1 - y / (H * 1.4);
+      ctx.strokeStyle = `rgba(${paint.dot},${(0.30 * depth * fade).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.moveTo(40, y);
+      ctx.lineTo(680, y);
+      ctx.stroke();
+    }
+
+    // A margin rule, the way a ledger or a circular carries one.
+    ctx.strokeStyle = `rgba(${paint.pulse},${(0.22 * fade).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(96, 0);
+    ctx.lineTo(96, H);
+    ctx.stroke();
+
+    // The seal: concentric rings, turning slowly.
+    const cx = 560;
+    const cy = H * 0.30;
+    for (let r = 0; r < 3; r += 1) {
+      const radius = 54 + r * 20;
+      ctx.strokeStyle = `rgba(${paint.pulse},${((0.20 - r * 0.05) * fade).toFixed(3)})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, f * 0.004 + r, f * 0.004 + r + Math.PI * 1.45);
+      ctx.stroke();
+    }
+  }
+
   function paintBackground(f) {
     const H = L.stageH;
     const paint = THEME_PAINT[theme] || THEME_PAINT.dark;
@@ -238,7 +314,9 @@
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, 720, H);
 
-    if (motif === 'nodes') { paintNodes(f, paint, H); return; }
+    if (motif === 'nodes')  { paintNodes(f, paint, H); return; }
+    if (motif === 'flow')   { paintFlow(f, paint, H); return; }
+    if (motif === 'ledger') { paintLedger(f, paint, H); return; }
 
     const step = 44;
     // 0.22px per frame is roughly a fifth of a pixel: measurably present, visually
@@ -306,7 +384,7 @@
       data = payload;
       TOTAL = payload.totalFrames || 150;
       theme = THEME_PAINT[payload.theme] ? payload.theme : 'dark';
-      motif = payload.motif === 'nodes' ? 'nodes' : 'dots';
+      motif = ['nodes', 'flow', 'ledger'].includes(payload.motif) ? payload.motif : 'dots';
       document.body.className = `theme-${theme}`;
       applyLayout(payload.layout || 'full');
 

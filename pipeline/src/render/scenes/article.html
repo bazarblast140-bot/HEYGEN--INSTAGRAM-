@@ -1,0 +1,205 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>article scene</title>
+<style>
+  @font-face { font-family: "Brand Sans";  src: url("../../../assets/fonts/inter-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
+  @font-face { font-family: "Brand Sans";  src: url("../../../assets/fonts/inter-600.woff2") format("woff2"); font-weight: 600; font-display: block; }
+  @font-face { font-family: "Brand Mono";  src: url("../../../assets/fonts/jetbrains-mono-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
+  @font-face { font-family: "Brand Mono";  src: url("../../../assets/fonts/jetbrains-mono-500.woff2") format("woff2"); font-weight: 500; font-display: block; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 720px; height: var(--stage-h, 1280px);
+    background: var(--ground, #020617);
+    color: var(--ink, #F8FAFC);
+    font-family: "Brand Sans", sans-serif; overflow: hidden;
+  }
+
+  /* Rajesh's own palette, deliberately. This scene quotes a publication; it must
+     never wear one. A page dressed in a masthead's colours and type would be a
+     forgery of that masthead, however true the words on it are. */
+  .theme-dark  { --ground: #020617; --ink: #F8FAFC; --dim: #93A3B8; --rule: #1E293B; --mark: #F59E0B; --paper: #0B1120; }
+  .theme-ink   { --ground: #0E1223; --ink: #F8FAFC; --dim: #8B93A7; --rule: #263048; --mark: #6EE7F9; --paper: #141A2E; }
+
+  #stage { position: relative; width: 720px; height: var(--stage-h, 1280px); overflow: hidden; }
+
+  /* The sheet the article sits on, inset so the frame reads as "a document on
+     screen" rather than as the screen itself. */
+  #sheet {
+    position: absolute; left: 44px; right: 44px; top: 128px; bottom: 128px;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 18px;
+    overflow: hidden;
+  }
+  #scroll { position: absolute; left: 0; right: 0; top: 0; padding: 44px 44px 120px; }
+
+  /* Attribution, and it is not decoration — it is the reason this scene is
+     allowed to exist. Source and date, always, at the top of the sheet. */
+  #source {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 26px;
+    font-family: "Brand Mono", monospace; font-size: 19px; letter-spacing: .10em;
+    color: var(--dim); text-transform: uppercase;
+  }
+  #source .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mark); }
+
+  #headline { font-size: 52px; font-weight: 700; line-height: 1.14; letter-spacing: -.015em; margin-bottom: 30px; }
+
+  .para {
+    font-size: 30px; line-height: 1.62; color: var(--dim);
+    margin-bottom: 24px; font-weight: 600;
+  }
+  .para.key { color: var(--ink); }
+
+  /* The marker sweep. A span behind the text, grown left to right, so the words
+     stay legible while the highlight arrives. */
+  .mark { position: relative; display: inline; }
+  .mark .bar {
+    position: absolute; left: -6px; top: .06em; bottom: .10em; width: 0;
+    background: var(--mark); opacity: .30; border-radius: 4px;
+  }
+  .mark .txt { position: relative; }
+
+  /* A soft mask top and bottom so lines enter and leave the sheet rather than
+     being chopped by its edge. */
+  #fadeTop, #fadeBot { position: absolute; left: 0; right: 0; height: 90px; pointer-events: none; }
+  #fadeTop { top: 0; background: linear-gradient(var(--paper), transparent); }
+  #fadeBot { bottom: 0; background: linear-gradient(transparent, var(--paper)); }
+
+  #caret {
+    position: absolute; right: 26px; width: 4px; border-radius: 3px;
+    background: var(--mark); opacity: .35;
+  }
+
+  #footer {
+    position: absolute; left: 60px; right: 60px; bottom: 62px;
+    font-family: "Brand Mono", monospace; font-size: 17px; letter-spacing: .16em;
+    color: var(--dim); text-transform: uppercase; opacity: .75;
+  }
+</style>
+
+<div id="stage">
+  <div id="sheet">
+    <div id="scroll">
+      <div id="source"><span class="dot"></span><span id="sourceName"></span></div>
+      <div id="headline"></div>
+      <div id="body"></div>
+    </div>
+    <div id="fadeTop"></div>
+    <div id="fadeBot"></div>
+    <div id="caret"></div>
+  </div>
+  <div id="footer"></div>
+</div>
+
+<script>
+  const FPS = 30;
+  let TOTAL = 150;
+  let data = null;
+  let theme = 'dark';
+
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const p = (f, [a, b]) => clamp01((f - a) / (b - a));
+  const outCubic = (t) => 1 - Math.pow(1 - t, 3);
+  const outQuint = (t) => 1 - Math.pow(1 - t, 5);
+
+  // Beats as fractions of the shot, so a two-second cut-in and a six-second read
+  // both land their highlight in the same place proportionally.
+  const AT = { source: [0.00, 0.08], headline: [0.03, 0.22], body: [0.10, 0.42],
+               scroll: [0.16, 0.72], mark: [0.60, 0.86] };
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  /**
+   * Wrap the highlighted phrase, if the line contains it.
+   *
+   * Matching is done on the escaped text so a phrase carrying an ampersand or a
+   * quote still finds itself, and the search is case-insensitive because a
+   * headline capitalises words the body does not.
+   */
+  function withMark(line, phrase) {
+    const safe = escapeHtml(line);
+    if (!phrase) return safe;
+    const needle = escapeHtml(phrase);
+    const at = safe.toLowerCase().indexOf(needle.toLowerCase());
+    if (at < 0) return safe;
+    return safe.slice(0, at)
+      + `<span class="mark"><span class="bar"></span><span class="txt">${safe.slice(at, at + needle.length)}</span></span>`
+      + safe.slice(at + needle.length);
+  }
+
+  window.__scene = {
+    fps: FPS,
+    get totalFrames() { return TOTAL; },
+
+    load(payload) {
+      data = payload;
+      TOTAL = payload.totalFrames || 150;
+      theme = payload.theme === 'ink' ? 'ink' : 'dark';
+      document.body.className = `theme-${theme}`;
+      document.documentElement.style.setProperty('--stage-h', (payload.stageH || 1280) + 'px');
+
+      document.getElementById('sourceName').textContent =
+        [payload.source, payload.date].filter(Boolean).join(' · ');
+      document.getElementById('headline').textContent = payload.headline || '';
+
+      const lines = Array.isArray(payload.body) ? payload.body : [];
+      document.getElementById('body').innerHTML = lines.map((line) => {
+        const marked = withMark(line, payload.highlight);
+        const isKey = marked !== escapeHtml(line);
+        return `<div class="para${isKey ? ' key' : ''}">${marked}</div>`;
+      }).join('');
+
+      document.getElementById('footer').textContent = payload.footnote || '';
+      this.seek(0);
+    },
+
+    seek(f) {
+      const t = TOTAL > 1 ? f / (TOTAL - 1) : 0;
+      const at = (beat) => clamp01((t - beat[0]) / (beat[1] - beat[0]));
+
+      document.getElementById('source').style.opacity = outCubic(at(AT.source));
+
+      const head = document.getElementById('headline');
+      const th = outQuint(at(AT.headline));
+      head.style.opacity = th;
+      head.style.transform = `translateY(${((1 - th) * 22).toFixed(2)}px)`;
+
+      document.querySelectorAll('.para').forEach((el, i) => {
+        const tb = outCubic(clamp01(at(AT.body) * 4 - i * 0.55));
+        el.style.opacity = tb * 0.98;
+        el.style.transform = `translateY(${((1 - tb) * 18).toFixed(2)}px)`;
+      });
+
+      // Scroll far enough to carry the highlighted line into the sheet's middle,
+      // then stop. A scroll that keeps going past its own point reads as a bug.
+      const scroll = document.getElementById('scroll');
+      const sheetH = document.getElementById('sheet').clientHeight;
+      const marked = document.querySelector('.para.key');
+      const target = marked
+        ? Math.max(0, marked.offsetTop - sheetH * 0.42)
+        : Math.max(0, scroll.scrollHeight - sheetH + 90);
+      const travel = outCubic(at(AT.scroll)) * target;
+      scroll.style.transform = `translateY(${(-travel).toFixed(2)}px)`;
+
+      // The marker arrives after the line has settled, left to right.
+      const tm = outQuint(at(AT.mark));
+      document.querySelectorAll('.mark').forEach((m) => {
+        const txt = m.querySelector('.txt');
+        m.querySelector('.bar').style.width = `${(tm * (txt.offsetWidth + 12)).toFixed(1)}px`;
+      });
+
+      // A scrollbar-ish caret, so the movement reads as a document being read.
+      const caret = document.getElementById('caret');
+      const frac = target > 0 ? travel / target : 0;
+      const trackH = sheetH - 120;
+      const thumbH = Math.max(70, trackH * 0.34);
+      caret.style.height = `${thumbH.toFixed(0)}px`;
+      caret.style.top = `${(60 + frac * (trackH - thumbH)).toFixed(1)}px`;
+      caret.style.opacity = (0.14 + 0.26 * outCubic(at(AT.source))).toFixed(3);
+    },
+  };
+</script>

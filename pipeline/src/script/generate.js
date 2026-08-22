@@ -11,6 +11,7 @@ import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 import { resolveProvider, callOpenAICompatible, VENDORS } from './providers.js';
 import { readHistory, findRepeat, recordTopic } from './topics.js';
+import { FAMILY_NAMES } from './families.js';
 
 const Stat = z.object({
   value: z.string(),
@@ -41,6 +42,8 @@ const Beat = z.object({
 
 const ReelSpec = z.object({
   topic: z.string(),
+  // Chosen by the model, and it decides how the reel looks. See families.js.
+  family: z.enum(['market', 'ai', 'fund', 'policy', 'commodity']),
   verdict: z.string(),
   segments: z.array(Beat),
   body: z.string(),

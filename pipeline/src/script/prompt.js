@@ -1,3 +1,4 @@
+import { familyMenu } from './families.js';
 // The prompt that turns a day's market data into a reel spec.
 //
 // Written for Claude Fable 5. Three things shape it:
@@ -125,6 +126,9 @@ Total spoken length across all beats: 70 to 95 words. That lands the reel near
 30 seconds when read aloud.
 
 Also produce:
+  family     — which kind of subject this is. It sets the reel's whole look, so
+               pick the one the story actually belongs to, not the closest:
+${familyMenu()}
   topic      — the day's subject in 3 to 7 words, written so it can be compared
                against the list above: name the company, scheme, policy or asset.
                "H D F C Bank Q2 margins", not "aaj ka bada move". This is a label

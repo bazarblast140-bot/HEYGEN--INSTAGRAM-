@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchCandles, summarise } from './src/harvest/yahoo.js';
 import { fetchCandles as fetchFromStooq } from './src/harvest/stooq.js';
 import { fetchCandles as fetchFromApi, configuredProviders } from './src/harvest/apis.js';
+import { motifFor } from './src/script/families.js';
 import { syntheticSeries } from './src/harvest/fixture.js';
 import { captureScene } from './src/render/capture.js';
 import { encodeFrames, probe } from './src/assemble/encode.js';
@@ -101,9 +102,9 @@ function dedupeCard(card) {
   return power && power === stat ? { ...card, power: '' } : card;
 }
 
-async function buildPresenterBeat({ segment, workDir, tag, narration, start, duration, fallbackCard }) {
+async function buildPresenterBeat({ segment, workDir, tag, narration, start, duration, fallbackCard, motif }) {
   const cardPanel = await renderSceneClip({
-    scene: 'card.html', data: segment.card, seconds: duration,
+    scene: 'card.html', data: { ...segment.card, motif }, seconds: duration,
     layout: 'panel', out: path.join(workDir, `${tag}-card.mp4`), workDir, tag: `${tag}-card`,
   });
 
@@ -112,7 +113,7 @@ async function buildPresenterBeat({ segment, workDir, tag, narration, start, dur
     // from speech synthesis rather than an avatar render. Either way there is no
     // face to stack, so show the card full frame instead of a blank panel.
     const full = await renderSceneClip({
-      scene: 'card.html', data: fallbackCard ?? segment.card, seconds: duration,
+      scene: 'card.html', data: { ...(fallbackCard ?? segment.card), motif }, seconds: duration,
       layout: 'full', out: path.join(workDir, `${tag}-full.mp4`), workDir, tag: `${tag}-full`,
     });
     return { file: full, avatarSeconds: 0 };
@@ -245,6 +246,11 @@ async function main() {
       }) || allocateDurations(spec.segments, narration.duration))
     : spec.segments.map((seg) => seg.seconds || 3);
 
+  // The family the script chose decides the texture behind every card in this
+  // reel. Chosen once here rather than per beat, so one reel is one look.
+  const motif = motifFor(spec.family);
+  if (spec.family) note(`${spec.family} topic — "${motif}" motif`);
+
   const segments = [];
   const captionBeats = [];
   let avatarSeconds = 0;
@@ -299,7 +305,7 @@ async function main() {
       if (repeatsNeighbour) captionSuppressed = true;
 
       const beat = await buildPresenterBeat({
-        segment, workDir, tag, narration, start: cursor, duration, fallbackCard,
+        segment, workDir, tag, narration, start: cursor, duration, fallbackCard, motif,
       });
       showsPresenter = beat.avatarSeconds > 0;
       file = beat.file;
@@ -320,7 +326,7 @@ async function main() {
       beatTheme = segment.card?.theme || THEMES[cardIndex % THEMES.length];
       file = await renderSceneClip({
         scene: 'card.html',
-        data: { ...dedupeCard(segment.card), theme: beatTheme },
+        data: { ...dedupeCard(segment.card), theme: beatTheme, motif },
         seconds: duration,
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
