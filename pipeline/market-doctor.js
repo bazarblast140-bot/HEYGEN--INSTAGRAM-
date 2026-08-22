@@ -121,9 +121,20 @@ async function probeAlphaVantageCoverage() {
     ['NSEI', 'the index itself'],
   ];
 
-  console.log(`\n  ${dim('Alpha Vantage coverage sweep (1 request each, 5 of 25 daily)')}`);
+  // One request per second is the free tier's rule, and the first version of
+  // this sweep broke it on every row -- including the IBM control, which is the
+  // one row that was supposed to be beyond doubt. Five throttled answers taught
+  // nothing. Spaced, they answer.
+  const PACE_MS = 1300;
+  const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
+  console.log(`\n  ${dim('Alpha Vantage coverage sweep (1 request each, spaced 1.3s, 5 of 25 daily)')}`);
+
+  let asked = false;
   for (const [symbol, why] of SYMBOLS) {
+    if (asked) await sleep(PACE_MS);
+    asked = true;
+
     try {
       const url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY'
         + `&symbol=${encodeURIComponent(symbol)}&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
