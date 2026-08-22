@@ -30,6 +30,19 @@ Voice: direct, confident, no hype. You are the trader who read the data before a
  * is silently dropped by most engines.
  */
 export function buildUserPrompt({ market, news, date, recentTopics = [] }) {
+  // A free tier sometimes withholds the index and sells only an E T F that tracks
+  // it. The percentage move survives that substitution; the price level does not.
+  // Saying so is the difference between a true reel and one that prints a 280
+  // rupee E T F price as the level of a 26,000 point index.
+  const proxy = market?.tracks
+    ? `\n\n<proxy_instrument>
+Today's data is ${market.name}, an E T F that tracks ${market.tracks}. Its daily
+percentage change is ${market.tracks}'s change and may be spoken as such. Its price
+level is the E T F's own price and is NOT the index level — never present it as one.
+When you name a level, name it as ${market.name}'s, or leave the level out.
+</proxy_instrument>`
+    : '';
+
   const alreadyCovered = recentTopics.length
     ? `\n\n<already_covered>
 These are the subjects the last ${recentTopics.length} reels covered, newest last.
@@ -48,7 +61,7 @@ Rotate across the whole beat: index moves, a single company's numbers, a governm
 or SEBI or RBI decision, mutual funds and SIP flows, an AI or technology stock story,
 commodities and currency. The viewer sees one of these every weekday, so two reels
 in a row on the same kind of subject is itself a repeat, even when the facts differ.
-</task>${alreadyCovered}
+</task>${alreadyCovered}${proxy}
 
 <context>
 The reel is 9:16, roughly 26 to 32 seconds, posted at 7:00 AM IST before the market opens.
