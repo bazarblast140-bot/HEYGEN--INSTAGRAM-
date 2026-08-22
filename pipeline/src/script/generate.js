@@ -75,6 +75,21 @@ function validateShape(spec, recentTopics = []) {
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
   if (!spec.segments.some((s) => s.type === 'chart')) problems.push('no chart beat');
 
+  // Two ways a card prints the same thing twice, both seen in a finished reel.
+  for (const [i, beat] of spec.segments.entries()) {
+    const power = String(beat.card?.power || '').trim().toLowerCase();
+    const stat = String(beat.card?.stat?.value || '').trim().toLowerCase();
+    if (power && power === stat) {
+      problems.push(`beat ${i}: card.power and card.stat.value are both "${beat.card.power}"`);
+    }
+    const next = spec.segments[i + 1]?.card;
+    if (beat.type === 'cutin' && beat.card && next
+      && String(beat.card.headline || '').trim().toLowerCase()
+         === String(next.headline || '').trim().toLowerCase()) {
+      problems.push(`beat ${i}: the cut-in repeats the next beat's headline "${next.headline}"`);
+    }
+  }
+
   // Footage is what stops the reel being eight dark cards in a row, but a reel
   // that is mostly footage stops being about the numbers. One or two beats.
   const stock = spec.segments.filter((s) => s.type === 'stock');

@@ -86,7 +86,22 @@ async function renderSceneClip({ scene, data, seconds, layout, out, workDir, tag
  * insufficient credit, plan restriction — the beat is rebuilt as a full-frame
  * card and the line is spoken by TTS instead. The reel loses the face, not the day.
  */
-async function buildPresenterBeat({ segment, workDir, tag, narration, start, duration }) {
+/**
+ * A card that prints the same figure twice.
+ *
+ * The generator is free to set `power` and `stat.value` to the same string, and
+ * it does: one reel had "+25%" set in display serif and "+25%" again as the big
+ * green figure, on the same card, six inches apart. The stat keeps its label, so
+ * the power line is the one that goes.
+ */
+function dedupeCard(card) {
+  if (!card) return card;
+  const power = String(card.power || '').trim().toLowerCase();
+  const stat = String(card.stat?.value || '').trim().toLowerCase();
+  return power && power === stat ? { ...card, power: '' } : card;
+}
+
+async function buildPresenterBeat({ segment, workDir, tag, narration, start, duration, fallbackCard }) {
   const cardPanel = await renderSceneClip({
     scene: 'card.html', data: segment.card, seconds: duration,
     layout: 'panel', out: path.join(workDir, `${tag}-card.mp4`), workDir, tag: `${tag}-card`,
@@ -97,7 +112,7 @@ async function buildPresenterBeat({ segment, workDir, tag, narration, start, dur
     // from speech synthesis rather than an avatar render. Either way there is no
     // face to stack, so show the card full frame instead of a blank panel.
     const full = await renderSceneClip({
-      scene: 'card.html', data: segment.card, seconds: duration,
+      scene: 'card.html', data: fallbackCard ?? segment.card, seconds: duration,
       layout: 'full', out: path.join(workDir, `${tag}-full.mp4`), workDir, tag: `${tag}-full`,
     });
     return { file: full, avatarSeconds: 0 };
@@ -244,9 +259,47 @@ async function main() {
 
     let file = null;
     let beatTheme = 'dark';
+    let captionSuppressed = false;
 
     if (segment.type === 'hook' || segment.type === 'cutin') {
-      const beat = await buildPresenterBeat({ segment, workDir, tag, narration, start: cursor, duration });
+      // Without a face, a cut-in falls back to a full-frame card — and its card
+      // is often the same one the next beat is about to show. In the last cut
+      // "Lagataar teesre din / KHAREEDARI" filled the screen for seven seconds
+      // across two beats. When the neighbour repeats it, build a plain statement
+      // card out of this beat's own words instead.
+      const next = spec.segments[i + 1]?.card;
+      const repeatsNeighbour = segment.card && next
+        && String(segment.card.headline || '').trim().toLowerCase()
+           === String(next.headline || '').trim().toLowerCase();
+
+      // On a normal card the power word is a phrase the headline does not contain.
+      // The substitute card is built from the caption, so its power word is often
+      // a slice of its own headline — "is number ko dhyan se" over "DHYAN SE".
+      // Emphasis on a word already on screen is repetition, so it is dropped.
+      const substituteHead = String(segment.caption || '').trim();
+      const substitutePower = String(segment.power || '').trim();
+      const powerInHeadline = substitutePower
+        && substituteHead.toLowerCase().includes(substitutePower.toLowerCase());
+
+      const fallbackCard = repeatsNeighbour
+        ? {
+            chips: [],
+            headline: substituteHead,
+            power: powerInHeadline ? '' : substitutePower,
+            stat: null,
+            footnote: '',
+          }
+        : dedupeCard(segment.card);
+
+      // The substitute card is built out of this beat's caption and power word.
+      // Burning the caption on top of it then prints the same phrase twice on the
+      // card and twice again below it — "DHYAN SE" appeared four times in one
+      // frame. The card is now carrying those words, so the caption stands down.
+      if (repeatsNeighbour) captionSuppressed = true;
+
+      const beat = await buildPresenterBeat({
+        segment, workDir, tag, narration, start: cursor, duration, fallbackCard,
+      });
       file = beat.file;
       avatarSeconds += beat.avatarSeconds;
 
@@ -265,7 +318,7 @@ async function main() {
       beatTheme = segment.card?.theme || THEMES[cardIndex % THEMES.length];
       file = await renderSceneClip({
         scene: 'card.html',
-        data: { ...segment.card, theme: beatTheme },
+        data: { ...dedupeCard(segment.card), theme: beatTheme },
         seconds: duration,
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
@@ -301,7 +354,7 @@ async function main() {
     const power = String(segment.power || '').trim();
     const powerEchoes = power && cardText.includes(power.toLowerCase());
 
-    if (captionText && !captionEchoes) {
+    if (captionText && !captionEchoes && !captionSuppressed) {
       captionBeats.push({
         start: cursor, duration, text: captionText,
         power: powerEchoes ? null : segment.power,

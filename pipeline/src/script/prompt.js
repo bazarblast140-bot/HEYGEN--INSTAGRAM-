@@ -64,6 +64,9 @@ with no words would be a silent gap, so there are none.
 Beat types:
   "hook"  — presenter on camera over a card. Opens the reel.
   "cutin" — presenter on camera again, 6 to 12 words, right before the biggest number.
+            Its card must NOT repeat the next beat's headline: when the avatar is
+            unavailable this beat falls back to a full-frame card, and two beats
+            running with one headline reads as a stall.
   "chart" — the price chart renders itself from real data. No card.
   "card"  — a full-frame statement or statistic.
   "stock" — real footage, searched from a free stock library. Give it a "query".
@@ -104,6 +107,8 @@ Per beat:
   card.power     — the display-serif line. A figure, or two or three words.
   card.stat      — optional { value, label, direction: "up" | "down" | "flat" }.
                    value max 10 characters. label max 5 words.
+                   MUST differ from card.power. Setting both to "+25%" prints the
+                   same figure twice on one card, once in serif and once large.
   card.footnote  — the source, or a one-line qualifier.
   query    — ONLY on a "stock" beat; null everywhere else. Two to four plain
              visual words naming what is literally on screen: "stock market

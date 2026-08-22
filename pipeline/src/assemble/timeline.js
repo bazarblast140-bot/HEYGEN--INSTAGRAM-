@@ -33,7 +33,14 @@ function normaliseVideo(index, duration, { grade = false } = {}) {
     'setsar=1',
     // Stock clips are shot in every colour temperature going. A slight darken and
     // desaturate settles them into the dark trading palette instead of jumping.
-    ...(grade ? ['eq=brightness=-0.06:saturation=0.85:contrast=1.05'] : []),
+    ...(grade ? [
+      // Footage carries its own detail, and the caption has to survive it. The
+      // "stock market screen" clip is a wall of small numbers; at the previous
+      // grade the burned-in caption sat inside that wall and could not be read.
+      'eq=brightness=-0.14:saturation=0.72:contrast=1.05',
+      // A bottom scrim where the captions live, so type has a ground of its own.
+      `drawbox=x=0:y=ih*0.62:w=iw:h=ih*0.38:color=black@0.42:t=fill`,
+    ] : []),
     `trim=duration=${duration.toFixed(3)}`,
     'setpts=PTS-STARTPTS',
     // A clip shorter than its slot holds its last frame rather than cutting to black.
@@ -117,8 +124,8 @@ export async function mixAudio({ voice, music, out, duration, bedLevel = 0.32 })
   if (!music) {
     await run('ffmpeg', [
       '-y', '-v', 'error', '-i', voice,
-      '-af', `loudnorm=I=${LOUDNESS.I}:TP=${LOUDNESS.TP}:LRA=${LOUDNESS.LRA}`,
-      '-c:a', 'aac', '-b:a', '192k', out,
+      '-af', `loudnorm=I=${LOUDNESS.I}:TP=${LOUDNESS.TP}:LRA=${LOUDNESS.LRA},aresample=48000`,
+      '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', out,
     ]);
     return out;
   }
@@ -130,14 +137,16 @@ export async function mixAudio({ voice, music, out, duration, bedLevel = 0.32 })
     `[voice]asplit=2[voiceMix][voiceKey]`,
     `[bed][voiceKey]sidechaincompress=threshold=0.045:ratio=6:attack=12:release=320[ducked]`,
     `[ducked][voiceMix]amix=inputs=2:duration=first:normalize=0[mixed]`,
-    `[mixed]loudnorm=I=${LOUDNESS.I}:TP=${LOUDNESS.TP}:LRA=${LOUDNESS.LRA}[a]`,
+    // loudnorm runs at 192 kHz internally and hands that rate on; without the
+    // resample the finished reel shipped at 96 kHz.
+    `[mixed]loudnorm=I=${LOUDNESS.I}:TP=${LOUDNESS.TP}:LRA=${LOUDNESS.LRA},aresample=48000[a]`,
   ].join(';');
 
   await run('ffmpeg', [
     '-y', '-v', 'error',
     '-i', voice, '-i', music,
     '-filter_complex', filter,
-    '-map', '[a]', '-c:a', 'aac', '-b:a', '192k',
+    '-map', '[a]', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
     '-t', duration.toFixed(3),
     out,
   ]);
