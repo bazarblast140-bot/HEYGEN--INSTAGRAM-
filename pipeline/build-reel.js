@@ -260,6 +260,7 @@ async function main() {
     let file = null;
     let beatTheme = 'dark';
     let captionSuppressed = false;
+    let showsPresenter = false;
 
     if (segment.type === 'hook' || segment.type === 'cutin') {
       // Without a face, a cut-in falls back to a full-frame card — and its card
@@ -300,6 +301,7 @@ async function main() {
       const beat = await buildPresenterBeat({
         segment, workDir, tag, narration, start: cursor, duration, fallbackCard,
       });
+      showsPresenter = beat.avatarSeconds > 0;
       file = beat.file;
       avatarSeconds += beat.avatarSeconds;
 
@@ -359,6 +361,9 @@ async function main() {
         start: cursor, duration, text: captionText,
         power: powerEchoes ? null : segment.power,
         theme: beatTheme,
+        // On a beat where the presenter is on screen, the bottom of the frame is
+        // his face. Captions go above the divider instead of across it.
+        region: showsPresenter ? 'upper' : 'lower',
       });
     }
 

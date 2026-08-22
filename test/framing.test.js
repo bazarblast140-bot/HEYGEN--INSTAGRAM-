@@ -92,3 +92,21 @@ test('the crown is found on a plain background, not assumed', async (t) => {
   assert.ok(crown !== null, 'a plain wall must be readable');
   assert.ok(Math.abs(crown - 400 / 1280) < 0.02, `crown ${crown?.toFixed(3)} should be near 0.313`);
 });
+
+test('captions clear the face on a presenter beat', async () => {
+  const { marginFor, CAPTION_MARGIN } = await import('../pipeline/src/assemble/captions.js');
+
+  // Alignment is bottom-centre, so MarginV counts up from the frame's bottom.
+  // A caption is clear of the presenter panel when its margin exceeds the
+  // panel's height — otherwise it prints across the face, which it did.
+  const upperBody = marginFor({ region: 'upper' }, 'body');
+  const upperPower = marginFor({ region: 'upper' }, 'power');
+
+  assert.ok(upperBody > BOTTOM.height, `body caption at ${upperBody} sits inside the ${BOTTOM.height}px face panel`);
+  assert.ok(upperPower > BOTTOM.height, `power caption at ${upperPower} sits inside the face panel`);
+  assert.ok(upperPower < FRAME.height - 200, 'the power line must not run off the top of the frame');
+
+  // Full-frame beats keep the low placement; nothing is behind them.
+  assert.equal(marginFor({}, 'body'), CAPTION_MARGIN.lower.body);
+  assert.equal(marginFor({ region: 'lower' }, 'power'), CAPTION_MARGIN.lower.power);
+});

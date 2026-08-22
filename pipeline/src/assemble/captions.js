@@ -81,6 +81,26 @@ function estimateTimings(words, start, duration) {
  *   power — the one word to set in display serif above the line, optional
  *   theme — the beat's ground, so the caption can invert on the light card
  */
+/**
+ * How far above the frame's bottom edge a caption sits.
+ *
+ * The styles put captions low, which is right for a full-frame card. On a
+ * presenter beat it is wrong: the face occupies the bottom panel, and the
+ * caption landed across it — "Namaste, main Rajesh" was printed over Rajesh.
+ *
+ * A beat marked `region: 'upper'` is lifted into the top panel instead, above
+ * the divider, where the graphics are.
+ */
+export const CAPTION_MARGIN = {
+  lower: { body: 300, power: 430 },
+  // TOP is 1000 tall, so 1920 - 1000 = 920 is the divider. These sit clear of it.
+  upper: { body: 1080, power: 1210 },
+};
+
+export function marginFor(beat, kind) {
+  return CAPTION_MARGIN[beat.region === 'upper' ? 'upper' : 'lower'][kind];
+}
+
 export function buildAss(beats) {
   const lines = [header()];
 
@@ -98,14 +118,20 @@ export function buildAss(beats) {
 
     for (const group of groupWords(timed)) {
       const text = group.map((t) => t.word).join(' ').replace(/[{}]/g, '');
-      lines.push(`Dialogue: 0,${ts(group[0].start)},${ts(group[group.length - 1].end)},${bodyStyle},,0,0,0,,${text}`);
+      // A non-zero MarginV on the event overrides the style's, which is how one
+      // style serves both panels without four more style definitions.
+      lines.push(
+        `Dialogue: 0,${ts(group[0].start)},${ts(group[group.length - 1].end)},${bodyStyle},,0,0,`
+        + `${marginFor(beat, 'body')},,${text}`,
+      );
     }
 
     if (beat.power) {
       // The power word holds for the whole beat rather than flashing per group —
       // it is the thing the viewer should still be reading when the shot changes.
       lines.push(
-        `Dialogue: 1,${ts(beat.start)},${ts(beat.start + beat.duration)},${powerStyle},,0,0,0,,${String(beat.power).replace(/[{}]/g, '')}`,
+        `Dialogue: 1,${ts(beat.start)},${ts(beat.start + beat.duration)},${powerStyle},,0,0,`
+        + `${marginFor(beat, 'power')},,${String(beat.power).replace(/[{}]/g, '')}`,
       );
     }
   }

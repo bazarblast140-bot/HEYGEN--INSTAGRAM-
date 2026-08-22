@@ -1,0 +1,155 @@
+{
+  "title": "Mutual fund SIP inflows",
+  "topic": "S I P inflows record high",
+  "chartSymbol": "nifty",
+  "chartRange": "3mo",
+  "verdict": "Retail bhaari",
+  "music": "assets/music/bed.wav",
+  "caption": "SIP inflows ne naya record banaya hai. Retail investors ab girte market me kharid rahe hain, dar nahi rahe.\n\nAapka SIP chal raha hai? Comment me batao.",
+  "hashtags": [
+    "#mutualfunds",
+    "#sip",
+    "#nifty",
+    "#stockmarketindia",
+    "#investing",
+    "#personalfinance",
+    "#nse",
+    "#retailinvestor",
+    "#sipinvestment",
+    "#financialfreedom"
+  ],
+  "disclaimer": "Educational content · Investment advice nahi",
+  "segments": [
+    {
+      "type": "hook",
+      "seconds": null,
+      "query": null,
+      "say": "Namaste doston, aaj mutual fund ki sabse badi khabar aapke liye",
+      "caption": "aaj ki sabse badi khabar",
+      "power": "BADI KHABAR",
+      "card": {
+        "chips": [
+          "MUTUAL FUND",
+          "AMFI"
+        ],
+        "headline": "Retail ne kar diya",
+        "power": "KAMAAL",
+        "stat": null,
+        "footnote": "RAJESH TECHNICAL TRADERS"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": null,
+      "query": null,
+      "say": "S I P se pichhle mahine bais hazar crore rupaye aaye hain",
+      "caption": "pichhle mahine akele",
+      "power": null,
+      "card": {
+        "chips": [
+          "SIP FLOW",
+          "MASIK"
+        ],
+        "headline": "Ek mahine me aaya",
+        "power": "",
+        "stat": {
+          "value": "22,000 Cr",
+          "label": "S I P inflow",
+          "direction": "up"
+        },
+        "footnote": "SOURCE: AMFI"
+      }
+    },
+    {
+      "type": "stock",
+      "seconds": null,
+      "query": "person using calculator",
+      "say": "Ye lagataar chaubeesva mahina hai jab inflow badha hai, ek baar bhi ghata nahi",
+      "caption": "lagataar chaubees mahine",
+      "power": "24 MAHINE",
+      "card": {
+        "chips": [
+          "STREAK"
+        ],
+        "headline": "Lagataar badhta hua",
+        "power": "CHAUBEES MAHINE",
+        "stat": null,
+        "footnote": "SOURCE: AMFI"
+      }
+    },
+    {
+      "type": "chart",
+      "seconds": null,
+      "query": null,
+      "say": "Isi beech Nifty flat raha, lekin S I P ka paisa ruka nahi",
+      "caption": "market flat, paisa aata raha",
+      "power": null,
+      "card": null
+    },
+    {
+      "type": "cutin",
+      "seconds": null,
+      "query": null,
+      "say": "Ab is baat ko dhyan se suniye",
+      "caption": "ye baat dhyan se suniye",
+      "power": "DHYAN SE",
+      "card": null
+    },
+    {
+      "type": "card",
+      "seconds": null,
+      "query": null,
+      "say": "Matlab chhote investors ab girte market me darte nahi, ulta kharidte hain",
+      "caption": "girte market me kharidte hain",
+      "power": "KHARIDTE HAIN",
+      "card": {
+        "chips": [
+          "BEHAVIOUR",
+          "RETAIL"
+        ],
+        "headline": "Girte market me",
+        "power": "KHAREEDARI",
+        "stat": {
+          "value": "+18%",
+          "label": "Naye S I P khate",
+          "direction": "up"
+        },
+        "footnote": "SOURCE: AMFI"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": null,
+      "query": null,
+      "say": "Lekin yaad rakhiye, S I P return ki koi guarantee nahi deta",
+      "caption": "guarantee koi nahi deta",
+      "power": "GUARANTEE NAHI",
+      "card": {
+        "chips": [
+          "DHYAN DEIN"
+        ],
+        "headline": "S I P return ki",
+        "power": "GUARANTEE NAHI",
+        "stat": null,
+        "footnote": "Market risk lagoo hota hai"
+      }
+    },
+    {
+      "type": "card",
+      "seconds": null,
+      "query": null,
+      "say": "Aapka S I P chal raha hai to comment me S I P likhiye",
+      "caption": "comment karo SIP",
+      "power": "comment “SIP”",
+      "card": {
+        "chips": [
+          "ROZ SUBAH 7 BAJE"
+        ],
+        "headline": "Aapka S I P chal raha hai",
+        "power": "comment “SIP”",
+        "stat": null,
+        "footnote": "EDUCATIONAL CONTENT · INVESTMENT ADVICE NAHI"
+      }
+    }
+  ]
+}
