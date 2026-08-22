@@ -144,10 +144,88 @@
    * so the background is as reproducible as everything else.
    */
   const THEME_PAINT = {
-    dark:  { glow: '55,72,116', dot: '71,85,105', dotAlpha: 0.5 },
-    light: { glow: '198,186,168', dot: '160,150,134', dotAlpha: 0.55 },
-    ink:   { glow: '38,72,110', dot: '70,88,124', dotAlpha: 0.55 },
+    dark:  { glow: '55,72,116', dot: '71,85,105', dotAlpha: 0.5, pulse: '245,177,66' },
+    light: { glow: '198,186,168', dot: '160,150,134', dotAlpha: 0.55, pulse: '176,110,20' },
+    ink:   { glow: '38,72,110', dot: '70,88,124', dotAlpha: 0.55, pulse: '108,190,255' },
   };
+
+  /**
+   * The motif is what makes a topic look like itself.
+   *
+   * Every reel so far used the same drifting dot field, so a mutual-fund day and
+   * an A I day differed only in their words — which is why they read as the same
+   * reel twice. The palette stays fixed, because that is the brand; what changes
+   * is the texture behind the type and, elsewhere, the shape the data takes.
+   *
+   *   dots   index and market days — the original ambient field
+   *   nodes  A I and technology — a lattice with pulses running along its edges
+   */
+  let motif = 'dots';
+
+  // A seeded generator, so the lattice is identical on every render of the same
+  // beat. Nothing here may read a clock or Math.random or the frames stop matching.
+  function seeded(i) {
+    const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  function paintNodes(f, paint, H) {
+    const COLS = 5;
+    const ROWS = Math.round(H / 150);
+    const nodes = [];
+
+    for (let r = 0; r <= ROWS; r += 1) {
+      for (let c = 0; c <= COLS; c += 1) {
+        const i = r * (COLS + 1) + c;
+        // Jitter each node off the lattice so it reads as a network, not a grid.
+        const jx = (seeded(i) - 0.5) * 70;
+        const jy = (seeded(i + 99) - 0.5) * 70;
+        // A slow circular wander keeps the whole field alive between cuts.
+        const t = f * 0.012 + i;
+        nodes.push({
+          x: (c / COLS) * 760 - 20 + jx + Math.cos(t) * 9,
+          y: (r / ROWS) * H + jy + Math.sin(t) * 9,
+          depth: 1 - (r / ROWS) * 0.75,
+        });
+      }
+    }
+
+    const fade = outCubic(p(f, BEAT.bg));
+
+    // Edges first, so the nodes sit on top of their own connections.
+    ctx.lineWidth = 1;
+    for (const [i, a] of nodes.entries()) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const b = nodes[j];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (d > 210) continue;
+
+        const strength = (1 - d / 210) * a.depth * fade;
+        ctx.strokeStyle = `rgba(${paint.dot},${(strength * 0.42).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        // A pulse travelling the edge — the one thing that says "signal", not "grid".
+        const phase = ((f * 0.010) + seeded(i * 31 + j)) % 1;
+        const px = a.x + (b.x - a.x) * phase;
+        const py = a.y + (b.y - a.y) * phase;
+        ctx.fillStyle = `rgba(${paint.pulse},${(strength * 0.85).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    for (const [i, n] of nodes.entries()) {
+      const r = 2.6 + seeded(i + 7) * 2.2;
+      ctx.fillStyle = `rgba(${paint.dot},${(paint.dotAlpha * n.depth * fade).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   function paintBackground(f) {
     const H = L.stageH;
@@ -159,6 +237,8 @@
     glow.addColorStop(1, `rgba(${paint.glow},0)`);
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, 720, H);
+
+    if (motif === 'nodes') { paintNodes(f, paint, H); return; }
 
     const step = 44;
     // 0.22px per frame is roughly a fifth of a pixel: measurably present, visually
@@ -226,6 +306,7 @@
       data = payload;
       TOTAL = payload.totalFrames || 150;
       theme = THEME_PAINT[payload.theme] ? payload.theme : 'dark';
+      motif = payload.motif === 'nodes' ? 'nodes' : 'dots';
       document.body.className = `theme-${theme}`;
       applyLayout(payload.layout || 'full');
 
