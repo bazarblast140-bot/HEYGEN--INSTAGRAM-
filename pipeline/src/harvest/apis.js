@@ -25,11 +25,62 @@ import { env } from '../../../src/config.js';
 const TWELVE = 'https://api.twelvedata.com/time_series';
 const ALPHA = 'https://www.alphavantage.co/query';
 
-/** Twelve Data names an index plainly; Alpha Vantage wants an exchange suffix. */
+/**
+ * Each instrument is a ladder, not a symbol.
+ *
+ * Free tiers routinely carry equities and withhold indices — an index is the
+ * product these vendors sell. So when the index is refused, the next rung is an
+ * ETF that tracks it: NIFTYBEES holds the NIFTY 50 constituents, so its daily
+ * shape is the index's shape, and a chart drawn from it is the same chart.
+ *
+ * The price is not the same number, though — NIFTYBEES trades near 280 while the
+ * index sits near 26,000 — so a rung that is a proxy says so in `tracks`, and
+ * keeps its own name. A reel must never print an ETF's price under an index's
+ * label; that is a false statement about the market, not a display detail.
+ *
+ * Twelve Data names an index plainly; Alpha Vantage wants an exchange suffix and
+ * only lists BSE for India, which is why the proxy rungs differ per provider.
+ */
 export const SYMBOLS = {
-  twelvedata: { nifty: 'NIFTY 50', banknifty: 'NIFTY BANK', sensex: 'SENSEX' },
-  alphavantage: { nifty: 'NSEI', banknifty: 'NSEBANK', sensex: 'BSESN' },
+  twelvedata: {
+    nifty: [
+      { symbol: 'NIFTY 50', name: 'NIFTY 50' },
+      { symbol: 'NIFTYBEES', exchange: 'NSE', name: 'NIFTYBEES', tracks: 'NIFTY 50' },
+    ],
+    banknifty: [
+      { symbol: 'NIFTY BANK', name: 'NIFTY BANK' },
+      { symbol: 'BANKBEES', exchange: 'NSE', name: 'BANKBEES', tracks: 'NIFTY BANK' },
+    ],
+    // No SENSEX ETF is listed here because none was verified. A guessed ticker
+    // spends a request from a 25-a-day budget to learn nothing.
+    sensex: [{ symbol: 'SENSEX', name: 'SENSEX' }],
+  },
+  alphavantage: {
+    nifty: [
+      { symbol: 'NSEI', name: 'NIFTY 50' },
+      { symbol: 'NIFTYBEES.BSE', name: 'NIFTYBEES', tracks: 'NIFTY 50' },
+    ],
+    banknifty: [
+      { symbol: 'NSEBANK', name: 'NIFTY BANK' },
+      { symbol: 'BANKBEES.BSE', name: 'BANKBEES', tracks: 'NIFTY BANK' },
+    ],
+    sensex: [{ symbol: 'BSESN', name: 'SENSEX' }],
+  },
 };
+
+/** An unlisted ticker is passed through as written, on its own, with no proxy. */
+export function candidatesFor(provider, nameOrTicker) {
+  return SYMBOLS[provider]?.[nameOrTicker] || [{ symbol: nameOrTicker, name: nameOrTicker }];
+}
+
+/**
+ * Some refusals are about this symbol; others are about this key, today.
+ * Only the first kind is worth walking the ladder for — retrying a throttle with
+ * a different symbol spends another request to be told the same thing.
+ */
+function exhausted(err) {
+  return Boolean(err?.exhausted);
+}
 
 function toCandle(o, h, l, c, v, t) {
   return { t, o: Number(o), h: Number(h), l: Number(l), c: Number(c), v: Number(v) || 0 };
@@ -37,9 +88,10 @@ function toCandle(o, h, l, c, v, t) {
 
 const usable = (d) => [d.o, d.h, d.l, d.c].every((n) => Number.isFinite(n));
 
-async function fromTwelveData(nameOrTicker, { bars, apiKey }) {
-  const symbol = SYMBOLS.twelvedata[nameOrTicker] || nameOrTicker;
+async function fromTwelveData(candidate, { bars, apiKey }) {
+  const { symbol } = candidate;
   const url = `${TWELVE}?symbol=${encodeURIComponent(symbol)}&interval=1day`
+    + (candidate.exchange ? `&exchange=${encodeURIComponent(candidate.exchange)}` : '')
     + `&outputsize=${bars}&apikey=${encodeURIComponent(apiKey)}`;
 
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -47,7 +99,11 @@ async function fromTwelveData(nameOrTicker, { bars, apiKey }) {
 
   // Twelve Data reports failure inside a 200, so the status code is not enough.
   if (body?.status === 'error' || body?.code >= 400) {
-    throw new Error(`Twelve Data: ${body?.message || `HTTP ${res.status}`}`);
+    const err = new Error(`Twelve Data: ${body?.message || `HTTP ${res.status}`}`);
+    // 429 is the daily credit limit; 401/403 is the key itself. Neither is fixed
+    // by asking for a different symbol.
+    err.exhausted = [401, 403, 429].includes(body?.code);
+    throw err;
   }
   if (!Array.isArray(body?.values) || !body.values.length) {
     throw new Error(`Twelve Data returned no values for ${symbol}`);
@@ -63,7 +119,8 @@ async function fromTwelveData(nameOrTicker, { bars, apiKey }) {
 
   return {
     symbol,
-    name: body.meta?.symbol || symbol,
+    name: candidate.name || body.meta?.symbol || symbol,
+    tracks: candidate.tracks || null,
     currency: body.meta?.currency || 'INR',
     interval: '1d',
     candles,
@@ -72,8 +129,8 @@ async function fromTwelveData(nameOrTicker, { bars, apiKey }) {
   };
 }
 
-async function fromAlphaVantage(nameOrTicker, { bars, apiKey }) {
-  const symbol = SYMBOLS.alphavantage[nameOrTicker] || nameOrTicker;
+async function fromAlphaVantage(candidate, { bars, apiKey }) {
+  const { symbol } = candidate;
   const url = `${ALPHA}?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(symbol)}`
     + `&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
 
@@ -82,8 +139,18 @@ async function fromAlphaVantage(nameOrTicker, { bars, apiKey }) {
 
   // Alpha Vantage answers a throttle or an unknown symbol with HTTP 200 and a
   // prose field. Each one names a different problem, so each is reported as it is.
-  const complaint = body?.Note || body?.Information || body?.['Error Message'];
-  if (complaint) throw new Error(`Alpha Vantage: ${String(complaint).slice(0, 180)}`);
+  //
+  // The distinction matters to the ladder below: Note and Information are the
+  // day's 25 requests being spent, or an endpoint the free tier does not sell.
+  // Error Message is this symbol being wrong, which the next rung may fix.
+  const spent = body?.Note || body?.Information;
+  const complaint = spent || body?.['Error Message'];
+  if (complaint) {
+    throw Object.assign(
+      new Error(`Alpha Vantage: ${String(complaint).slice(0, 180)}`),
+      { exhausted: Boolean(spent) },
+    );
+  }
 
   const series = body?.['Time Series (Daily)'];
   if (!series) throw new Error(`Alpha Vantage returned no daily series for ${symbol}`);
@@ -100,7 +167,8 @@ async function fromAlphaVantage(nameOrTicker, { bars, apiKey }) {
 
   return {
     symbol,
-    name: symbol,
+    name: candidate.name || symbol,
+    tracks: candidate.tracks || null,
     currency: 'INR',
     interval: '1d',
     candles,
@@ -119,8 +187,9 @@ export function configuredProviders() {
 }
 
 /**
- * Try each configured provider in turn. A provider that refuses is reported and
- * skipped, because the point of having two is that one of them answers.
+ * Try each configured provider in turn, and within a provider each rung of the
+ * symbol ladder. A provider that refuses is reported and skipped, because the
+ * point of having two is that one of them answers.
  */
 export async function fetchCandles(nameOrTicker, { bars = 90, onAttempt } = {}) {
   const providers = configuredProviders();
@@ -133,11 +202,14 @@ export async function fetchCandles(nameOrTicker, { bars = 90, onAttempt } = {}) 
 
   const refusals = [];
   for (const provider of providers) {
-    try {
-      onAttempt?.(provider.name);
-      return await provider.fetch(nameOrTicker, { bars, apiKey: env(provider.key) });
-    } catch (err) {
-      refusals.push(`${provider.name}: ${err.message}`);
+    for (const candidate of candidatesFor(provider.name, nameOrTicker)) {
+      try {
+        onAttempt?.(`${provider.name} ${candidate.symbol}`);
+        return await provider.fetch(candidate, { bars, apiKey: env(provider.key) });
+      } catch (err) {
+        refusals.push(`${provider.name}/${candidate.symbol}: ${err.message}`);
+        if (exhausted(err)) break;
+      }
     }
   }
 
