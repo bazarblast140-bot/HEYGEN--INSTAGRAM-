@@ -178,6 +178,10 @@ async function main() {
       }
     }
   }
+  if (series.tracks) {
+    note(`${series.name} stood in for ${series.tracks} — the percentage is the index's, the level is the E T F's`);
+  }
+
   const summary = summarise(series);
 
   // Without this the pipeline posts the same reel every morning: the checked-in
@@ -187,7 +191,10 @@ async function main() {
     console.log('Writing today\'s script');
     try {
       const written = await generateSpec({
-        market: { name: series.name, source: series.source, summary, recent: series.candles.slice(-10) },
+        market: {
+          name: series.name, tracks: series.tracks || null, source: series.source,
+          summary, recent: series.candles.slice(-10),
+        },
         news: spec.news,
         onAttempt: (n, model) => console.log(`  ${model}, attempt ${n}`),
       });
