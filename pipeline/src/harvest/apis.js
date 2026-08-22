@@ -82,6 +82,29 @@ function exhausted(err) {
   return Boolean(err?.exhausted);
 }
 
+/**
+ * Alpha Vantage's free tier meters two different ways and says so in the same
+ * field, which is how a ladder can defeat itself: the second rung fired inside
+ * the same second as the first and was refused for pacing, so the E T F was
+ * never actually tested.
+ *
+ *   "1 request per second" / "spreading out"   slow down, then ask again
+ *   "25 requests per day"                      the day is spent, stop asking
+ *
+ * The first is a wait; the second is a wall. Treating them alike either burns
+ * the daily allowance on retries or abandons a key that would have answered a
+ * second later.
+ */
+function throttleKind(message) {
+  const m = String(message);
+  if (/per day|daily (rate )?limit/i.test(m)) return 'daily';
+  if (/per second|spreading out/i.test(m)) return 'pace';
+  return null;
+}
+
+const PACE_MS = 1300;
+const sleep = (ms) => (ms > 0 ? new Promise((resolve) => { setTimeout(resolve, ms); }) : Promise.resolve());
+
 function toCandle(o, h, l, c, v, t) {
   return { t, o: Number(o), h: Number(h), l: Number(l), c: Number(c), v: Number(v) || 0 };
 }
@@ -100,9 +123,11 @@ async function fromTwelveData(candidate, { bars, apiKey }) {
   // Twelve Data reports failure inside a 200, so the status code is not enough.
   if (body?.status === 'error' || body?.code >= 400) {
     const err = new Error(`Twelve Data: ${body?.message || `HTTP ${res.status}`}`);
-    // 429 is the daily credit limit; 401/403 is the key itself. Neither is fixed
-    // by asking for a different symbol.
-    err.exhausted = [401, 403, 429].includes(body?.code);
+    // 401/403 is the key itself and 429 is usually the daily credit limit —
+    // neither is fixed by asking for a different symbol. A 429 that names a
+    // per-second rate is the exception: that one is fixed by waiting.
+    err.paced = body?.code === 429 && throttleKind(body?.message) === 'pace';
+    err.exhausted = [401, 403, 429].includes(body?.code) && !err.paced;
     throw err;
   }
   if (!Array.isArray(body?.values) || !body.values.length) {
@@ -140,15 +165,18 @@ async function fromAlphaVantage(candidate, { bars, apiKey }) {
   // Alpha Vantage answers a throttle or an unknown symbol with HTTP 200 and a
   // prose field. Each one names a different problem, so each is reported as it is.
   //
-  // The distinction matters to the ladder below: Note and Information are the
-  // day's 25 requests being spent, or an endpoint the free tier does not sell.
-  // Error Message is this symbol being wrong, which the next rung may fix.
-  const spent = body?.Note || body?.Information;
-  const complaint = spent || body?.['Error Message'];
+  // The distinction matters to the ladder below. Error Message is this symbol
+  // being wrong, which the next rung may fix. Note and Information cover both
+  // meters — the day's 25 requests being spent, and the one-per-second pacing
+  // rule — so which of the two it is decides whether to stop or to wait.
+  const metered = body?.Note || body?.Information;
+  const complaint = metered || body?.['Error Message'];
   if (complaint) {
+    const kind = metered ? throttleKind(metered) : null;
     throw Object.assign(
       new Error(`Alpha Vantage: ${String(complaint).slice(0, 180)}`),
-      { exhausted: Boolean(spent) },
+      // A pacing refusal is neither: it is the same request, asked too soon.
+      { exhausted: Boolean(metered) && kind !== 'pace', paced: kind === 'pace' },
     );
   }
 
@@ -186,12 +214,24 @@ export function configuredProviders() {
   return PROVIDERS.filter((p) => env(p.key));
 }
 
+async function fetchWithPacing(provider, candidate, opts, paceMs) {
+  try {
+    return await provider.fetch(candidate, opts);
+  } catch (err) {
+    if (!err.paced) throw err;
+    // The vendor asked for slower, not for less. One wait and one retry is the
+    // whole remedy; a second refusal is something other than pacing.
+    await sleep(paceMs);
+    return provider.fetch(candidate, opts);
+  }
+}
+
 /**
  * Try each configured provider in turn, and within a provider each rung of the
  * symbol ladder. A provider that refuses is reported and skipped, because the
  * point of having two is that one of them answers.
  */
-export async function fetchCandles(nameOrTicker, { bars = 90, onAttempt } = {}) {
+export async function fetchCandles(nameOrTicker, { bars = 90, onAttempt, paceMs = PACE_MS } = {}) {
   const providers = configuredProviders();
   if (!providers.length) {
     throw new Error(
@@ -201,11 +241,18 @@ export async function fetchCandles(nameOrTicker, { bars = 90, onAttempt } = {}) 
   }
 
   const refusals = [];
+  let asked = false;
   for (const provider of providers) {
     for (const candidate of candidatesFor(provider.name, nameOrTicker)) {
+      // Rungs are spaced, not fired together. Alpha Vantage allows one request
+      // per second, so a ladder walked at full speed refuses its own second rung
+      // for pacing and reports it as though the symbol were wrong.
+      if (asked) await sleep(paceMs);
+      asked = true;
+
       try {
         onAttempt?.(`${provider.name} ${candidate.symbol}`);
-        return await provider.fetch(candidate, { bars, apiKey: env(provider.key) });
+        return await fetchWithPacing(provider, candidate, { bars, apiKey: env(provider.key) }, paceMs);
       } catch (err) {
         refusals.push(`${provider.name}/${candidate.symbol}: ${err.message}`);
         if (exhausted(err)) break;
