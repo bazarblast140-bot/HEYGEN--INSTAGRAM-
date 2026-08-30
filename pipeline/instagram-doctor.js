@@ -44,11 +44,38 @@ if (!token) {
 
 console.log(`  ${dim(`token ${token.length} chars, ends ...${token.slice(-4)}  ·  surface ${surface}  ·  user ${userId || '(unset)'}`)}`);
 
+// Check the value before blaming the account.
+//
+// A token copied out of a JSON response brings the punctuation with it, and a
+// single trailing quote is enough for Facebook to answer "Cannot parse access
+// token" — which reads like a revoked app and is a paste error. env() strips
+// whitespace but a quote is not whitespace, so it survives all the way to the
+// API. Naming the character is the difference between a two-second fix and an
+// afternoon spent regenerating tokens that were never the problem.
+const strays = [...new Set([...token].filter((c) => /["'`\s<>]/.test(c)))];
+if (strays.length) {
+  const names = strays.map((c) => (c.trim() ? `"${c}"` : JSON.stringify(c)));
+  console.log(`  ${bad('bad value')} the token contains ${names.join(', ')} — quotes or spaces, not part of the token`);
+  console.log(dim('  Re-paste the secret with only the token itself: no surrounding quotes, no trailing comma.'));
+}
+
 // Does it resolve to the account we think it does?
+//
+// whoami tries each surface and RETURNS the outcome rather than throwing, so a
+// try/catch alone reports every failure as a success. The first version of this
+// file did exactly that and printed a green WORKS next to ok:false.
 try {
   const me = await whoami({ igUserId: userId, token });
-  const label = me?.username ? `@${me.username}` : (me?.name || JSON.stringify(me).slice(0, 80));
-  console.log(`  ${ok('WORKS')} resolves to ${label}`);
+  if (me.working) {
+    const account = me.results.find((r) => r.ok)?.account || {};
+    const label = account.username ? `@${account.username}` : (account.id || 'the account');
+    console.log(`  ${ok('WORKS')} ${label} via ${me.working}${account.media_count != null ? dim(`  ·  ${account.media_count} posts`) : ''}`);
+  } else {
+    console.log(`  ${bad('fail ')} no surface accepted the token`);
+    for (const r of me.results) {
+      console.log(`        ${dim(`${r.surface}: ${String(r.error).slice(0, 150)}`)}`);
+    }
+  }
 } catch (err) {
   console.log(`  ${bad('fail ')} ${String(err.message).slice(0, 200)}`);
 }
