@@ -124,6 +124,7 @@ jobs:
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
+            ${{ (github.event_name == 'schedule' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
             2>&1 | tee carousel.log
           {
             echo '## Carousel'

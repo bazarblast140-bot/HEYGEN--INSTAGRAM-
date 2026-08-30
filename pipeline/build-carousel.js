@@ -5,6 +5,7 @@
 //   node pipeline/build-carousel.js --generate               # today's topic
 //   node pipeline/build-carousel.js --spec ... --no-photos   # gradients only
 //   node pipeline/build-carousel.js --spec ... --format png   # lossless, not postable
+//   node pipeline/build-carousel.js --generate --require-generated   # no fallback
 //
 // This is the cheap sibling of build-reel.js. There is no video in it, so there
 // is no avatar render, no voice synthesis and no ffmpeg encode: a carousel is N
@@ -103,6 +104,18 @@ async function main() {
       await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
     } catch (err) {
+      // On a run that publishes, falling back is worse than failing.
+      //
+      // The checked-in spec is one fixed carousel. Falling back to it on a
+      // scheduled run does not mean "no new fact today", it means posting a
+      // carousel the account has already posted -- and the ledger cannot catch
+      // that, because the fallback never goes through the ledger. A skipped day
+      // costs nothing; a duplicate costs the reason people follow.
+      if (args['require-generated']) {
+        console.error(`\nGeneration failed and --require-generated is set, so nothing was built.`);
+        console.error(`  ${err.message.slice(0, 300)}`);
+        process.exit(1);
+      }
       note(`generation failed (${err.message.slice(0, 160)}) — using the checked-in spec`);
     }
   }
