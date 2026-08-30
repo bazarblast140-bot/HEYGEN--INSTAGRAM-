@@ -100,3 +100,22 @@ test('an undescribed photo is used before falling back to the gradient', () => {
 
   assert.equal(chosen?.id, 1);
 });
+
+// Also from the live post: a slide about butterflies got a photograph of socks.
+test('a person wearing the subject is not the subject', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: 'Photograph of feet in butterfly socks next to sneakers' },
+    { id: 2, alt: 'Butterfly resting on a flower in summer sunlight' },
+  ], { query: 'butterfly insect', used: new Set() });
+
+  assert.equal(chosen.id, 2);
+});
+
+test('a drawing of the subject loses to a photograph of it', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: 'Cartoon drawing of an octopus' },
+    { id: 2, alt: 'Octopus tentacles underwater' },
+  ], { query: 'octopus tentacles', used: new Set() });
+
+  assert.equal(chosen.id, 2);
+});

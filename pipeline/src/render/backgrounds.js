@@ -63,8 +63,14 @@ const FILLER = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|tex
  * NASA's library is a working archive, so a search for "venus" returns the
  * planet and also a shuttle sunset with Venus as a dot near the horizon. Both
  * are about Venus. Only one is a picture of it.
+ *
+ * The second half of this list is the stock-library version of the same trap,
+ * and it also reached the feed: a slide about butterflies got "feet in
+ * butterfly socks next to sneakers". The word matched; the picture was socks.
+ * On an account whose slides name an animal, a photograph of a person wearing
+ * one, or a drawing of one, is not the animal.
  */
-const INCIDENTAL = /\b(sunset|sunrise|crew|astronauts?|briefing|conference|patch|logo|signage|artist|concept|illustration|diagram|technicians?|ceremony|anniversary|award|interview|visitors?|employees?)\b/i;
+const INCIDENTAL = /\b(sunset|sunrise|crew|astronauts?|briefing|conference|patch|logo|signage|artist|concept|illustration|diagram|technicians?|ceremony|anniversary|award|interview|visitors?|employees?|person|people|woman|women|man|men|girl|boy|couple|hands?|feet|foot|socks|shoes|sneakers|shirt|clothing|fashion|costume|toy|plush|tattoo|drawing|painting|sculpture|statue|cartoon)\b/i;
 
 const words = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g) || [];
 
