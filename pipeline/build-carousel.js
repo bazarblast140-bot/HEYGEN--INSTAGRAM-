@@ -2,6 +2,7 @@
 // Build one Instagram carousel from a spec.
 //
 //   node pipeline/build-carousel.js --spec pipeline/specs/carousel-hindi.json
+//   node pipeline/build-carousel.js --generate               # today's topic
 //   node pipeline/build-carousel.js --spec ... --no-photos   # gradients only
 //
 // This is the cheap sibling of build-reel.js. There is no video in it, so there
@@ -19,8 +20,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
 import { attachBackgrounds } from './src/render/backgrounds.js';
+import { generateCarousel } from './src/carousel/generate.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * The look is the account's, not the day's. A generated spec carries the words
+ * and nothing else, so the model cannot quietly restyle the brand by returning
+ * a different colour.
+ */
+const BRAND = { brand: 'FACTVIZER', ink: '#FFD200', brandInk: '#F2F2F2' };
 
 function parseArgs(argv) {
   const args = {};
@@ -77,8 +86,29 @@ async function main() {
   const specPath = args.spec || path.join(HERE, 'specs', 'carousel-hindi.json');
   const outDir = path.resolve(args.out || path.join(HERE, 'out', 'slides'));
 
-  const spec = JSON.parse(await fs.readFile(specPath, 'utf8'));
-  console.log(`Spec  ${path.relative(process.cwd(), specPath)}  (${(spec.slides || []).length} slides)`);
+  // Without --generate the checked-in spec is a fixture, and a fixture posted
+  // every morning is one post repeated forever. Generation is what makes this a
+  // daily show; the spec on disk stays as the thing to fall back to.
+  let spec;
+  if (args.generate) {
+    console.log('Writing today\'s carousel');
+    try {
+      const written = await generateCarousel({
+        onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
+      });
+      spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
+      note(`"${written.spec.topic}" — ${written.provider} in ${written.attempts} attempt(s)`);
+      await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
+      await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
+    } catch (err) {
+      note(`generation failed (${err.message.slice(0, 160)}) — using the checked-in spec`);
+    }
+  }
+
+  if (!spec) {
+    spec = JSON.parse(await fs.readFile(specPath, 'utf8'));
+    console.log(`Spec  ${path.relative(process.cwd(), specPath)}  (${(spec.slides || []).length} slides)`);
+  }
 
   const problems = validateSpec(spec);
   if (problems.length) {

@@ -17,6 +17,10 @@ on:
         description: Skip Pexels, use the generated gradient
         type: boolean
         default: false
+      generate:
+        description: Write today's topic with the model (off = the checked-in spec)
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -53,6 +57,25 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Read-only. It resolves the configured IG_USER_ID against the token and
+      # prints whose account it is -- publishing nothing. "The token is set" and
+      # "the token still works" are different facts, and a Facebook-surface token
+      # expires; finding that out at post time means a missed day.
+      - name: Check the Instagram token
+        continue-on-error: true
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: |
+          node pipeline/publish-reel.js --whoami 2>&1 | tee ig.log || true
+          {
+            echo '## Instagram'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' ig.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
@@ -63,10 +86,18 @@ jobs:
       - name: Build the carousel
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
         run: |
           node pipeline/build-carousel.js \
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
+            ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
             2>&1 | tee carousel.log
           {
             echo '## Carousel'
@@ -84,6 +115,7 @@ jobs:
           name: carousel
           path: |
             pipeline/out/slides
+            pipeline/out/spec-generated.json
             pipeline/out/caption.txt
             pipeline/out/carousel-report.json
           retention-days: 14
