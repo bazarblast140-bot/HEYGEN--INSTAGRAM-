@@ -7,37 +7,37 @@
     {
       "band": "center",
       "headline": "किस ग्रह पर एक दिन,\nउसके पूरे साल से भी लंबा होता है?",
-      "query": "night sky stars milky way"
+      "query": "milky way galaxy"
     },
     {
       "headline": "शुक्र",
       "subline": "धुरी पर एक चक्कर\n243 दिन",
       "source": "NASA Planetary Fact Sheet",
-      "query": "venus planet space"
+      "query": "venus planet"
     },
     {
       "headline": "शुक्र का साल",
       "subline": "सूरज का एक चक्कर\n225 दिन",
       "source": "NASA Planetary Fact Sheet — दिन, साल से लंबा",
-      "query": "orbit solar system illustration"
+      "query": "venus atmosphere"
     },
     {
       "headline": "बृहस्पति",
       "subline": "धुरी पर एक चक्कर\n9 घंटे 56 मिनट",
       "source": "NASA Planetary Fact Sheet — सबसे तेज़",
-      "query": "jupiter planet gas giant"
+      "query": "jupiter planet"
     },
     {
       "headline": "पृथ्वी",
       "subline": "धुरी पर एक चक्कर\n23 घंटे 56 मिनट",
       "source": "NASA Planetary Fact Sheet",
-      "query": "earth from space blue planet"
+      "query": "earth from space"
     },
     {
       "cta": true,
       "headline": "रोज़ एक नया तथ्य",
       "subline": "फ़ॉलो करें\nFACTVIZER",
-      "query": "telescope observatory night"
+      "query": "hubble telescope"
     }
   ],
   "caption": "किस ग्रह पर एक दिन, उसके पूरे साल से भी लंबा होता है? 🪐\n\nशुक्र (Venus) अपनी धुरी पर एक चक्कर 243 दिन में लगाता है, और सूरज का चक्कर 225 दिन में — यानी वहाँ दिन, साल से लंबा है। बृहस्पति (Jupiter) वही काम 10 घंटे से भी कम में कर लेता है।\n\nआँकड़े: NASA Planetary Fact Sheet",

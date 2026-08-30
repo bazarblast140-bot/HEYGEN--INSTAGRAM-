@@ -1,59 +1,143 @@
-// Pick a background photo per slide from Pexels.
+// Pick a background photo per slide.
 //
 // A carousel with no photo reads like a quote card; the reference accounts are
 // photo-first and the text is a band over it. So each slide gets its own image,
 // chosen from a query the spec supplies.
 //
+// Two sources, in order:
+//
+//   NASA's image library, for anything about space. It needs no key, it is
+//   public domain, and for "venus" it returns Venus — where a stock library
+//   returns a purple blur that a photographer tagged "venus". The first live
+//   carousel made that difference obvious: the Venus slide was an empty
+//   gradient-looking smear and the Jupiter slide was a solar-system diagram
+//   with Jupiter three pixels wide at the edge.
+//
+//   Pexels for everything else, which is most categories.
+//
 // Three things this deliberately does NOT do:
 //
-//   * search on the Hindi headline. Pexels indexes English, and a Devanagari
-//     query returns whatever the fallback ranking coughs up. The spec carries
-//     an explicit English `query` per slide instead of the code guessing a
-//     translation.
+//   * search on the Hindi headline. Neither library indexes Devanagari, and a
+//     Hindi query returns whatever the fallback ranking coughs up. The spec
+//     carries an explicit English `query` per slide.
 //   * reuse one photo across slides. Ten identical backgrounds looks like a
 //     broken render, so a photo already used in this carousel is skipped.
-//   * fail the build. No key, no result, rate limit — all of it falls back to
-//     the generated gradient, because a plainer carousel beats no carousel.
+//   * fail the build. No key, no result, rate limit, a source that is down —
+//     all of it falls back to the generated gradient, because a plainer
+//     carousel beats no carousel.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { env } from '../../../src/config.js';
 
-const API = 'https://api.pexels.com/v1/search';
+const PEXELS = 'https://api.pexels.com/v1/search';
+const NASA = 'https://images-api.nasa.gov';
+
+/**
+ * Queries NASA can answer better than a stock library can.
+ *
+ * Deliberately narrow: NASA has photographs of these things, and for anything
+ * else its library is press conferences, logos and mission patches — worse than
+ * Pexels, not better.
+ */
+const SPACE = /\b(planet|mercury|venus|earth|mars|jupiter|saturn|uranus|neptune|pluto|moon|lunar|sun|solar|star|galaxy|nebula|milky\s?way|comet|asteroid|meteor|space|orbit|spacecraft|satellite|rocket|launch|astronaut|telescope|hubble|webb|apollo|iss|eclipse|aurora)\b/i;
+
+/**
+ * Stock-library junk that technically matches any query.
+ *
+ * A blurred purple gradient tagged "venus" satisfies the search and shows the
+ * reader nothing. These words are how that photo describes itself.
+ */
+const JUNK = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|texture|pattern|gradient|copy\s?space|mockup|closeup of a wall)\b/i;
+
+const words = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g) || [];
+
+/** Does this photo's own description have anything to do with what was asked? */
+export function relevance(alt, query) {
+  const asked = new Set(words(query));
+  const said = words(alt);
+  if (!asked.size || !said.length) return 0;
+  return said.filter((w) => asked.has(w)).length;
+}
+
+/**
+ * Rank candidates: junk out, on-topic first, source order breaking ties.
+ *
+ * `used` is per-carousel, so the same photo cannot appear on two slides even
+ * when two slides share a query.
+ */
+export function bestPhoto(candidates, { query, used }) {
+  const fresh = candidates.filter((c) => !used.has(String(c.id)));
+  const clean = fresh.filter((c) => !JUNK.test(c.alt || ''));
+  if (!clean.length) return null;
+
+  const scored = clean
+    .map((c, i) => ({ c, score: relevance(c.alt, query), i }))
+    .sort((a, b) => b.score - a.score || a.i - b.i);
+
+  return scored[0].c;
+}
+
+async function json(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
+  return res.json();
+}
 
 /** Portrait crops sit better under a 4:5 slide than the landscape default. */
-async function search({ query, key, perPage = 15 }) {
-  const url = new URL(API);
+async function searchPexels({ query, key, perPage = 20 }) {
+  const url = new URL(PEXELS);
   url.searchParams.set('query', query);
   url.searchParams.set('orientation', 'portrait');
   url.searchParams.set('per_page', String(perPage));
 
-  const res = await fetch(url, { headers: { Authorization: key } });
-  if (!res.ok) throw new Error(`Pexels ${res.status} for "${query}"`);
+  const { photos = [] } = await json(url, { headers: { Authorization: key } });
+  return photos.map((p) => ({
+    id: p.id,
+    alt: p.alt,
+    credit: p.photographer,
+    src: p.src?.portrait || p.src?.large2x || p.src?.original,
+  }));
+}
 
-  const { photos = [] } = await res.json();
-  return photos;
+/**
+ * NASA search returns metadata; the picture itself lives in a second call.
+ *
+ * The asset list holds the same image at several sizes. ~orig is often 20MB of
+ * a raw instrument frame, so it is the last choice, not the first.
+ */
+async function searchNasa({ query, limit = 8 }) {
+  const url = new URL(`${NASA}/search`);
+  url.searchParams.set('q', query);
+  url.searchParams.set('media_type', 'image');
+
+  const { collection } = await json(url);
+  return (collection?.items || []).slice(0, limit).map((item) => {
+    const meta = item.data?.[0] || {};
+    return {
+      id: meta.nasa_id,
+      alt: [meta.title, meta.keywords?.join(' ')].filter(Boolean).join(' '),
+      credit: meta.center ? `NASA/${meta.center}` : 'NASA',
+      nasaId: meta.nasa_id,
+    };
+  }).filter((c) => c.id);
+}
+
+async function nasaAsset(nasaId) {
+  const { collection } = await json(`${NASA}/asset/${encodeURIComponent(nasaId)}`);
+  const hrefs = (collection?.items || []).map((i) => i.href).filter((h) => /\.jpe?g$/i.test(h));
+  const pick = (suffix) => hrefs.find((h) => h.includes(suffix));
+  const chosen = pick('~large') || pick('~medium') || pick('~orig') || hrefs[0];
+  if (!chosen) throw new Error(`no jpeg asset for ${nasaId}`);
+  return chosen.replace(/^http:/, 'https:');
 }
 
 async function download({ url, dest }) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Photo download ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  await fs.writeFile(dest, buf);
+  await fs.writeFile(dest, Buffer.from(await res.arrayBuffer()));
   return dest;
-}
-
-/**
- * Pick the first result this carousel has not already used.
- *
- * Ranking is Pexels' own; taking the top hit every time would be fine if the
- * queries were all different, but two slides about the same subject share a
- * query often enough that a "first unused" rule is what actually keeps the
- * carousel from repeating itself.
- */
-function firstUnused(photos, used) {
-  return photos.find((p) => !used.has(String(p.id)));
 }
 
 /**
@@ -68,11 +152,6 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
   const slides = spec.slides || [];
   const note = (msg) => onNote?.(msg);
 
-  if (!key) {
-    note('no PEXELS_API_KEY — every slide falls back to the generated gradient');
-    return { spec, attached: 0 };
-  }
-
   await fs.mkdir(outDir, { recursive: true });
 
   const used = new Set();
@@ -81,28 +160,47 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
 
   for (const [i, slide] of slides.entries()) {
     if (slide.background || !slide.query) { out.push(slide); continue; }
+    const n = i + 1;
 
     try {
-      const photos = await search({ query: slide.query, key });
-      const photo = firstUnused(photos, used);
-      if (!photo) {
-        note(`no unused Pexels result for "${slide.query}" — gradient on slide ${i + 1}`);
+      let chosen = null;
+      let source = null;
+
+      if (SPACE.test(slide.query)) {
+        try {
+          chosen = bestPhoto(await searchNasa({ query: slide.query }), { query: slide.query, used });
+          if (chosen) {
+            chosen = { ...chosen, src: await nasaAsset(chosen.nasaId) };
+            source = 'NASA';
+          }
+        } catch (err) {
+          note(`NASA had nothing for "${slide.query}" (${String(err.message).slice(0, 60)})`);
+        }
+      }
+
+      if (!chosen && key) {
+        chosen = bestPhoto(await searchPexels({ query: slide.query, key }), { query: slide.query, used });
+        source = 'Pexels';
+      }
+
+      if (!chosen) {
+        note(key
+          ? `nothing usable for "${slide.query}" — gradient on slide ${n}`
+          : 'no PEXELS_API_KEY — gradient behind every non-space slide');
         out.push(slide);
         continue;
       }
 
-      used.add(String(photo.id));
-      // portrait.large2x is the widest crop Pexels pre-renders tall; the slide
-      // is 1080x1350, so anything smaller would upscale visibly.
-      const src = photo.src?.portrait || photo.src?.large2x || photo.src?.original;
-      const dest = path.join(outDir, `${String(i + 1).padStart(2, '0')}.jpg`);
-      await download({ url: src, dest });
+      used.add(String(chosen.id));
+      const dest = path.join(outDir, `${String(n).padStart(2, '0')}.jpg`);
+      await download({ url: chosen.src, dest });
 
-      out.push({ ...slide, background: dest, credit: photo.photographer });
+      note(`slide ${n}: ${source} — ${String(chosen.alt || '').slice(0, 60)}`);
+      out.push({ ...slide, background: dest, credit: chosen.credit });
       attached += 1;
     } catch (err) {
       // One slide's failure is one gradient, not a dead build.
-      note(`slide ${i + 1} photo failed (${String(err.message).slice(0, 90)}) — gradient instead`);
+      note(`slide ${n} photo failed (${String(err.message).slice(0, 90)}) — gradient instead`);
       out.push(slide);
     }
   }
