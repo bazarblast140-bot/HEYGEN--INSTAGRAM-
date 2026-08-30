@@ -55,3 +55,28 @@ test('ties keep the source ordering', () => {
 
   assert.equal(chosen.id, 1);
 });
+
+// Real titles, from the first CI run that used NASA. The ranker chose the first
+// of each pair; the second is the picture a reader actually wants.
+test('a photo OF the subject beats one that merely mentions it', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: 'STS-30 sunset with Venus near the center of the frame ATLANTIS' },
+    { id: 2, alt: 'Venus - Computer Simulated Global View of the Northern Hemisphere' },
+  ], { query: 'venus planet', used: new Set() });
+
+  assert.equal(chosen.id, 2);
+});
+
+test('a title that opens with the subject wins on equal wording', () => {
+  assert.ok(
+    relevance('Jupiter and its moon Io', 'jupiter planet')
+    > relevance('A wide view of the outer solar system including Jupiter', 'jupiter planet'),
+  );
+});
+
+test('circumstance words are a penalty, not a match', () => {
+  assert.ok(
+    relevance('Earth from orbit', 'earth from space')
+    > relevance('Crew briefing before launch, Earth globe on the table', 'earth from space'),
+  );
+});

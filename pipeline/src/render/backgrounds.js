@@ -51,14 +51,42 @@ const SPACE = /\b(planet|mercury|venus|earth|mars|jupiter|saturn|uranus|neptune|
  */
 const JUNK = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|texture|pattern|gradient|copy\s?space|mockup|closeup of a wall)\b/i;
 
+/**
+ * Titles where the subject is in the picture by accident.
+ *
+ * NASA's library is a working archive, so a search for "venus" returns the
+ * planet and also a shuttle sunset with Venus as a dot near the horizon. Both
+ * are about Venus. Only one is a picture of it.
+ */
+const INCIDENTAL = /\b(sunset|sunrise|crew|astronauts?|briefing|conference|patch|logo|signage|artist|concept|illustration|diagram|technicians?|ceremony|anniversary|award|interview|visitors?|employees?)\b/i;
+
 const words = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g) || [];
 
-/** Does this photo's own description have anything to do with what was asked? */
+/**
+ * How much is this photo ABOUT what was asked?
+ *
+ * Counting shared words is not enough, and the first live run showed why: for
+ * "venus planet" it chose "STS-30 sunset with Venus near the center of the
+ * frame" over an actual photograph of the planet. Both contain "venus" once.
+ *
+ * So two things are measured instead. Density -- how much of the title is the
+ * subject rather than surrounding circumstance -- and position, because a title
+ * that OPENS with the subject ("Venus - Global View") is almost always a picture
+ * of it, while one that mentions it in passing puts it late.
+ */
 export function relevance(alt, query) {
   const asked = new Set(words(query));
   const said = words(alt);
   if (!asked.size || !said.length) return 0;
-  return said.filter((w) => asked.has(w)).length;
+
+  const matches = said.filter((w) => asked.has(w)).length;
+  if (!matches) return 0;
+
+  const density = matches / said.length;
+  const leads = said.slice(0, 3).some((w) => asked.has(w)) ? 1 : 0;
+  const incidental = INCIDENTAL.test(alt) ? 0.5 : 0;
+
+  return leads + density - incidental;
 }
 
 /**
@@ -107,7 +135,7 @@ async function searchPexels({ query, key, perPage = 20 }) {
  * The asset list holds the same image at several sizes. ~orig is often 20MB of
  * a raw instrument frame, so it is the last choice, not the first.
  */
-async function searchNasa({ query, limit = 8 }) {
+async function searchNasa({ query, limit = 24 }) {
   const url = new URL(`${NASA}/search`);
   url.searchParams.set('q', query);
   url.searchParams.set('media_type', 'image');
