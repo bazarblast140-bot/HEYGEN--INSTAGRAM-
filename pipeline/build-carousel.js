@@ -1,0 +1,140 @@
+#!/usr/bin/env node
+// Build one Instagram carousel from a spec.
+//
+//   node pipeline/build-carousel.js --spec pipeline/specs/carousel-hindi.json
+//   node pipeline/build-carousel.js --spec ... --no-photos   # gradients only
+//
+// This is the cheap sibling of build-reel.js. There is no video in it, so there
+// is no avatar render, no voice synthesis and no ffmpeg encode: a carousel is N
+// screenshots and finishes in about two minutes for zero API credits. That is
+// the whole reason it can afford a daily schedule.
+//
+// Nothing is published. Rendering and posting are separate commands on purpose —
+// a run that writes PNGs to disk can be looked at before anything reaches the
+// feed, and a fact account cannot take back a wrong number.
+
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
+import { attachBackgrounds } from './src/render/backgrounds.js';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    if (!argv[i].startsWith('--')) continue;
+    const key = argv[i].slice(2);
+    const next = argv[i + 1];
+    if (!next || next.startsWith('--')) args[key] = true;
+    else { args[key] = next; i += 1; }
+  }
+  return args;
+}
+
+const notes = [];
+const note = (msg) => { notes.push(msg); console.log(`  · ${msg}`); };
+
+/**
+ * Reject the spec before rendering rather than after posting.
+ *
+ * The `source` rule is the one that matters. On an account whose whole promise
+ * is that the numbers are right, an unsourced figure is worse than a missed
+ * day — a missed day costs nothing, a wrong number costs the reason anyone
+ * follows. So a list slide without a source is a hard failure, not a warning.
+ */
+export function validateSpec(spec) {
+  const problems = [];
+  const slides = spec.slides || [];
+
+  if (!slides.length) problems.push('spec has no slides');
+  if (slides.length > 10) problems.push(`${slides.length} slides — Instagram allows 10`);
+
+  const covers = slides.filter((s) => s.band === 'center');
+  if (covers.length !== 1) problems.push(`expected exactly one cover slide (band "center"), found ${covers.length}`);
+  if (slides.length && slides[0].band !== 'center') problems.push('the first slide must be the cover');
+
+  slides.forEach((slide, i) => {
+    const n = i + 1;
+    if (!String(slide.headline || '').trim()) problems.push(`slide ${n} has no headline`);
+
+    // The cover asks a question and the closing card asks for a follow; neither
+    // states a figure, so neither needs a citation. Every slide that carries a
+    // fact does.
+    const carriesFact = slide.band !== 'center' && !slide.cta;
+    if (carriesFact && !String(slide.source || slide.footnote || '').trim()) {
+      problems.push(`slide ${n} states a fact with no "source"`);
+    }
+  });
+
+  return problems;
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const specPath = args.spec || path.join(HERE, 'specs', 'carousel-hindi.json');
+  const outDir = path.resolve(args.out || path.join(HERE, 'out', 'slides'));
+
+  const spec = JSON.parse(await fs.readFile(specPath, 'utf8'));
+  console.log(`Spec  ${path.relative(process.cwd(), specPath)}  (${(spec.slides || []).length} slides)`);
+
+  const problems = validateSpec(spec);
+  if (problems.length) {
+    console.error(`REJECTED:\n  ${problems.join('\n  ')}`);
+    process.exit(1);
+  }
+
+  // The scene renders `footnote`; the spec carries `source`. Keeping them
+  // separate means the validator can insist on a citation without dictating
+  // how it is worded on screen.
+  const withFootnotes = {
+    ...spec,
+    slides: spec.slides.map((s) => ({ ...s, footnote: s.footnote ?? s.source ?? '' })),
+  };
+
+  let ready = withFootnotes;
+  if (args['no-photos']) {
+    note('--no-photos — generated gradient behind every slide');
+  } else {
+    console.log('Backgrounds');
+    const { spec: withPhotos, attached } = await attachBackgrounds(withFootnotes, {
+      outDir: path.join(HERE, 'out', 'photos'),
+      onNote: note,
+    });
+    ready = withPhotos;
+    console.log(`  ${attached}/${spec.slides.length} slides carry a photo`);
+  }
+
+  console.log('Rendering');
+  const { files } = await renderSlides({
+    spec: ready, outDir,
+    onProgress: (n, total) => process.stdout.write(`\r  ${n}/${total}`),
+  });
+  process.stdout.write('\n');
+
+  const caption = [
+    spec.caption?.trim(),
+    spec.hashtags?.length ? spec.hashtags.join(' ') : null,
+  ].filter(Boolean).join('\n\n');
+  await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
+
+  const report = {
+    spec: path.relative(process.cwd(), specPath),
+    slides: files.length,
+    width: WIDTH, height: HEIGHT,
+    files: files.map((f) => path.relative(process.cwd(), f)),
+    photos: ready.slides.filter((s) => s.background).length,
+    topic: spec.topic || null,
+    notes,
+  };
+  await fs.writeFile(path.join(path.dirname(outDir), 'carousel-report.json'), JSON.stringify(report, null, 2));
+
+  console.log(`\n${files.length} slides  ${WIDTH}x${HEIGHT}  ->  ${path.relative(process.cwd(), outDir)}`);
+  console.log('nothing published — rendering and posting are separate commands');
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => { console.error(`\n${err.stack || err.message}`); process.exit(1); });
+}

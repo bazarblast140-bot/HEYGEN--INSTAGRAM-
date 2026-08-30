@@ -87,7 +87,24 @@ export async function renderSlides({ spec, outDir, onProgress }) {
     page.on('pageerror', (err) => { throw new Error(`Slide scene threw: ${err.message}`); });
 
     await page.goto(pathToFileURL(SCENE).href, { waitUntil: 'load' });
-    await page.evaluate(() => document.fonts.ready);
+
+    // Force every bundled face to load before the first slide is measured.
+    //
+    // document.fonts.ready is not enough on its own, and the way it fails is
+    // quiet. A face is only fetched once rendered text needs it, and at this
+    // point every text node in the scene is empty — so ready resolves at once
+    // with nothing loaded. The scene then fits its text against the *fallback*
+    // metrics, the real face arrives, and the finished line rewraps underneath
+    // a size that was chosen for a different font.
+    //
+    // Measured on the cover slide: without this the headline fitted at 82px
+    // and reflowed to three lines where the spec asked for two, and the brand
+    // bar — positioned from the headline's box — landed on top of the first
+    // line. With it: two lines at 80px, bar 82px clear.
+    await page.evaluate(async () => {
+      await Promise.all([...document.fonts].map((f) => f.load()));
+      await document.fonts.ready;
+    });
 
     for (let i = 0; i < slides.length; i += 1) {
       const slide = slides[i];

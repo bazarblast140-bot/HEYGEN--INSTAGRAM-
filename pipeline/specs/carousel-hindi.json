@@ -1,0 +1,50 @@
+{
+  "brand": "FACTVIZER",
+  "ink": "#FFD200",
+  "brandInk": "#F2F2F2",
+  "topic": "ग्रहों की घूर्णन अवधि — दिन बनाम साल",
+
+  "slides": [
+    {
+      "band": "center",
+      "headline": "किस ग्रह पर एक दिन,\nउसके पूरे साल से भी लंबा होता है?",
+      "query": "night sky stars milky way"
+    },
+    {
+      "headline": "शुक्र",
+      "subline": "धुरी पर एक चक्कर\n243 दिन",
+      "source": "NASA Planetary Fact Sheet",
+      "query": "venus planet space"
+    },
+    {
+      "headline": "शुक्र का साल",
+      "subline": "सूरज का एक चक्कर\n225 दिन",
+      "source": "NASA Planetary Fact Sheet — दिन, साल से लंबा",
+      "query": "orbit solar system illustration"
+    },
+    {
+      "headline": "बृहस्पति",
+      "subline": "धुरी पर एक चक्कर\n9 घंटे 56 मिनट",
+      "source": "NASA Planetary Fact Sheet — सबसे तेज़",
+      "query": "jupiter planet gas giant"
+    },
+    {
+      "headline": "पृथ्वी",
+      "subline": "धुरी पर एक चक्कर\n23 घंटे 56 मिनट",
+      "source": "NASA Planetary Fact Sheet",
+      "query": "earth from space blue planet"
+    },
+    {
+      "cta": true,
+      "headline": "रोज़ एक नया तथ्य",
+      "subline": "फ़ॉलो करें\nFACTVIZER",
+      "query": "telescope observatory night"
+    }
+  ],
+
+  "caption": "किस ग्रह पर एक दिन, उसके पूरे साल से भी लंबा होता है? 🪐\n\nहर ग्रह अपनी धुरी पर अलग रफ़्तार से घूमता है — कोई 10 घंटे में एक चक्कर पूरा कर लेता है, तो कोई 243 दिन लेता है।\n\nआँकड़े: NASA Planetary Fact Sheet",
+  "hashtags": [
+    "#विज्ञान", "#अंतरिक्ष", "#रोचकतथ्य", "#ज्ञान", "#नासा",
+    "#space", "#sciencefacts", "#hindifacts"
+  ]
+}
