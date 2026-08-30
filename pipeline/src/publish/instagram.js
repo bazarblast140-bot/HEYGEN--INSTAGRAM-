@@ -137,6 +137,21 @@ export async function publishReel({
  * Run it before spending a render — an hour of build is wasted on a token that was
  * never going to publish.
  */
+/**
+ * The two surfaces are different APIs, and the IG User node does not carry the
+ * same fields on both.
+ *
+ * `account_type` exists on the Instagram-Login API and does not exist on the
+ * Facebook one, where the same request answers "(#100) Tried accessing
+ * nonexisting field (account_type)". That reads like a rejected token and is a
+ * rejected *field* — a working Page token was reported as failing because of
+ * one word in this list.
+ */
+const ACCOUNT_FIELDS = {
+  facebook: 'id,username,media_count',
+  instagram: 'id,username,account_type,media_count',
+};
+
 export async function whoami({ igUserId = env('IG_USER_ID'), token = env('IG_ACCESS_TOKEN') } = {}) {
   if (!token) throw new Error('No IG_ACCESS_TOKEN. Set it in .env or pass token.');
 
@@ -144,7 +159,7 @@ export async function whoami({ igUserId = env('IG_USER_ID'), token = env('IG_ACC
   for (const surface of Object.keys(SURFACES)) {
     try {
       const account = await call(igUserId || 'me', {
-        token, surface, params: { fields: 'id,username,account_type,media_count' },
+        token, surface, params: { fields: ACCOUNT_FIELDS[surface] },
       });
       results.push({ surface, ok: true, account });
     } catch (err) {
