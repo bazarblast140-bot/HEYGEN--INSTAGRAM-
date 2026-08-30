@@ -38,7 +38,7 @@ function hostFor(surface) {
 
 // Instagram pulls the file from a URL — it never accepts an upload — so the video
 // must already be reachable, publicly, over HTTPS before any of this runs.
-async function call(pathname, { method = 'GET', params = {}, token, surface = DEFAULT_SURFACE }) {
+export async function call(pathname, { method = 'GET', params = {}, token, surface = DEFAULT_SURFACE }) {
   const url = new URL(`${hostFor(surface)}/${VERSION}/${pathname}`);
   const body = new URLSearchParams({ ...params, access_token: token });
 

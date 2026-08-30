@@ -1,7 +1,9 @@
-// Put the finished MP4 somewhere Instagram can fetch it.
+// Put a finished file somewhere Instagram can fetch it.
 //
-// Instagram downloads the video from a URL and never accepts an upload, so the
-// file needs a plain public HTTPS address before publishing can run. GitHub
+// Instagram downloads the media from a URL and never accepts an upload, so the
+// file needs a plain public HTTPS address before publishing can run. That is as
+// true of a carousel's JPEGs as of a reel's MP4 — the only difference is how
+// many files and what Content-Type they are uploaded under. GitHub
 // Releases give exactly that, for free, with no extra account: release assets on
 // a PUBLIC repository are served unauthenticated from a stable URL.
 //
@@ -61,25 +63,81 @@ async function ensureRelease({ repo, token, tag }) {
   }
   return gh(`${API}/repos/${repo}/releases`, {
     token, method: 'POST',
-    body: JSON.stringify({ tag_name: tag, name: tag, body: 'Reel media. Created automatically.' }),
+    body: JSON.stringify({ tag_name: tag, name: tag, body: 'Media for a scheduled post. Created automatically.' }),
   });
 }
 
-export async function hostVideo({ file, tag = `reel-${new Date().toISOString().slice(0, 10)}` }) {
+/**
+ * Content-Type is not decoration here.
+ *
+ * GitHub serves a release asset back with the type it was uploaded under, and
+ * Instagram decides what a URL is from that header — not from the extension. A
+ * JPEG uploaded as video/mp4 (which is what this file used to hardcode) is
+ * fetched, found not to be a video, and rejected with a message about the media
+ * being unsupported, which reads like a problem with the image.
+ */
+const TYPES = {
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+};
+
+export function contentTypeFor(file) {
+  const ext = path.extname(file).toLowerCase();
+  const type = TYPES[ext];
+  if (!type) throw new Error(`No Content-Type known for "${ext}" — add it to host.js rather than guessing.`);
+  return type;
+}
+
+/** Upload one file to a release and return the public URL it is served from. */
+export async function hostFile({ file, tag = `media-${new Date().toISOString().slice(0, 10)}`, name = path.basename(file) }) {
   const { repo, token } = target();
   const release = await ensureRelease({ repo, token, tag });
-  const name = path.basename(file);
+  return upload({ repo, token, release, file, name });
+}
 
+/**
+ * Upload several files under one release.
+ *
+ * One release rather than one per file, and one lookup rather than one per
+ * upload: a 6-slide carousel is 6 assets on a single tag, so a day's post is a
+ * single thing to look at or delete.
+ */
+export async function hostFiles({ files, tag = `carousel-${new Date().toISOString().slice(0, 10)}`, onProgress }) {
+  const { repo, token } = target();
+  const release = await ensureRelease({ repo, token, tag });
+
+  const hosted = [];
+  for (const [i, file] of files.entries()) {
+    hosted.push(await upload({ repo, token, release, file, name: path.basename(file) }));
+    onProgress?.(i + 1, files.length);
+  }
+  return { assets: hosted, repo, tag };
+}
+
+async function upload({ repo, token, release, file, name }) {
   // An asset name can only exist once per release; drop the old one so a re-run
-  // replaces the video instead of failing.
+  // replaces the file instead of failing.
   const existing = (release.assets || []).find((a) => a.name === name);
   if (existing) await gh(`${API}/repos/${repo}/releases/assets/${existing.id}`, { token, method: 'DELETE' });
 
   const data = fs.readFileSync(file);
   const asset = await gh(
     `${UPLOADS}/repos/${repo}/releases/${release.id}/assets?name=${encodeURIComponent(name)}`,
-    { token, method: 'POST', body: data, headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(data.length) } },
+    {
+      token, method: 'POST', body: data,
+      headers: { 'Content-Type': contentTypeFor(file), 'Content-Length': String(data.length) },
+    },
   );
 
-  return { url: asset.browser_download_url, repo, tag, sizeBytes: data.length };
+  return { url: asset.browser_download_url, name, sizeBytes: data.length };
+}
+
+export async function hostVideo({ file, tag = `reel-${new Date().toISOString().slice(0, 10)}` }) {
+  const { repo, token } = target();
+  const release = await ensureRelease({ repo, token, tag });
+  const asset = await upload({ repo, token, release, file, name: path.basename(file) });
+  return { url: asset.url, repo, tag, sizeBytes: asset.sizeBytes };
 }

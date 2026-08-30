@@ -4,8 +4,9 @@ name: Build carousel
 # new feature; sharing a workflow would mean a change here can break the post
 # that already goes out.
 #
-# No schedule yet. Nothing publishes, so a scheduled run would only fill the
-# artifact list — the cron goes on once publishing is wired and verified.
+# Still no schedule. Publishing now exists but it is opt-in per run, and a cron
+# that builds without posting only fills the artifact list. The cron goes on once
+# one carousel has actually gone out by hand and looked right on the feed.
 
 on:
   workflow_dispatch:
@@ -21,11 +22,20 @@ on:
         description: Write today's topic with the model (off = the checked-in spec)
         type: boolean
         default: true
+      publish:
+        description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
+        type: boolean
+        default: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    # contents: write is for the release the slides are hosted on -- Instagram
+    # fetches each image from a public URL and never accepts an upload.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +116,46 @@ jobs:
             echo '```'
             echo '```json'
             cat pipeline/out/carousel-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # publish off: show what would go out -- which account, which files, the
+      # caption in full -- and post nothing. Cheap, and it catches a caption that
+      # got mangled or a token that resolves to the wrong account, at the point
+      # where that is still free to fix.
+      - name: What would be posted
+        if: github.event.inputs.publish != 'true'
+        continue-on-error: true
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: |
+          node pipeline/publish-carousel.js --report pipeline/out/carousel-report.json 2>&1 | tee dry.log || true
+          {
+            echo '## Dry run'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' dry.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The only step in this workflow that is visible to anyone but us, and the
+      # only one that cannot be undone from here -- a wrong post is deleted by
+      # hand, from the phone, after people have seen it. So it runs when it is
+      # asked for and never by default.
+      - name: Publish to Instagram
+        if: github.event.inputs.publish == 'true'
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node pipeline/publish-carousel.js --report pipeline/out/carousel-report.json --yes 2>&1 | tee publish.log
+          {
+            echo '## Published'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' publish.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Render a carousel spec to PNG slides.
+// Render a carousel spec to slide images.
 //
 //   node pipeline/render-slides.js --spec pipeline/specs/carousel-hindi.json
 //   node pipeline/render-slides.js --demo --out pipeline/out/slides
+//   node pipeline/render-slides.js --spec ... --format png   # lossless, not postable
 //
 // One browser, one page, N screenshots. Reusing the page across slides keeps a
 // 10-slide carousel under ten seconds; a fresh context per slide costs more in
@@ -19,6 +20,22 @@ const SCENE = path.join(HERE, 'src', 'render', 'scenes', 'slide.html');
 
 export const WIDTH = 1080;
 export const HEIGHT = 1350;          // 4:5 — the tallest ratio the feed allows
+
+/**
+ * JPEG, not PNG, and not as a size trade-off.
+ *
+ * Instagram's image container accepts JPEG. Hand it a PNG and the file is
+ * fetched and then refused, with an error about unsupported media that reads
+ * like a problem with the picture rather than with its format. Since the only
+ * reason these files exist is to be posted, the default is the one that can be.
+ *
+ * The artifact is then also exactly what goes on the feed — reviewing a PNG and
+ * posting a re-encode means the thing checked is not the thing published.
+ * quality 92 keeps flat colour and Devanagari edges clean; Instagram re-encodes
+ * on its own side regardless.
+ */
+export const FORMAT = 'jpeg';
+export const QUALITY = 92;
 
 const DEMO = {
   brand: 'FACTVIZER',
@@ -64,7 +81,8 @@ function toUrl(src) {
   return pathToFileURL(path.resolve(src)).href;
 }
 
-export async function renderSlides({ spec, outDir, onProgress }) {
+export async function renderSlides({ spec, outDir, onProgress, format = FORMAT, quality = QUALITY }) {
+  if (!['jpeg', 'png'].includes(format)) throw new Error(`Unknown format "${format}" — jpeg or png.`);
   const slides = spec.slides || [];
   if (!slides.length) throw new Error('Spec has no slides.');
   if (slides.length > 10) throw new Error(`Instagram allows 10 slides per carousel; spec has ${slides.length}.`);
@@ -122,8 +140,11 @@ export async function renderSlides({ spec, outDir, onProgress }) {
       await page.waitForFunction(() => document.body.dataset.ready === '1');
       await page.evaluate(() => document.fonts.ready);
 
-      const file = path.join(outDir, `${String(i + 1).padStart(2, '0')}.png`);
-      await page.screenshot({ path: file, animations: 'disabled' });
+      const file = path.join(outDir, `${String(i + 1).padStart(2, '0')}.${format === 'jpeg' ? 'jpg' : 'png'}`);
+      await page.screenshot({
+        path: file, type: format, animations: 'disabled',
+        ...(format === 'jpeg' ? { quality } : {}),
+      });
       files.push(file);
       onProgress?.(i + 1, slides.length);
     }
@@ -131,7 +152,7 @@ export async function renderSlides({ spec, outDir, onProgress }) {
     await browser.close();
   }
 
-  return { files, width: WIDTH, height: HEIGHT };
+  return { files, width: WIDTH, height: HEIGHT, format };
 }
 
 async function main() {
@@ -141,6 +162,7 @@ async function main() {
 
   const { files } = await renderSlides({
     spec, outDir,
+    ...(args.format ? { format: args.format } : {}),
     onProgress: (n, total) => process.stdout.write(`\rrendering ${n}/${total}`),
   });
 

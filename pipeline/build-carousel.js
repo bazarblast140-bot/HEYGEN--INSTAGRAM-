@@ -4,6 +4,7 @@
 //   node pipeline/build-carousel.js --spec pipeline/specs/carousel-hindi.json
 //   node pipeline/build-carousel.js --generate               # today's topic
 //   node pipeline/build-carousel.js --spec ... --no-photos   # gradients only
+//   node pipeline/build-carousel.js --spec ... --format png   # lossless, not postable
 //
 // This is the cheap sibling of build-reel.js. There is no video in it, so there
 // is no avatar render, no voice synthesis and no ffmpeg encode: a carousel is N
@@ -138,8 +139,9 @@ async function main() {
   }
 
   console.log('Rendering');
-  const { files } = await renderSlides({
+  const { files, format } = await renderSlides({
     spec: ready, outDir,
+    ...(args.format ? { format: args.format } : {}),
     onProgress: (n, total) => process.stdout.write(`\r  ${n}/${total}`),
   });
   process.stdout.write('\n');
@@ -153,7 +155,7 @@ async function main() {
   const report = {
     spec: path.relative(process.cwd(), specPath),
     slides: files.length,
-    width: WIDTH, height: HEIGHT,
+    width: WIDTH, height: HEIGHT, format,
     files: files.map((f) => path.relative(process.cwd(), f)),
     photos: ready.slides.filter((s) => s.background).length,
     topic: spec.topic || null,
@@ -161,8 +163,9 @@ async function main() {
   };
   await fs.writeFile(path.join(path.dirname(outDir), 'carousel-report.json'), JSON.stringify(report, null, 2));
 
-  console.log(`\n${files.length} slides  ${WIDTH}x${HEIGHT}  ->  ${path.relative(process.cwd(), outDir)}`);
+  console.log(`\n${files.length} slides  ${WIDTH}x${HEIGHT} ${format}  ->  ${path.relative(process.cwd(), outDir)}`);
   console.log('nothing published — rendering and posting are separate commands');
+  console.log(`to post it:  node pipeline/publish-carousel.js --report ${path.relative(process.cwd(), path.join(path.dirname(outDir), 'carousel-report.json'))} --yes`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
