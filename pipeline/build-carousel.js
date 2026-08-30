@@ -30,7 +30,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  * and nothing else, so the model cannot quietly restyle the brand by returning
  * a different colour.
  */
-const BRAND = { brand: 'FACTVIZER', ink: '#FFD200', brandInk: '#F2F2F2' };
+const BRAND = { brand: 'FACTVIZER', ink: '#FFD200', brandInk: '#F2F2F2', tag: '#factvizer' };
 
 function parseArgs(argv) {
   const args = {};
@@ -95,10 +95,11 @@ async function main() {
     console.log('Writing today\'s carousel');
     try {
       const written = await generateCarousel({
+        ...(args.slot ? { slot: args.slot } : {}),
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
-      note(`"${written.spec.topic}" — ${written.provider} in ${written.attempts} attempt(s)`);
+      note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
       await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
     } catch (err) {
@@ -146,9 +147,13 @@ async function main() {
   });
   process.stdout.write('\n');
 
+  // The brand tag is added here rather than asked for in the prompt: it is the
+  // one hashtag that must be on every post, and a model that forgets it once
+  // breaks the only tag that collects the account's own back catalogue.
+  const hashtags = [...new Set([...(spec.hashtags || []), BRAND.tag])];
   const caption = [
     spec.caption?.trim(),
-    spec.hashtags?.length ? spec.hashtags.join(' ') : null,
+    hashtags.length ? hashtags.join(' ') : null,
   ].filter(Boolean).join('\n\n');
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
 

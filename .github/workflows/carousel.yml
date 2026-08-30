@@ -4,11 +4,21 @@ name: Build carousel
 # new feature; sharing a workflow would mean a change here can break the post
 # that already goes out.
 #
-# Still no schedule. Publishing now exists but it is opt-in per run, and a cron
-# that builds without posting only fills the artifact list. The cron goes on once
-# one carousel has actually gone out by hand and looked right on the feed.
+# Two posts a day, 06:00 and 17:00 IST. Actions cron is UTC and IST is UTC+5:30,
+# so those are 00:30 and 11:30 UTC.
+#
+# A scheduled run PUBLISHES. That is the point of it, and it is also the reason
+# every guard in this pipeline exists: an unsourced slide is rejected, a repeated
+# topic is rejected, a non-JPEG build is refused. Nobody is watching at 06:00.
+#
+# GitHub does not fire cron on time under load -- late by 5 to 30 minutes is
+# normal and it is not worth chasing. The two slots are far enough apart that a
+# late morning run cannot collide with the evening one.
 
 on:
+  schedule:
+    - cron: '30 0 * * *'     # 06:00 IST
+    - cron: '30 11 * * *'    # 17:00 IST
   workflow_dispatch:
     inputs:
       spec:
@@ -26,6 +36,12 @@ on:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
         type: boolean
         default: false
+
+# One at a time. Both runs commit the topic ledger back to the branch, and two
+# runs racing that push is how a day ends up with the same fact twice.
+concurrency:
+  group: carousel
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -124,7 +140,7 @@ jobs:
       # got mangled or a token that resolves to the wrong account, at the point
       # where that is still free to fix.
       - name: What would be posted
-        if: github.event.inputs.publish != 'true'
+        if: github.event_name != 'schedule' && github.event.inputs.publish != 'true'
         continue-on-error: true
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
@@ -144,7 +160,8 @@ jobs:
       # hand, from the phone, after people have seen it. So it runs when it is
       # asked for and never by default.
       - name: Publish to Instagram
-        if: github.event.inputs.publish == 'true'
+        id: publish
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -158,6 +175,29 @@ jobs:
             sed -e 's/\x1b\[[0-9;]*m//g' publish.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The ledger is what stops the same fact going out twice, and it only works
+      # if it outlives the runner -- so it is committed back to the branch.
+      #
+      # After publishing, and only when publishing succeeded. A topic that was
+      # written but never posted is not spent: recording it would retire a fact
+      # nobody has seen, and a build that failed at the last step would quietly
+      # cost the account its subject.
+      - name: Remember this post's topic
+        if: steps.publish.outcome == 'success'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/carousel-history.json
+          git diff --cached --quiet && { echo "No new topic to record."; exit 0; }
+          git commit -m "Record $(date -u +'%Y-%m-%d %H:%M') carousel topic"
+          # The other slot may have recorded its own topic first; take theirs and
+          # replay ours on top rather than clobbering the ledger.
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the topic -- the next run may repeat it." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()

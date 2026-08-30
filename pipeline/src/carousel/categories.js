@@ -30,6 +30,26 @@ export const POOL = [
 export const STRIDE = 5;
 
 /**
+ * Two posts a day, and the second one must not be a rerun of the first.
+ *
+ * The day's stride solves "yesterday vs today"; it says nothing about the two
+ * posts inside one day, which land on the same index and so the same category.
+ * The evening post steps a further 10.
+ *
+ * Ten works for the same reason five does. The sequence of indices becomes
+ * d*5, d*5+10, (d+1)*5, ... so the gaps alternate +10 and -5, and both are
+ * further than the longest block of one category (4) is wide — a block spans at
+ * most indices i..i+3, so anything four or more apart is a different category
+ * outright. And because each slot walks the whole pool once per cycle, the
+ * weights still hold exactly: over 21 days each category comes up twice its
+ * weight, not once with a fudge.
+ */
+export const SLOT_OFFSET = 10;
+
+/** Morning post or evening post. The cron fires at 06:00 and 17:00 IST. */
+export const SLOTS = ['morning', 'evening'];
+
+/**
  * What each category is about, in the words the prompt needs. Kept here rather
  * than in the prompt so that adding a category is one edit, not two.
  */
@@ -50,6 +70,21 @@ export function dayNumber(date = new Date()) {
   return Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86400000);
 }
 
-export function categoryFor(date = new Date()) {
-  return POOL[(dayNumber(date) * STRIDE) % POOL.length];
+/**
+ * Which slot a run belongs to, worked out from the clock rather than passed in.
+ *
+ * A scheduled run knows its own cron only as a time, and a hand-started run
+ * knows nothing at all, so guessing wrong would be silent. IST is UTC+5:30: the
+ * 06:00 post fires at 00:30 UTC and the 17:00 post at 11:30 UTC, and any hour
+ * before 06:00 UTC is unambiguously the morning one.
+ */
+export function slotFor(date = new Date()) {
+  const hour = typeof date === 'string' ? 0 : date.getUTCHours();
+  return hour < 6 ? 'morning' : 'evening';
+}
+
+export function categoryFor(date = new Date(), slot = 'morning') {
+  const index = SLOTS.indexOf(slot);
+  if (index === -1) throw new Error(`Unknown slot "${slot}" — ${SLOTS.join(' or ')}.`);
+  return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
 }

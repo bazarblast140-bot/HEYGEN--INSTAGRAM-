@@ -20,7 +20,7 @@ import { z } from 'zod';
 
 import { resolveProvider, callOpenAICompatible, VENDORS } from '../script/providers.js';
 import { readHistory, findRepeat, recordTopic } from '../script/topics.js';
-import { categoryFor } from './categories.js';
+import { categoryFor, slotFor } from './categories.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -73,6 +73,25 @@ function validateShape(spec, recentTopics) {
     }
   });
 
+  // Instagram's search reads the caption, and it reads the start of it hardest:
+  // the first line is what shows above "more" and what a search result displays.
+  // A caption that opens with a preamble spends that line on nothing.
+  const firstLine = String(spec.caption || '').split('\n')[0].trim();
+  if (!firstLine) problems.push('caption is empty — the first line is what search and the feed show');
+  else if (firstLine.length > 125) problems.push(`caption's first line is ${firstLine.length} characters — Instagram cuts it at about 125`);
+
+  const tags = spec.hashtags || [];
+  if (tags.length < 8 || tags.length > 15) problems.push(`${tags.length} hashtags — 8 to 15`);
+  if (new Set(tags).size !== tags.length) problems.push('hashtags repeat');
+  const malformed = tags.filter((t) => !/^#[^\s#]+$/.test(String(t)));
+  if (malformed.length) problems.push(`malformed hashtags: ${malformed.join(' ')}`);
+  // Half and half. Hindi tags reach the audience that reads the slides; English
+  // tags are where the subject itself is searched, and a Devanagari-only post is
+  // invisible to anyone searching "venus" or "space facts".
+  const english = tags.filter((t) => /^#[\x20-\x7E]+$/.test(String(t)));
+  if (english.length < 3) problems.push(`only ${english.length} English hashtags — at least 3, the subject is searched in English`);
+  if (tags.length - english.length < 3) problems.push(`only ${tags.length - english.length} Hindi hashtags — at least 3`);
+
   const repeat = findRepeat(spec.topic, recentTopics);
   if (repeat) problems.push(`topic repeats ${repeat.date}: "${repeat.topic}" — pick a different subject`);
 
@@ -81,7 +100,8 @@ function validateShape(spec, recentTopics) {
 
 export async function generateCarousel({
   date = new Date().toISOString().slice(0, 10),
-  category = categoryFor(date),
+  slot = slotFor(new Date()),
+  category = categoryFor(date, slot),
   model,
   onAttempt,
 } = {}) {
@@ -117,8 +137,8 @@ export async function generateCarousel({
       if (!lastProblems.length) {
         // Recorded only once accepted, so a rejected draft does not burn a
         // subject that never actually went out.
-        await recordTopic({ topic: output.topic, angle: output.category, date, file: LEDGER });
-        return { spec: output, provider: provider.name, model: used, attempts: attempt, category };
+        await recordTopic({ topic: output.topic, angle: output.category, date: `${date} ${slot}`, file: LEDGER });
+        return { spec: output, provider: provider.name, model: used, attempts: attempt, category, slot };
       }
     } catch (err) {
       if (!err.schemaIssues || attempt === 3) throw err;
