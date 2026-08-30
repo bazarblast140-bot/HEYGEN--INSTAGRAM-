@@ -53,6 +53,11 @@ async function main() {
 
   console.log(`Carousel  ${files.length} slides  ${report.width}x${report.height}  ${dim(report.topic || '')}`);
   for (const f of files) console.log(`  ${dim(f)}`);
+
+  // Where the pictures came from. The build prints this too, but by the time
+  // anyone reads a CI log they are reading the end of it, and "which slide got
+  // a real photograph and which got the gradient" is the thing worth knowing.
+  for (const n of report.notes || []) console.log(`  ${dim(`· ${n}`)}`);
   console.log(`Caption   ${caption.length} chars`);
   console.log(caption.split('\n').map((l) => `  ${dim(l)}`).join('\n'));
 
