@@ -1,0 +1,247 @@
+<!doctype html>
+<!--
+  One carousel slide, 4:5 (1080x1350 at scale 1).
+
+  Static by design: no animation, no frame index. render-slides.js calls
+  __slide.load(data) once and screenshots. Keeping it a pure function of the
+  payload means the same spec always produces the same PNG, which is what makes
+  a re-run safe to publish.
+
+  The Devanagari face is bundled as a variable TTF and pinned by weight, because
+  a fallback face silently drops conjuncts (क्ष, त्र, ज्ञ) into tofu and the
+  failure only shows up after the image is already on Instagram.
+-->
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: 'Brand Latin';
+    src: url('../../../assets/fonts-ttf/brand-latin.ttf') format('truetype-variations');
+    font-weight: 100 900;
+  }
+
+  @font-face {
+    font-family: 'Noto Devanagari';
+    src: url('../../../assets/fonts-ttf/noto-devanagari.ttf') format('truetype-variations');
+    font-weight: 100 900;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 1080px; height: 1350px;
+    background: #000;
+    font-family: 'Noto Devanagari', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #stage { position: relative; width: 1080px; height: 1350px; overflow: hidden; }
+
+  /* Background photo, or a generated field when no photo is supplied. */
+  #bg {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+    transform: scale(1.04);           /* hides edge seams on off-ratio photos */
+  }
+  #bg.generated {
+    background:
+      radial-gradient(120% 80% at 20% 15%, #1e3a5f 0%, transparent 60%),
+      radial-gradient(100% 70% at 85% 25%, #4a2545 0%, transparent 55%),
+      linear-gradient(160deg, #0b1020 0%, #14161f 55%, #05060a 100%);
+  }
+
+  /* Legibility floor. The text band never sits on raw photo. */
+  /* Legibility floor. The reference accounts do not fade text onto a photo —
+     they drop a near-solid band under it, because a light subject (a glass
+     tower, a snowfield) eats a gradient and the text goes unreadable exactly
+     on the slides with the best photos. */
+  #scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(
+      to bottom,
+      rgba(0,0,0,.50) 0%,
+      rgba(0,0,0,.12) 22%,
+      rgba(0,0,0,.12) 34%,
+      rgba(0,0,0,.55) 48%,
+      rgba(0,0,0,1) 60%,
+      rgba(0,0,0,1) 100%
+    );
+  }
+
+  /* Circular inset portraits, the pattern the reference account leans on. */
+  .inset {
+    position: absolute;
+    border-radius: 50%;
+    background-size: cover; background-position: center;
+    border: 6px solid rgba(255,255,255,.92);
+    box-shadow: 0 18px 46px rgba(0,0,0,.6);
+  }
+
+  #brand {
+    position: absolute; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 22px;
+  }
+  #brand .rule { height: 2px; width: 122px; background: linear-gradient(90deg, transparent, var(--brand-ink, #F2F2F2)); opacity: .75; }
+  #brand .rule.right { background: linear-gradient(270deg, transparent, var(--brand-ink, #F2F2F2)); }
+  #brand .logo { height: 52px; width: 52px; flex: 0 0 52px; }
+  #brand { gap: 18px; }
+  #brand .mark {
+    font-size: 30px; color: var(--ink, #E8B923); font-weight: 700; font-variation-settings: 'wght' 700;
+    white-space: nowrap;
+  }
+
+  #copy { position: absolute; left: 44px; right: 44px; text-align: center; }
+  #headline, #subline { white-space: pre-line; }
+
+  #headline {
+    color: var(--ink, #FFD200);
+    font-weight: 900;
+    font-variation-settings: 'wght' 900, 'wdth' 82;
+    line-height: 1.24;
+    text-shadow: 0 4px 26px rgba(0,0,0,.85);
+  }
+  #subline {
+    color: var(--ink, #FFD200);
+    font-weight: 800;
+    font-variation-settings: 'wght' 800, 'wdth' 85;
+    line-height: 1.28;
+    text-shadow: 0 4px 22px rgba(0,0,0,.85);
+  }
+  #footnote {
+    color: var(--ink, #fff); opacity: .62;
+    font-weight: 500; font-variation-settings: 'wght' 500;
+    font-size: 30px; line-height: 1.3;
+    margin-top: 26px;
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="bg"></div>
+    <div id="scrim"></div>
+    <div id="insets"></div>
+    <div id="brand">
+      <span class="rule"></span>
+      <img class="logo" alt="">
+      <span class="mark"></span>
+      <span class="rule right"></span>
+    </div>
+    <div id="copy">
+      <div id="headline"></div>
+      <div id="subline"></div>
+      <div id="footnote"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // Devanagari sets wider than Latin at the same point size, and a matra stack
+  // adds height a Latin string never would. So size is driven off the rendered
+  // box, not a character count: shrink until it fits the band, rather than
+  // trusting a guessed value and discovering the clip after publishing.
+  function fitText(el, { max, min, maxHeight }) {
+    // Two failure modes, one loop.
+    //
+    // Height is the obvious one. The other is the orphan: a spec writes two
+    // lines with an explicit break, the second is a shade too wide, and the
+    // last word wraps alone onto a third line. It fits the box perfectly and
+    // looks broken. So the fitter also shrinks until the rendered line count
+    // matches the breaks the spec actually asked for.
+    const wanted = (el.textContent.match(/\n/g) || []).length + 1;
+
+    let size = max;
+    el.style.fontSize = size + 'px';
+
+    const lines = () => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight);
+      return Math.round(el.scrollHeight / lh);
+    };
+
+    while (size > min && (el.scrollHeight > maxHeight || lines() > wanted)) {
+      size -= 2;
+      el.style.fontSize = size + 'px';
+    }
+    return size;
+  }
+
+  window.__slide = {
+    load(data) {
+      const {
+        headline = '',
+        subline = '',
+        footnote = '',
+        brand = 'FACTVIZER',
+        ink,                 // one colour for every word on the slide
+        logo,                // brand mark shown beside the wordmark
+        brandInk,            // wordmark + rule colour, separate from the copy
+        background,          // file:// or https:// image for the photo layer
+        insets = [],         // [{ image, x, y, size }] in design px
+        band = 'bottom',     // 'bottom' (list slides) | 'center' (cover slide)
+      } = data;
+
+      if (ink) document.documentElement.style.setProperty('--ink', ink);
+      if (brandInk) document.documentElement.style.setProperty('--brand-ink', brandInk);
+
+      const bg = $('bg');
+      if (background) {
+        bg.style.backgroundImage = `url("${background}")`;
+        bg.classList.remove('generated');
+      } else {
+        bg.classList.add('generated');
+      }
+
+      $('insets').innerHTML = '';
+      for (const it of insets) {
+        const d = document.createElement('div');
+        d.className = 'inset';
+        d.style.left = it.x + 'px';
+        d.style.top = it.y + 'px';
+        d.style.width = it.size + 'px';
+        d.style.height = it.size + 'px';
+        d.style.backgroundImage = `url("${it.image}")`;
+        $('insets').appendChild(d);
+      }
+
+      $('brand').querySelector('.mark').textContent = brand;
+      const logoEl = $('brand').querySelector('.logo');
+      if (logo) { logoEl.src = logo; logoEl.style.display = ''; }
+      else logoEl.style.display = 'none';
+
+      const h = $('headline');
+      const s = $('subline');
+      const f = $('footnote');
+      h.textContent = headline;
+      s.textContent = subline;
+      f.textContent = footnote;
+      s.classList.toggle('hidden', !subline);
+      f.classList.toggle('hidden', !footnote);
+
+      // Cover slide carries one long headline; list slides carry a short
+      // yellow label over a white fact, so they get different budgets.
+      const cover = band === 'center';
+      fitText(h, cover ? { max: 112, min: 56, maxHeight: 420 }
+                       : { max: 96, min: 50, maxHeight: 210 });
+      if (subline) fitText(s, { max: 74, min: 40, maxHeight: 260 });
+
+      // Lay the block out from the bottom so a two-line and a four-line slide
+      // share the same baseline instead of drifting up the frame.
+      const copy = $('copy');
+      copy.style.bottom = (cover ? 116 : 104) + 'px';
+      copy.style.top = 'auto';
+      s.style.marginTop = subline ? '18px' : '0';
+
+      const copyTop = copy.getBoundingClientRect().top;
+      $('brand').style.top = Math.round(copyTop - 82) + 'px';
+
+      document.body.dataset.ready = '1';
+    },
+  };
+})();
+</script>
+</body>
+</html>
