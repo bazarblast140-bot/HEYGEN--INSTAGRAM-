@@ -56,6 +56,35 @@ const note = (msg) => { notes.push(msg); console.log(`  · ${msg}`); };
  * day — a missed day costs nothing, a wrong number costs the reason anyone
  * follows. So a list slide without a source is a hard failure, not a warning.
  */
+/**
+ * One hashtag block, not two.
+ *
+ * The live post had them twice: the model wrote its own row of tags at the end
+ * of the caption AND returned them in the hashtags field, and the caption was
+ * simply the two concatenated. So any tags the caption already ends with are
+ * lifted out of it, merged with the field, and written once.
+ *
+ * Matching is case-insensitive: #Venus and #venus are one tag to Instagram and
+ * two rows to a reader.
+ */
+export function composeCaption(spec, brandTag) {
+  const written = String(spec.caption || '').trim();
+  const trailing = written.match(/(?:^|\n)[ \t]*(?:#[^\s#]+[ \t]*)+$/);
+  const body = trailing ? written.slice(0, trailing.index).trim() : written;
+  const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
+
+  // The brand tag is added here rather than asked for in the prompt: it is the
+  // one hashtag that must be on every post, and a model that forgets it once
+  // breaks the only tag that collects the account's own back catalogue.
+  const seen = new Map();
+  for (const tag of [...inline, ...(spec.hashtags || []), brandTag]) {
+    const key = String(tag).toLowerCase();
+    if (!seen.has(key)) seen.set(key, tag);
+  }
+
+  return [body, seen.size ? [...seen.values()].join(' ') : null].filter(Boolean).join('\n\n');
+}
+
 export function validateSpec(spec) {
   const problems = [];
   const slides = spec.slides || [];
@@ -160,14 +189,8 @@ async function main() {
   });
   process.stdout.write('\n');
 
-  // The brand tag is added here rather than asked for in the prompt: it is the
-  // one hashtag that must be on every post, and a model that forgets it once
-  // breaks the only tag that collects the account's own back catalogue.
-  const hashtags = [...new Set([...(spec.hashtags || []), BRAND.tag])];
-  const caption = [
-    spec.caption?.trim(),
-    hashtags.length ? hashtags.join(' ') : null,
-  ].filter(Boolean).join('\n\n');
+  const caption = composeCaption(spec, BRAND.tag);
+
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
 
   const report = {

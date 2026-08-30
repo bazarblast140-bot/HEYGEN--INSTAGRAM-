@@ -80,3 +80,23 @@ test('circumstance words are a penalty, not a match', () => {
     > relevance('Crew briefing before launch, Earth globe on the table', 'earth from space'),
   );
 });
+
+// The bug that shipped: two slides of a live post came out as empty gradients.
+// "Blurred background" is what a good photograph of a small animal looks like,
+// and treating those words as disqualifying threw away every candidate.
+test('a blurred background does not disqualify a photo of the subject', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: 'Hummingbird hovering near a flower with blurred background' },
+  ], { query: 'hummingbird bird', used: new Set() });
+
+  assert.equal(chosen?.id, 1);
+});
+
+test('an undescribed photo is used before falling back to the gradient', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: '' },
+    { id: 2, alt: 'a wooden table' },
+  ], { query: 'hummingbird bird', used: new Set() });
+
+  assert.equal(chosen?.id, 1);
+});

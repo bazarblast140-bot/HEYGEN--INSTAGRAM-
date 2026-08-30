@@ -44,12 +44,18 @@ const NASA = 'https://images-api.nasa.gov';
 const SPACE = /\b(planet|mercury|venus|earth|mars|jupiter|saturn|uranus|neptune|pluto|moon|lunar|sun|solar|star|galaxy|nebula|milky\s?way|comet|asteroid|meteor|space|orbit|spacecraft|satellite|rocket|launch|astronaut|telescope|hubble|webb|apollo|iss|eclipse|aurora)\b/i;
 
 /**
- * Stock-library junk that technically matches any query.
+ * Words a filler photo uses about itself.
  *
- * A blurred purple gradient tagged "venus" satisfies the search and shows the
- * reader nothing. These words are how that photo describes itself.
+ * A PENALTY, not a rule -- and that distinction cost two slides. As a hard
+ * filter this dropped every hummingbird photo Pexels had, because a stock
+ * photographer describes a perfectly good bird as "hummingbird hovering near a
+ * flower, blurred background". Blurred background is what a good photograph of
+ * a small animal looks like. The post went out with two empty gradients.
+ *
+ * So these words push a candidate down and no further. A photo that is ONLY
+ * these words still loses, because it has nothing else to score with.
  */
-const JUNK = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|texture|pattern|gradient|copy\s?space|mockup|closeup of a wall)\b/i;
+const FILLER = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|texture|pattern|gradient|copy\s?space|mockup)\b/i;
 
 /**
  * Titles where the subject is in the picture by accident.
@@ -85,8 +91,9 @@ export function relevance(alt, query) {
   const density = matches / said.length;
   const leads = said.slice(0, 3).some((w) => asked.has(w)) ? 1 : 0;
   const incidental = INCIDENTAL.test(alt) ? 0.5 : 0;
+  const filler = FILLER.test(alt) ? 0.4 : 0;
 
-  return leads + density - incidental;
+  return leads + density - incidental - filler;
 }
 
 /**
@@ -97,14 +104,19 @@ export function relevance(alt, query) {
  */
 export function bestPhoto(candidates, { query, used }) {
   const fresh = candidates.filter((c) => !used.has(String(c.id)));
-  const clean = fresh.filter((c) => !JUNK.test(c.alt || ''));
-  if (!clean.length) return null;
+  const scored = fresh.map((c, i) => ({ c, i, score: relevance(c.alt, query) }));
 
-  const scored = clean
-    .map((c, i) => ({ c, score: relevance(c.alt, query), i }))
+  // First choice: something that actually names the subject.
+  const onTopic = scored
+    .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || a.i - b.i);
+  if (onTopic.length) return onTopic[0].c;
 
-  return scored[0].c;
+  // Second choice: a photo the library did not describe at all. Pexels often
+  // gives no useful alt text, and a silent photo is not a bad one -- the
+  // library ranked it first for this query for some reason.
+  const neutral = scored.find((s) => !FILLER.test(s.c.alt || ''));
+  return neutral ? neutral.c : null;
 }
 
 async function json(url, opts) {

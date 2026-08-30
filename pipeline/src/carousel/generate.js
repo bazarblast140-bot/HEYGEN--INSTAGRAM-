@@ -80,6 +80,17 @@ function validateShape(spec, recentTopics) {
   if (!firstLine) problems.push('caption is empty — the first line is what search and the feed show');
   else if (firstLine.length > 125) problems.push(`caption's first line is ${firstLine.length} characters — Instagram cuts it at about 125`);
 
+  // The caption's own hashtag row is a duplicate of the hashtags field, and it
+  // reached the feed once already -- the same ten tags printed twice.
+  if (/#[^\s#]/.test(String(spec.caption || ''))) {
+    problems.push('caption contains hashtags — they belong in "hashtags", and printing both repeats them');
+  }
+
+  // "इस कारousel में" went out on a live post: half Devanagari, half Latin,
+  // inside one word. A reader sees a typo, not a loanword.
+  const mixed = String(spec.caption || '').match(/[\u0900-\u097F]+[A-Za-z]+|[A-Za-z]+[\u0900-\u097F]+/g);
+  if (mixed) problems.push(`half-Hindi half-English words: ${[...new Set(mixed)].join(', ')}`);
+
   const tags = spec.hashtags || [];
   if (tags.length < 8 || tags.length > 15) problems.push(`${tags.length} hashtags — 8 to 15`);
   if (new Set(tags).size !== tags.length) problems.push('hashtags repeat');
