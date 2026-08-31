@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
 import { attachBackgrounds } from './src/render/backgrounds.js';
+import { attachCover } from './src/render/covers.js';
 import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
 import { slotFor } from './src/carousel/categories.js';
 
@@ -146,6 +147,7 @@ async function main() {
   // Which post this is, whether or not generation ran -- the background choice
   // depends on it.
   let slotUsed = args.slot || slotFor(new Date());
+  let categoryUsed = null;
 
   let spec;
   if (args.generate) {
@@ -164,6 +166,7 @@ async function main() {
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
+      categoryUsed = written.category || null;
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
       if (written.stories) {
         // Which source actually fed the post. Invisible once, and that is how
@@ -236,7 +239,12 @@ async function main() {
     note('--no-photos — generated gradient behind every slide');
   } else {
     console.log('Backgrounds');
-    const { spec: withPhotos, attached } = await attachBackgrounds(withFootnotes, {
+    // Hand-made cover first. attachBackgrounds skips any slide that already
+    // carries a picture, so this is the whole of the override.
+    const { spec: withCover } = await attachCover(withFootnotes, {
+      category: categoryUsed, slot: slotUsed, onNote: note,
+    });
+    const { spec: withPhotos, attached } = await attachBackgrounds(withCover, {
       outDir: path.join(HERE, 'out', 'photos'),
       onNote: note,
     });
