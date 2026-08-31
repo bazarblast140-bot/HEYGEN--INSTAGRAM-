@@ -156,6 +156,7 @@ export async function generateNewsCarousel({
   date = new Date().toISOString().slice(0, 10),
   model,
   onAttempt,
+  onNote,
   stories,
 } = {}) {
   const provider = resolveProvider();
@@ -164,7 +165,7 @@ export async function generateNewsCarousel({
   const chosenModel = model || provider.model;
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
-  const found = stories || await fetchStories();
+  const found = stories || await fetchStories({ onNote });
   if (found.length < 3) {
     throw new Error(`only ${found.length} usable stories today — not enough for a carousel`);
   }

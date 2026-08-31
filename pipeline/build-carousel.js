@@ -155,7 +155,7 @@ async function main() {
 
     try {
       const written = await write({
-        ...(slot === 'midday' ? {} : { slot }),
+        ...(slot === 'midday' ? { onNote: note } : { slot }),
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };

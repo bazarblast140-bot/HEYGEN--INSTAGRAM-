@@ -162,11 +162,21 @@ const fingerprint = (title) => String(title).toLowerCase()
  * missed post -- losing both is, and that is reported honestly rather than
  * papered over with whatever the model remembers.
  */
-export async function fetchStories({ hours = 36, limit = 12 } = {}) {
-  const [...results] = await Promise.allSettled([
-    ...QUERIES.map((query) => fetchGoogleNews({ query, hours })),
-    fetchHackerNews({ hours }),
-  ]);
+export async function fetchStories({ hours = 36, limit = 12, onNote } = {}) {
+  const jobs = [
+    ...QUERIES.map((query) => ({ label: `Google News "${query}"`, run: () => fetchGoogleNews({ query, hours }) })),
+    { label: 'Hacker News', run: () => fetchHackerNews({ hours }) },
+  ];
+  const results = await Promise.allSettled(jobs.map((j) => j.run()));
+
+  // Say what each source did. A source that quietly returns nothing looks
+  // exactly like a source that is switched off, and Google News did precisely
+  // that for two runs while the log showed a healthy-looking build.
+  results.forEach((r, i) => {
+    onNote?.(r.status === 'fulfilled'
+      ? `${jobs[i].label}: ${r.value.length} stories`
+      : `${jobs[i].label}: FAILED — ${String(r.reason?.message).slice(0, 80)}`);
+  });
 
   const seen = new Map();
   for (const result of results) {
