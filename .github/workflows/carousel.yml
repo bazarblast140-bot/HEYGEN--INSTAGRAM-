@@ -45,6 +45,11 @@ on:
         description: Write today's topic with the model (off = the checked-in spec)
         type: boolean
         default: true
+      slot:
+        description: "Which post to build (blank = whichever the clock says)"
+        type: choice
+        options: ['', 'morning', 'midday', 'evening']
+        default: ''
       publish:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
         type: boolean
@@ -147,6 +152,7 @@ jobs:
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
+            ${{ github.event.inputs.slot && format('--slot {0}', github.event.inputs.slot) || '' }} \
             ${{ (github.event_name == 'schedule' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
             2>&1 | tee carousel.log
           {
