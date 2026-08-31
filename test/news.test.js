@@ -71,3 +71,15 @@ test('midday is a slot but not a rotation slot', () => {
   assert.ok(!SLOTS.includes('midday'));
   assert.throws(() => categoryFor('2026-08-31', 'midday'), /Unknown slot/);
 });
+
+// From the first live technology build: the model wrote the query "linux
+// penguin" and got a photograph of an actual penguin on sand.
+test('a mascot is not the technology', async () => {
+  const { bestPhoto } = await import('../pipeline/src/render/backgrounds.js');
+  const chosen = bestPhoto([
+    { id: 1, alt: 'Adorable juvenile penguin standing on the sand' },
+    { id: 2, alt: 'Linux terminal running on a laptop screen' },
+  ], { query: 'linux operating system', used: new Set() });
+
+  assert.equal(chosen.id, 2);
+});

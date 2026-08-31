@@ -87,9 +87,12 @@ fields:
   headline  — 4 शब्द तक. चीज़ या कंपनी का नाम, नारा नहीं.
   subline   — cover पर null. बाक़ी पर ख़बर, ठीक दो पंक्तियों में.
   source    — cover और cta पर null. बाक़ी हर slide पर सूची वाली site.
-  query     — हमेशा अंग्रेज़ी में, 2 से 4 शब्द, जो चीज़ तस्वीर में दिखनी चाहिए:
-              "data center servers", "computer chip macro", "robot arm factory".
-              Pexels हिंदी नहीं समझता.
+  query     — हमेशा अंग्रेज़ी में, 2 से 4 शब्द. एक असली दृश्य लिखो जिसकी तस्वीर
+              खींची जा सकती हो: "data center servers", "computer chip macro",
+              "server room cables", "code on screen", "robot arm factory".
+              कंपनी का नाम, mascot या logo कभी मत लिखो. "linux penguin" लिखोगे
+              तो सचमुच पेंगुइन की तस्वीर आएगी — असली में यही हुआ था.
+              Pexels हिंदी नहीं समझता, और वो अर्थ नहीं दृश्य ढूँढ़ता है.
   hashtags  — 8 से 15, कम से कम 3 हिंदी और 3 अंग्रेज़ी.
 </output_format>
 
