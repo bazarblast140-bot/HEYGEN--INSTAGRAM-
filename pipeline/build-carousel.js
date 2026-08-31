@@ -223,23 +223,17 @@ async function main() {
     })),
   };
 
-  // The news post gets the gradient, not a stock photo.
+  // Photos on every post, news included.
   //
-  // Three live builds, three bad photo sets: a penguin for a story about Linux
-  // law (twice), a robot arm holding a flower for enterprise software, and a
-  // stranger's actual Instagram profile on the follow card. Tech news has no
-  // stock photography -- the pictures exist, but they illustrate the word, not
-  // the story, and a wrong picture on a news slide reads as carelessness.
-  //
-  // The gradient is designed, on-brand and always legible. --photos overrides
-  // this for a day when the subject is something a camera can actually show.
-  const skipPhotos = args['no-photos'] || (slotUsed === 'midday' && !args.photos);
-
+  // They were switched off here for a day after three bad sets -- a penguin for
+  // a Linux story, a stranger's Instagram profile on the follow card. The
+  // reference account this is modelled on runs photographs on every slide and
+  // they always fit, but its pictures are GENERATED for each fact, not searched
+  // for. A stock library cannot do that, so the ranking has to work harder:
+  // see backgrounds.js. --no-photos still forces the gradient.
   let ready = withFootnotes;
-  if (skipPhotos) {
-    note(slotUsed === 'midday' && !args['no-photos']
-      ? 'news post — brand gradient behind every slide (--photos to override)'
-      : '--no-photos — generated gradient behind every slide');
+  if (args['no-photos']) {
+    note('--no-photos — generated gradient behind every slide');
   } else {
     console.log('Backgrounds');
     const { spec: withPhotos, attached } = await attachBackgrounds(withFootnotes, {
