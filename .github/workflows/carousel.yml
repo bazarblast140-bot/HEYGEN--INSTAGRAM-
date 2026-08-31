@@ -109,6 +109,23 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Read-only, and it spends nothing: every request is a GET. It answers
+      # what this key is permitted to do -- music, images -- which a settings
+      # screen shows as toggles and an API answers as status codes.
+      - name: Check what ElevenLabs allows
+        if: github.event_name != 'schedule'
+        continue-on-error: true
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          node pipeline/elevenlabs-doctor.js 2>&1 | tee eleven.log || true
+          {
+            echo '## ElevenLabs'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' eleven.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Read-only. It resolves the configured IG_USER_ID against the token and
       # prints whose account it is -- publishing nothing. "The token is set" and
       # "the token still works" are different facts, and a Facebook-surface token
