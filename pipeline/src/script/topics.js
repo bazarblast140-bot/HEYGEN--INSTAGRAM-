@@ -20,16 +20,30 @@ export const LEDGER = path.resolve(HERE, '..', '..', 'topic-history.json');
 // genuinely recurring subject (a budget, a rate decision) can come back later.
 export const REMEMBER = 20;
 
-/** Reduce a topic to what makes it the same subject, not the same sentence. */
+/**
+ * Reduce a topic to what makes it the same subject, not the same sentence.
+ *
+ * Devanagari has to survive this, and for a long time it did not: the filter
+ * kept a-z0-9 and threw everything else away, so every Hindi topic fingerprinted
+ * to the empty string and tooSimilar() returned false for a topic compared with
+ * ITSELF. The repeat check ran on every generated carousel and could never once
+ * have fired. It was found by a Venus post going out four days after a post
+ * about how long a day on Venus lasts.
+ */
 export function fingerprint(topic) {
   const STOPWORDS = new Set([
     'the', 'a', 'an', 'of', 'in', 'on', 'for', 'to', 'and', 'is', 'are', 'ka',
     'ki', 'ke', 'me', 'se', 'ko', 'hai', 'kya', 'aaj', 'today', 'stock', 'market',
     'share', 'price', 'news', 'update', 'nifty', 'sensex',
+    // The Hindi equivalents. Without these the fingerprint is mostly grammar.
+    'की', 'के', 'का', 'को', 'में', 'से', 'पर', 'और', 'है', 'हैं', 'था', 'थे',
+    'यह', 'वह', 'ये', 'वो', 'एक', 'भी', 'ही', 'तक', 'लिए', 'क्या', 'कैसे', 'क्यों',
+    'आज', 'नया', 'नयी', 'बड़ा', 'बड़ी', 'सबसे', 'बारे',
   ]);
+
   return String(topic || '')
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^a-z0-9\u0900-\u097F\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOPWORDS.has(w))
     .sort()
