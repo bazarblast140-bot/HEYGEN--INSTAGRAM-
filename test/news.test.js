@@ -173,3 +173,58 @@ test('both sources appear, mainstream first', async () => {
     assert.ok(stories.some((s) => s.from === 'Hacker News'), 'Hacker News should still be represented');
   } finally { globalThis.fetch = original; }
 });
+
+// Half of these feeds are Atom and half are RSS, and the two disagree about
+// where the URL and the date live. Handling one and meeting the other at 13:07
+// is a missed post.
+test('Atom entries parse as well as RSS items', async () => {
+  const { parseRss } = await import('../pipeline/src/carousel/news.js');
+
+  const [atom] = parseRss(`<entry>
+    <title>Introducing a smaller model</title>
+    <link rel="alternate" href="https://huggingface.co/blog/small"/>
+    <published>2026-08-31T04:00:00Z</published>
+  </entry>`, { site: 'Hugging Face' });
+
+  assert.equal(atom.title, 'Introducing a smaller model');
+  assert.equal(atom.url, 'https://huggingface.co/blog/small');
+  assert.equal(atom.site, 'Hugging Face');
+  assert.equal(atom.date, '2026-08-31');
+});
+
+test('the publisher is the feed, not the URL host', async () => {
+  const { parseRss } = await import('../pipeline/src/carousel/news.js');
+  const [item] = parseRss(`<item>
+    <title>A chip announcement</title><link>https://arstechnica.com/x</link>
+    <pubDate>Sun, 31 Aug 2026 04:00:00 GMT</pubDate>
+  </item>`, { site: 'Ars Technica' });
+
+  assert.equal(item.site, 'Ars Technica');   // not arstechnica.com
+});
+
+// A feed that publishes forty items a day must not fill the carousel while a
+// feed that publishes two never appears.
+test('no single feed can crowd out the others', async () => {
+  const { fetchStories } = await import('../pipeline/src/carousel/news.js');
+  const original = globalThis.fetch;
+  const now = Date.now();
+  const item = (t) => `<item><title>${t}</title><link>https://x.com/${t.replace(/\W/g, '')}</link>
+    <pubDate>${new Date(now - 3600e3).toUTCString()}</pubDate></item>`;
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('marktechpost')) {
+      return { ok: true, text: async () => Array.from({ length: 40 }, (_, i) => item(`Flood story ${i}`)).join('') };
+    }
+    if (url.includes('openai.com')) return { ok: true, text: async () => item('OpenAI ships something') };
+    if (url.includes('hn.algolia')) return { ok: true, json: async () => ({ hits: [] }) };
+    return { ok: true, text: async () => '' };
+  };
+
+  try {
+    const stories = await fetchStories();
+    const flood = stories.filter((s) => s.from === 'MarkTechPost').length;
+    assert.ok(stories.some((s) => s.from === 'OpenAI'), 'the quiet feed should still appear');
+    assert.ok(flood <= 6, `one feed took ${flood} slots`);
+  } finally { globalThis.fetch = original; }
+});
