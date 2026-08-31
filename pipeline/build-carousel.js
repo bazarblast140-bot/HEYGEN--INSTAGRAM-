@@ -91,6 +91,41 @@ export function reflowHook(text, limit = HOOK_LIMIT) {
     .filter(Boolean).join('\n');
 }
 
+/**
+ * A subline is two lines. Anything else comes out small.
+ *
+ * The renderer shrinks text until it fits its band AND occupies exactly the
+ * number of lines the spec asked for, so a subline written as one long
+ * unbroken sentence is shrunk all the way to the floor trying to stay on one
+ * line -- which is how "कैलिफोर्निया में उम्र सत्यापन कानून से Linux मुक्त,
+ * डेवलपर्स के लिए राहत" reached the feed at the minimum size. Three lines fold
+ * into two; one long line is broken at the word boundary nearest the middle,
+ * so both halves are about as wide and the type stays big.
+ *
+ * Repaired here rather than sent back to the model: a rejected attempt costs a
+ * whole generation, and this is a fault with one right answer.
+ */
+export const SUBLINE_ONE_LINE = 30;
+
+export function balanceSubline(text, limit = SUBLINE_ONE_LINE) {
+  const lines = String(text ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return text;
+
+  if (lines.length > 2) return [lines[0], lines.slice(1).join(' ')].join('\n');
+  if (lines.length === 2 || lines[0].length <= limit) return lines.join('\n');
+
+  // One long line: break as near the middle as a space allows.
+  const only = lines[0];
+  const middle = Math.floor(only.length / 2);
+  let cut = -1;
+  for (let i = 0; i < only.length; i += 1) {
+    if (only[i] !== ' ') continue;
+    if (cut === -1 || Math.abs(i - middle) < Math.abs(cut - middle)) cut = i;
+  }
+  if (cut <= 0) return only;                       // one very long word, nothing to do
+  return [only.slice(0, cut).trim(), only.slice(cut + 1).trim()].join('\n');
+}
+
 export function composeCaption(spec, brandTag) {
   const written = reflowHook(String(spec.caption || '').trim());
   const trailing = written.match(/(?:^|\n)[ \t]*(?:#[^\s#]+[ \t]*)+$/);
@@ -210,16 +245,12 @@ async function main() {
   // shrinks to fit, so it comes out small rather than clipped, which is worse
   // because nothing looks broken. Two lines, with the overflow folded into the
   // second -- repaired here rather than sent back to the model.
-  const twoLines = (subline) => {
-    const lines = String(subline || '').split('\n').filter(Boolean);
-    return lines.length > 2 ? [lines[0], lines.slice(1).join(' ')].join('\n') : subline;
-  };
 
   const withFootnotes = {
     ...spec,
     slides: spec.slides.map((s) => ({
       ...s,
-      subline: twoLines(s.subline),
+      subline: balanceSubline(s.subline),
       footnote: s.footnote ?? s.source ?? '',
     })),
   };

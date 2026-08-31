@@ -111,7 +111,7 @@
   #footnote {
     color: var(--ink, #fff); opacity: .62;
     font-weight: 500; font-variation-settings: 'wght' 500;
-    font-size: 30px; line-height: 1.3;
+    font-size: 34px; line-height: 1.3;
     margin-top: 26px;
   }
 
@@ -144,7 +144,7 @@
   // adds height a Latin string never would. So size is driven off the rendered
   // box, not a character count: shrink until it fits the band, rather than
   // trusting a guessed value and discovering the clip after publishing.
-  function fitText(el, { max, min, maxHeight }) {
+  function fitText(el, { max, min, maxHeight, maxLines = 2 }) {
     // Two failure modes, one loop.
     //
     // Height is the obvious one. The other is the orphan: a spec writes two
@@ -152,7 +152,14 @@
     // last word wraps alone onto a third line. It fits the box perfectly and
     // looks broken. So the fitter also shrinks until the rendered line count
     // matches the breaks the spec actually asked for.
-    const wanted = (el.textContent.match(/\n/g) || []).length + 1;
+    //
+    // A spec that asked for no break is a different case: an unbroken sentence
+    // that wraps is not an orphan, and holding it to one line shrinks it to the
+    // floor. That is how a news subline reached the feed at 40px. So the line
+    // budget is what the spec asked for when it asked for anything, and a
+    // generous cap when it did not.
+    const breaks = (el.textContent.match(/\n/g) || []).length;
+    const wanted = breaks ? breaks + 1 : maxLines;
 
     let size = max;
     el.style.fontSize = size + 'px';
@@ -224,9 +231,9 @@
       // Cover slide carries one long headline; list slides carry a short
       // yellow label over a white fact, so they get different budgets.
       const cover = band === 'center';
-      fitText(h, cover ? { max: 112, min: 56, maxHeight: 420 }
-                       : { max: 96, min: 50, maxHeight: 210 });
-      if (subline) fitText(s, { max: 74, min: 40, maxHeight: 260 });
+      fitText(h, cover ? { max: 136, min: 74, maxHeight: 470, maxLines: 3 }
+                       : { max: 118, min: 66, maxHeight: 250, maxLines: 2 });
+      if (subline) fitText(s, { max: 92, min: 56, maxHeight: 300, maxLines: 2 });
 
       // Lay the block out from the bottom so a two-line and a four-line slide
       // share the same baseline instead of drifting up the frame.
