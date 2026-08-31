@@ -52,6 +52,10 @@ it, so the picture is not seen whole:
 - **Bottom 60–100%** — solid black. The Hindi text is drawn here. Anything in
   this band is invisible.
 
+A **square (1:1)** picture works well for `cover.jpg` and `follow.jpg`: it is
+scaled to the full 1080 width and pushed up so the face lands in the clear band,
+so the photo runs edge to edge with no bars of any kind.
+
 So: subject high and centred, empty space below it, and **no text in the
 picture** — the text is drawn on top, and two lots of text on one slide looks
 like a mistake.

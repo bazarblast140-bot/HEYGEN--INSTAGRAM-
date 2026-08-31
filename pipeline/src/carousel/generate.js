@@ -20,7 +20,7 @@ import { z } from 'zod';
 
 import { resolveProvider, callOpenAICompatible, VENDORS } from '../script/providers.js';
 import { readHistory, findRepeat, recordTopic } from '../script/topics.js';
-import { categoryFor, slotFor } from './categories.js';
+import { categoryFor, slotFor, SLIDES } from './categories.js';
 import { fetchStories } from './news.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
@@ -51,11 +51,11 @@ export const CarouselSpec = z.object({
  * Checks the model cannot do for itself: the ones that need the ledger, or that
  * need to count. The schema already guarantees the fields exist.
  */
-function validateShape(spec, recentTopics) {
+export function validateShape(spec, recentTopics) {
   const problems = [];
   const slides = spec.slides || [];
 
-  if (slides.length !== 6) problems.push(`${slides.length} slides — exactly 6 are wanted`);
+  if (slides.length !== SLIDES) problems.push(`${slides.length} slides — exactly ${SLIDES} are wanted`);
   if (slides[0] && slides[0].band !== 'center') problems.push('slide 1 must be the cover (band "center")');
   if (slides.length && !slides.at(-1)?.cta) problems.push('the last slide must be the follow card (cta true)');
 

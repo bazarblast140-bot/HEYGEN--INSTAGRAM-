@@ -29,6 +29,14 @@ export const POOL = [
 
 export const STRIDE = 5;
 
+// How many slides a post carries.
+//
+// Nine, not six: a carousel's reach is driven by how long people stay on it,
+// and three more slides is three more swipes without three more facts to find.
+// The last is always the follow card, so nine slides is eight of substance.
+// Instagram's own ceiling is ten -- see MAX_ITEMS in publish/carousel.js.
+export const SLIDES = 9;
+
 /**
  * Two posts a day, and the second one must not be a rerun of the first.
  *
