@@ -67,8 +67,30 @@ const note = (msg) => { notes.push(msg); console.log(`  · ${msg}`); };
  * Matching is case-insensitive: #Venus and #venus are one tag to Instagram and
  * two rows to a reader.
  */
+export const HOOK_LIMIT = 125;
+
+/**
+ * Instagram shows one line above "more", and search shows roughly the same.
+ *
+ * A model asked for a short opening line sometimes writes one 193-character
+ * paragraph instead, and then the hook is a sentence fragment cut mid-word. So
+ * a long opening is split at its first sentence end -- the hook the writer
+ * actually wrote -- and the remainder becomes the next line. Nothing is lost.
+ */
+export function reflowHook(text, limit = HOOK_LIMIT) {
+  const [first, ...rest] = String(text).split('\n');
+  if (first.length <= limit) return text;
+
+  const sentence = first.match(new RegExp(`^[\\s\\S]{20,${limit}}[।?!]`));
+  const cut = sentence ? sentence[0].length : first.lastIndexOf(' ', limit);
+  if (cut <= 0) return text;
+
+  return [first.slice(0, cut).trim(), first.slice(cut).trim(), ...rest]
+    .filter(Boolean).join('\n');
+}
+
 export function composeCaption(spec, brandTag) {
-  const written = String(spec.caption || '').trim();
+  const written = reflowHook(String(spec.caption || '').trim());
   const trailing = written.match(/(?:^|\n)[ \t]*(?:#[^\s#]+[ \t]*)+$/);
   const body = trailing ? written.slice(0, trailing.index).trim() : written;
   const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
@@ -163,9 +185,22 @@ async function main() {
   // The scene renders `footnote`; the spec carries `source`. Keeping them
   // separate means the validator can insist on a citation without dictating
   // how it is worded on screen.
+  // Devanagari sets tall and a third line overflows the band; the renderer
+  // shrinks to fit, so it comes out small rather than clipped, which is worse
+  // because nothing looks broken. Two lines, with the overflow folded into the
+  // second -- repaired here rather than sent back to the model.
+  const twoLines = (subline) => {
+    const lines = String(subline || '').split('\n').filter(Boolean);
+    return lines.length > 2 ? [lines[0], lines.slice(1).join(' ')].join('\n') : subline;
+  };
+
   const withFootnotes = {
     ...spec,
-    slides: spec.slides.map((s) => ({ ...s, footnote: s.footnote ?? s.source ?? '' })),
+    slides: spec.slides.map((s) => ({
+      ...s,
+      subline: twoLines(s.subline),
+      footnote: s.footnote ?? s.source ?? '',
+    })),
   };
 
   let ready = withFootnotes;

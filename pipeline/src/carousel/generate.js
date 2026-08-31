@@ -63,51 +63,24 @@ function validateShape(spec, recentTopics) {
     if (factSlide && !String(slide.source || '').trim()) {
       problems.push(`slide ${n} states a fact with no source`);
     }
-    // Devanagari sets tall, and a third line overflows the band. The renderer
-    // shrinks to fit, so a three-line subline comes out small rather than
-    // clipped — which is worse, because nothing looks broken.
-    const lines = String(slide.subline || '').split('\n').filter(Boolean).length;
-    if (factSlide && lines > 2) problems.push(`slide ${n} subline has ${lines} lines — two at most`);
+    // A three-line subline is trimmed to two in build-carousel.js rather than
+    // rejected, for the same reason.
     if (!/^[\x20-\x7E]+$/.test(String(slide.query || ''))) {
       problems.push(`slide ${n} query must be plain English — Pexels does not index Devanagari`);
     }
   });
 
-  // Instagram's search reads the caption, and it reads the start of it hardest:
-  // the first line is what shows above "more" and what a search result displays.
-  // A caption that opens with a preamble spends that line on nothing.
-  const firstLine = String(spec.caption || '').split('\n')[0].trim();
-  if (!firstLine) problems.push('caption is empty — the first line is what search and the feed show');
-  else if (firstLine.length > 125) problems.push(`caption's first line is ${firstLine.length} characters — Instagram cuts it at about 125`);
-
-  // Hashtags in the caption are NOT rejected, and that is deliberate.
+  // Nothing about the caption is fatal any more, and two lost posts is why.
   //
-  // They were, for one morning, and the post never went out: the model wrote a
-  // tag row in its caption on all three attempts, every attempt was rejected,
-  // and --require-generated turned that into a skipped day. The duplicate is
-  // real but composeCaption() already lifts the row out and merges it, so the
-  // check was refusing work the pipeline knows how to finish.
+  // First it was hashtags in the caption; the day after, a first line of 193
+  // characters. Both are real faults, both are cosmetic, and both are repaired
+  // in build-carousel.js -- but as rejections they burned all three attempts
+  // and --require-generated turned that into no post at all. The prompt still
+  // asks for a short first line and no tag row; asking is the right weight for
+  // something the build can finish on its own.
   //
-  // A validator earns a veto only over what cannot be repaired here: a missing
-  // source, a repeated topic, a broken word. Anything the build can fix, the
-  // build fixes.
-
-  // "इस कारousel में" went out on a live post: half Devanagari, half Latin,
-  // inside one word. A reader sees a typo, not a loanword.
-  const mixed = String(spec.caption || '').match(/[\u0900-\u097F]+[A-Za-z]+|[A-Za-z]+[\u0900-\u097F]+/g);
-  if (mixed) problems.push(`half-Hindi half-English words: ${[...new Set(mixed)].join(', ')}`);
-
-  const tags = spec.hashtags || [];
-  if (tags.length < 8 || tags.length > 15) problems.push(`${tags.length} hashtags — 8 to 15`);
-  if (new Set(tags).size !== tags.length) problems.push('hashtags repeat');
-  const malformed = tags.filter((t) => !/^#[^\s#]+$/.test(String(t)));
-  if (malformed.length) problems.push(`malformed hashtags: ${malformed.join(' ')}`);
-  // Half and half. Hindi tags reach the audience that reads the slides; English
-  // tags are where the subject itself is searched, and a Devanagari-only post is
-  // invisible to anyone searching "venus" or "space facts".
-  const english = tags.filter((t) => /^#[\x20-\x7E]+$/.test(String(t)));
-  if (english.length < 3) problems.push(`only ${english.length} English hashtags — at least 3, the subject is searched in English`);
-  if (tags.length - english.length < 3) problems.push(`only ${tags.length - english.length} Hindi hashtags — at least 3`);
+  // What stays fatal is what cannot be repaired without inventing something: a
+  // missing source, a repeated topic, a broken word, the wrong slide shape.
 
   const repeat = findRepeat(spec.topic, recentTopics);
   if (repeat) problems.push(`topic repeats ${repeat.date}: "${repeat.topic}" — pick a different subject`);

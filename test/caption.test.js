@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { composeCaption } from '../pipeline/build-carousel.js';
+import { composeCaption, reflowHook } from '../pipeline/build-carousel.js';
 
 test('hashtags the model wrote into the caption are not printed twice', () => {
   const caption = composeCaption({
@@ -33,4 +33,22 @@ test('the brand tag is always there, exactly once', () => {
 test('only a trailing row of tags is lifted out', () => {
   const caption = composeCaption({ caption: 'देखो #विज्ञान कितना अजीब है', hashtags: ['#जानवर'] }, '#factvizer');
   assert.match(caption, /^देखो #विज्ञान कितना अजीब है\n\n/);
+});
+
+// The second lost post: the model wrote its caption as one 193-character
+// paragraph, the length rule rejected all three attempts, and the day had no
+// post. The opening line is repaired now instead of refused.
+test('a long opening line is split at its first sentence end', () => {
+  const long = 'जानवरों की दुनिया में ऐसे कई अजीब तथ्य छिपे हैं जो आपको हैरान कर देंगे, और इनमें से ज़्यादातर आपने कभी सुने भी नहीं होंगे। आइए जानते हैं।';
+  const [hook, second] = reflowHook(long).split('\n');
+
+  assert.ok(hook.length <= 125, `hook is ${hook.length}`);
+  assert.match(hook, /।$/);
+  assert.equal(second, 'आइए जानते हैं।');
+  assert.equal(`${hook} ${second}`.replace(/\s+/g, ' '), long.replace(/\s+/g, ' '));
+});
+
+test('a short opening line is left exactly as written', () => {
+  const fine = 'क्या आप जानते हैं? 🐢\n\nबाक़ी बात.';
+  assert.equal(reflowHook(fine), fine);
 });
