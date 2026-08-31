@@ -78,7 +78,8 @@ export async function fetchHackerNews({ hours = 36, limit = 12, minPoints = 30 }
       site: domain(h.url),
       points: h.points,
       date: (h.created_at || '').slice(0, 10),
-      comments: h.num_comments,
+      at: Date.parse(h.created_at || 0),
+      from: 'Hacker News',
     }))
     .filter((s) => s.site)
     .sort((a, b) => b.points - a.points)
@@ -143,6 +144,7 @@ async function fetchGoogleNews({ query, hours = 36, limit = 12 }) {
   return parseRss(await res.text())
     .filter((s) => s.at >= cutoff)
     .filter((s) => !OFF_TOPIC.test(s.title))
+    .map((s) => ({ ...s, from: 'Google News' }))
     .sort((a, b) => b.at - a.at)
     .slice(0, limit);
 }
@@ -161,13 +163,13 @@ const fingerprint = (title) => String(title).toLowerCase()
  * papered over with whatever the model remembers.
  */
 export async function fetchStories({ hours = 36, limit = 12 } = {}) {
-  const settled = await Promise.allSettled([
+  const [...results] = await Promise.allSettled([
     ...QUERIES.map((query) => fetchGoogleNews({ query, hours })),
     fetchHackerNews({ hours }),
   ]);
 
   const seen = new Map();
-  for (const result of settled) {
+  for (const result of results) {
     if (result.status !== 'fulfilled') continue;
     for (const story of result.value) {
       const key = fingerprint(story.title);
@@ -178,7 +180,30 @@ export async function fetchStories({ hours = 36, limit = 12 } = {}) {
     }
   }
 
-  return [...seen.values()]
-    .sort((a, b) => (b.corroborated - a.corroborated) || ((b.points || 0) - (a.points || 0)) || ((b.at || 0) - (a.at || 0)))
-    .slice(0, limit);
+  const all = [...seen.values()];
+  const corroborated = all.filter((s) => s.corroborated);
+
+  // Interleave the two sources rather than sorting them together.
+  //
+  // Sorting by points looked right and buried Google News entirely: a Hacker
+  // News story carries a score and a news item does not, so every mainstream
+  // headline sank below every forum post and the run came back with the same
+  // engineering stories the second source was added to balance. Ranking across
+  // two scales that do not exist in both is not ranking, it is a coin toss with
+  // one side weighted.
+  const queue = {
+    'Google News': all.filter((s) => !s.corroborated && s.from === 'Google News').sort((a, b) => b.at - a.at),
+    'Hacker News': all.filter((s) => !s.corroborated && s.from === 'Hacker News').sort((a, b) => b.points - a.points),
+  };
+
+  const mixed = [];
+  while (mixed.length + corroborated.length < limit && (queue['Google News'].length || queue['Hacker News'].length)) {
+    // Mainstream first on each pass: it is what a reader means by "AI news".
+    for (const source of ['Google News', 'Hacker News']) {
+      const next = queue[source].shift();
+      if (next) mixed.push(next);
+    }
+  }
+
+  return [...corroborated, ...mixed].slice(0, limit);
 }

@@ -160,6 +160,13 @@ async function main() {
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
+      if (written.stories) {
+        // Which source actually fed the post. Invisible once, and that is how
+        // Google News contributed nothing for a whole run without anyone
+        // noticing.
+        const by = written.stories.reduce((acc, st) => ({ ...acc, [st.from]: (acc[st.from] || 0) + 1 }), {});
+        note(`stories: ${Object.entries(by).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+      }
       await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
     } catch (err) {

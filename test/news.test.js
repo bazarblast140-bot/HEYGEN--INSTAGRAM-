@@ -147,3 +147,29 @@ test('one source failing still yields stories', async () => {
     assert.equal(stories[0].site, 'a.com');
   } finally { globalThis.fetch = original; }
 });
+
+// The bug this replaced: sorting both sources by points buried Google News
+// completely, because only Hacker News items have a score.
+test('both sources appear, mainstream first', async () => {
+  const { fetchStories } = await import('../pipeline/src/carousel/news.js');
+  const original = globalThis.fetch;
+  const now = Date.now();
+
+  globalThis.fetch = async (input) => {
+    if (String(input).includes('news.google.com')) {
+      return { ok: true, text: async () => `<item><title>OpenAI opens an India office</title>
+        <link>https://news.google.com/a</link><pubDate>${new Date(now - 3600e3).toUTCString()}</pubDate>
+        <source url="https://reuters.com">Reuters</source></item>` };
+    }
+    return { ok: true, json: async () => ({ hits: [
+      { title: 'A kernel scheduler rewrite in Rust', url: 'https://lwn.net/a', points: 800, created_at: new Date(now - 7200e3).toISOString() },
+      { title: 'Another GPU benchmark writeup', url: 'https://b.com/b', points: 700, created_at: new Date(now - 7200e3).toISOString() },
+    ] }) };
+  };
+
+  try {
+    const stories = await fetchStories();
+    assert.equal(stories[0].from, 'Google News', 'mainstream news should lead');
+    assert.ok(stories.some((s) => s.from === 'Hacker News'), 'Hacker News should still be represented');
+  } finally { globalThis.fetch = original; }
+});
