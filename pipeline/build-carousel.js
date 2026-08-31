@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
 import { attachBackgrounds } from './src/render/backgrounds.js';
-import { fillGaps } from './src/render/pictures.js';
+import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
 import { slotFor } from './src/carousel/categories.js';
 
@@ -237,15 +237,19 @@ async function main() {
     note('--no-photos — generated gradient behind every slide');
   } else {
     console.log('Backgrounds');
-    const { spec: withPhotos, attached } = await attachBackgrounds(withFootnotes, {
+    // The account's own pictures first -- cover and follow card are ours, and
+    // a search must not get a vote on them: see pictures.js.
+    const { spec: withOurs, attached: ours } = await attachFixed(withFootnotes, { onNote: note });
+    const { spec: withPhotos, attached } = await attachBackgrounds(withOurs, {
       outDir: path.join(HERE, 'out', 'photos'),
       onNote: note,
     });
     // Only now, for whatever the search left as a gradient: see pictures.js.
     const { spec: withGivenPictures, filled } = await fillGaps(withPhotos, { onNote: note });
     ready = withGivenPictures;
-    console.log(`  ${attached + filled}/${spec.slides.length} slides carry a picture`
-      + (filled ? `  (${filled} given by hand)` : ''));
+    const given = ours + filled;
+    console.log(`  ${attached + given}/${spec.slides.length} slides carry a picture`
+      + (given ? `  (${given} of them yours)` : ''));
   }
 
   console.log('Rendering');

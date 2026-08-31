@@ -13,6 +13,13 @@
 //   pipeline/pictures/quantum-computer.jpg   matches "quantum computer chip"
 //   pipeline/pictures/default.jpg            last resort, any empty slide
 //
+// Three names are reserved and behave differently -- they are the account's own
+// pictures, not a stand-in for a search, so they run BEFORE the search and keep
+// their slide whatever Pexels would have found:
+//
+//   pipeline/pictures/cover.jpg    slide 1, every post
+//   pipeline/pictures/follow.jpg   the follow card, every post
+//
 // No key, no credits, no network. An empty folder means today's behaviour,
 // unchanged -- this can only ever add a picture where there was a gradient.
 
@@ -29,6 +36,10 @@ export const PICTURES_DIR = path.resolve(HERE, '..', '..', 'pictures');
 export const EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 const words = (s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+// Names that mean a role rather than a topic. Kept out of topic matching so
+// cover.jpg never lands on a slide about book covers.
+export const RESERVED = new Set(['cover', 'follow', 'default']);
 
 /** The topic words a filename claims: "quantum-computer.jpg" -> [quantum, computer]. */
 export function topicOf(filename) {
@@ -71,7 +82,7 @@ export function pictureFor(query, files, { skip = new Set() } = {}) {
   for (const file of files) {
     if (skip.has(file)) continue;
     const topic = topicOf(file);
-    if (!topic.length || topic.includes('default')) continue;
+    if (!topic.length || topic.some((w) => RESERVED.has(w))) continue;
     if (!topic.every((w) => asked.has(w))) continue;
     // More words matched is a more specific picture, so it wins.
     if (!best || topic.length > best.score) best = { file, score: topic.length };
@@ -87,6 +98,45 @@ export function pictureFor(query, files, { skip = new Set() } = {}) {
  * twice in one carousel -- the same picture on two slides looks like a bug, and
  * a gradient is the better of the two.
  */
+/**
+ * The account's own pictures, on the slides they belong to.
+ *
+ * Runs before the search, not after it: these are not a stand-in for a photo
+ * that could not be found, they are the picture that slide is supposed to have.
+ * attachBackgrounds skips any slide that already carries one, so setting them
+ * here is the whole of the override.
+ *
+ * The follow card is found by its `cta` flag rather than by being last -- a
+ * generated carousel is free to end wherever it likes.
+ */
+export async function attachFixed(spec, { dir = PICTURES_DIR, onNote } = {}) {
+  const slides = spec.slides || [];
+  if (!slides.length) return { spec, attached: 0 };
+
+  const files = await listPictures(dir);
+  const named = (role) => files.find((f) => topicOf(f).join('-') === role) ?? null;
+
+  const cover = named('cover');
+  const follow = named('follow');
+  if (!cover && !follow) return { spec, attached: 0 };
+
+  const ctaIndex = slides.findIndex((slide) => slide.cta);
+  const followIndex = ctaIndex === -1 ? slides.length - 1 : ctaIndex;
+
+  let attached = 0;
+  const out = slides.map((slide, i) => {
+    if (slide.background) return slide;
+    const picked = (i === 0 ? cover : null) ?? (i === followIndex ? follow : null);
+    if (!picked) return slide;
+
+    attached += 1;
+    onNote?.(`slide ${i + 1}: ${path.basename(picked)} (yours — not searched)`);
+    return { ...slide, background: picked };
+  });
+
+  return { spec: { ...spec, slides: out }, attached };
+}
+
 export async function fillGaps(spec, { dir = PICTURES_DIR, onNote } = {}) {
   const slides = spec.slides || [];
   const gaps = slides.filter((s) => !s.background);

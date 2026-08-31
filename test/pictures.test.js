@@ -94,3 +94,57 @@ test('an empty folder leaves the spec exactly as it was', async () => {
   assert.equal(filled, 0);
   assert.deepEqual(after, before);
 });
+
+// --- the account's own pictures, which are not a fallback ---
+
+import { attachFixed } from '../pipeline/src/render/pictures.js';
+
+const sixSlides = () => ({
+  slides: [
+    { query: 'milky way galaxy' },
+    { query: 'venus planet globe' },
+    { query: 'jupiter planet' },
+    { query: 'hubble space telescope', cta: true },
+  ],
+});
+
+test('cover goes on slide 1 and follow on the cta card', async () => {
+  const dir = await tmpdir({ 'cover.jpg': 'x', 'follow.jpg': 'y' });
+  const { spec: after, attached } = await attachFixed(sixSlides(), { dir });
+  assert.equal(attached, 2);
+  assert.equal(base(after.slides[0].background), 'cover.jpg');
+  assert.equal(after.slides[1].background, undefined);
+  assert.equal(after.slides[2].background, undefined);
+  assert.equal(base(after.slides[3].background), 'follow.jpg');
+});
+
+// The follow card is found by its flag, not by being last -- a generated
+// carousel is free to put it anywhere.
+test('the follow card is found by its cta flag', async () => {
+  const dir = await tmpdir({ 'follow.jpg': 'y' });
+  const spec = { slides: [{ query: 'a' }, { query: 'b', cta: true }, { query: 'c' }] };
+  const { spec: after } = await attachFixed(spec, { dir });
+  assert.equal(base(after.slides[1].background), 'follow.jpg');
+  assert.equal(after.slides[2].background, undefined);
+});
+
+test('with no cta flag the last slide is the follow card', async () => {
+  const dir = await tmpdir({ 'follow.jpg': 'y' });
+  const spec = { slides: [{ query: 'a' }, { query: 'b' }] };
+  const { spec: after } = await attachFixed(spec, { dir });
+  assert.equal(base(after.slides[1].background), 'follow.jpg');
+});
+
+test('no cover and no follow leaves the spec untouched', async () => {
+  const before = sixSlides();
+  const { spec: after, attached } = await attachFixed(before, { dir: await tmpdir({ 'venus.jpg': 'x' }) });
+  assert.equal(attached, 0);
+  assert.deepEqual(after, before);
+});
+
+// cover.jpg on a slide about book covers would be the embarrassing failure.
+test('reserved names never match a topic', async () => {
+  const files = ['/p/cover.jpg', '/p/follow.jpg', '/p/default.jpg'];
+  assert.equal(pictureFor('book cover design', files), null);
+  assert.equal(pictureFor('follow the money', files), null);
+});

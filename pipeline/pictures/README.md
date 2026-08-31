@@ -6,6 +6,19 @@ A slide that already found a photo keeps it.
 
 No API key, no credits, no network: the file is read off disk at build time.
 
+## Reserved names — the account's own pictures
+
+Three filenames mean a role, not a topic. These are **ours**, so they run before
+the search and keep their slide whatever Pexels would have found:
+
+| File | Slide |
+| --- | --- |
+| `cover.jpg` | slide 1, every post |
+| `follow.jpg` | the follow card (the slide flagged `cta`), every post |
+| `default.jpg` | a last resort for any slide still empty after the search |
+
+To change the cover or the follow card, replace the file. Nothing else moves.
+
 ## Naming — by topic
 
 Name the file after the topic, using the words that appear in the slide's search
