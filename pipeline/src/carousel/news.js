@@ -188,7 +188,7 @@ export async function fetchHackerNews({ hours = 36, limit = 8, minPoints = 30 } 
 }
 
 /** Same story, differently worded, from two places. */
-const fingerprint = (title) => String(title).toLowerCase()
+export const fingerprint = (title) => String(title).toLowerCase()
   .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
   .filter((w) => w.length > 3).sort().slice(0, 8).join(' ');
 
@@ -207,7 +207,15 @@ const fingerprint = (title) => String(title).toLowerCase()
  * a missed post, which generateNewsCarousel reports rather than papering over
  * with whatever the model remembers.
  */
-export async function fetchStories({ hours = 36, limit = 12, onNote } = {}) {
+/**
+ * What identifies a story across days, so it is not posted twice.
+ *
+ * The headline, not the link: the same piece reaches us as its publisher's URL
+ * and again as a Google News redirect, and those two strings share nothing.
+ */
+export const storyKey = (story) => fingerprint(story.title);
+
+export async function fetchStories({ hours = 36, limit = 12, onNote, skip = new Set() } = {}) {
   const jobs = [
     ...FEEDS.map((feed) => ({ label: feed.name, run: () => fetchFeed({ ...feed, hours }) })),
     ...QUERIES.map((query) => ({ label: `Google News "${query}"`, run: () => fetchGoogleNews({ query, hours }) })),
@@ -231,6 +239,11 @@ export async function fetchStories({ hours = 36, limit = 12, onNote } = {}) {
     if (r.status !== 'fulfilled') continue;
     for (const story of r.value) {
       const key = fingerprint(story.title);
+      // Already posted on an earlier day. The 36-hour window overlaps every
+      // run, so without this the top story of the morning is still the top
+      // story of the next one -- which is how the same Steam leak and the same
+      // California Linux exemption went out in two posts on one day.
+      if (skip.has(key)) continue;
       const already = seen.get(key);
       if (already) already.corroborated = true;
       else seen.set(key, { ...story, corroborated: false });

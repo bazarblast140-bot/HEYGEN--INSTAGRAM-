@@ -19,9 +19,9 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 import { resolveProvider, callOpenAICompatible, VENDORS } from '../script/providers.js';
-import { readHistory, findRepeat, recordTopic } from '../script/topics.js';
+import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } from '../script/topics.js';
 import { categoryFor, slotFor, SLIDES } from './categories.js';
-import { fetchStories } from './news.js';
+import { fetchStories, storyKey } from './news.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
@@ -165,9 +165,24 @@ export async function generateNewsCarousel({
   const chosenModel = model || provider.model;
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
-  const found = stories || await fetchStories({ onNote });
-  if (found.length < 3) {
-    throw new Error(`only ${found.length} usable stories today — not enough for a carousel`);
+  // Stories already posted are not offered again. Without this the 36-hour
+  // window overlaps every run and the top story stays the top story.
+  const alreadyPosted = await readUsedStories(LEDGER);
+  let found = stories || await fetchStories({ onNote, skip: alreadyPosted });
+
+  // Seven fact slides need seven stories. This used to demand three, which was
+  // right when a post was six slides and is now an invitation to invent four.
+  const needed = SLIDES - 2;
+
+  // A quiet news day must not cost the post. Preferring new stories is worth a
+  // lot; refusing to post without them is worth less than posting.
+  if (!stories && found.length < needed) {
+    onNote?.(`only ${found.length} unposted stories — allowing already-posted ones to fill ${needed}`);
+    found = await fetchStories({ onNote });
+  }
+
+  if (found.length < needed) {
+    throw new Error(`only ${found.length} usable stories today — ${needed} are needed for a carousel`);
   }
 
   const sites = new Set(found.map((s) => s.site.toLowerCase()));
@@ -191,6 +206,10 @@ export async function generateNewsCarousel({
       lastProblems = [...validateShape(output, recentTopics), ...checkSources(output, sites)];
       if (!lastProblems.length) {
         await recordTopic({ topic: output.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
+        // Every story offered, not only the ones that reached a slide: the ones
+        // the model passed over were the weaker half of today's news, and
+        // offering them again tomorrow is how a repeat gets a second chance.
+        await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
         return { spec: output, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found };
       }
     } catch (err) {

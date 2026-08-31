@@ -20,6 +20,13 @@ export const LEDGER = path.resolve(HERE, '..', '..', 'topic-history.json');
 // genuinely recurring subject (a budget, a rate decision) can come back later.
 export const REMEMBER = 20;
 
+// Stories are remembered separately from topics, and far more of them: one post
+// consumes a dozen, and a topic line ("आज की टेक ख़बरें") says nothing about
+// which stories were inside it. Five days is longer than any feed's 36-hour
+// window, so a story cannot come back round.
+export const REMEMBER_STORIES = 400;
+export const STORY_DAYS = 5;
+
 /**
  * Reduce a topic to what makes it the same subject, not the same sentence.
  *
@@ -88,11 +95,64 @@ export async function readHistory(file = LEDGER) {
 
 export async function recordTopic({ topic, angle, date, file = LEDGER }) {
   if (!topic?.trim()) return;
-  const entries = await readHistory(file);
+
+  // Read the whole ledger, not just the entries. Writing back only `entries`
+  // would delete the story list this file also carries, and the deletion would
+  // be silent -- the next run would simply find nothing remembered.
+  let parsed = {};
+  try {
+    parsed = JSON.parse(await fs.readFile(file, 'utf8'));
+  } catch { /* first run */ }
+
+  const entries = Array.isArray(parsed.entries) ? [...parsed.entries] : [];
   entries.push({ date, topic: topic.trim(), angle: (angle || '').trim() });
+
   await fs.writeFile(
     file,
-    `${JSON.stringify({ entries: entries.slice(-REMEMBER) }, null, 2)}\n`,
+    `${JSON.stringify({ ...parsed, entries: entries.slice(-REMEMBER) }, null, 2)}\n`,
+  );
+}
+
+/** Story keys posted within the last `days` days. */
+export async function readUsedStories(file = LEDGER, { days = STORY_DAYS, now = new Date() } = {}) {
+  let used = [];
+  try {
+    const parsed = JSON.parse(await fs.readFile(file, 'utf8'));
+    used = Array.isArray(parsed?.stories) ? parsed.stories : [];
+  } catch {
+    return new Set();
+  }
+
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return new Set(
+    used
+      .filter((u) => {
+        const when = new Date(String(u?.date || '').slice(0, 10));
+        return Number.isNaN(when.getTime()) ? true : when >= cutoff;
+      })
+      .map((u) => u?.key)
+      .filter(Boolean),
+  );
+}
+
+/** Remember the stories a post was built from, alongside its topic. */
+export async function recordStories({ keys = [], date, file = LEDGER }) {
+  const fresh = [...new Set(keys.filter(Boolean))];
+  if (!fresh.length) return;
+
+  let parsed = { entries: [] };
+  try {
+    parsed = JSON.parse(await fs.readFile(file, 'utf8'));
+  } catch { /* first run */ }
+
+  const stories = [
+    ...(Array.isArray(parsed.stories) ? parsed.stories : []),
+    ...fresh.map((key) => ({ date, key })),
+  ];
+
+  await fs.writeFile(
+    file,
+    `${JSON.stringify({ ...parsed, stories: stories.slice(-REMEMBER_STORIES) }, null, 2)}\n`,
   );
 }
 
