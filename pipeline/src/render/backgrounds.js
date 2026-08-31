@@ -55,6 +55,48 @@ const SPACE = /\b(planet|mercury|venus|earth|mars|jupiter|saturn|uranus|neptune|
  * So these words push a candidate down and no further. A photo that is ONLY
  * these words still loses, because it has nothing else to score with.
  */
+// A brand name is not a photographable thing, and a stock library answers it
+// with whatever the word means literally. "linux penguin" returns a penguin --
+// which reached the feed twice on a Linux story. The prompt already forbids
+// company names in queries; the prompt is a request, and this is the rule.
+//
+// Unambiguous names are always brands. The second list is words that are a
+// brand only in a technology sentence: an animals carousel may legitimately ask
+// for an apple, a python or a swift, and must keep them.
+const BRANDS = /\b(linux|ubuntu|debian|fedora|centos|android|microsoft|openai|chatgpt|anthropic|deepseek|nvidia|qualcomm|spacex|samsung|huawei|xiaomi|oneplus|oppo|vivo|realme|lenovo|asus|acer|nintendo|playstation|xbox|netflix|spotify|tiktok|whatsapp|facebook|instagram|twitter|youtube|github|gitlab|docker|kubernetes|javascript|typescript|golang|mozilla|firefox|adobe|autodesk|salesforce|infosys|wipro|paytm|phonepe|flipkart|zomato|swiggy|reliance|airtel|nasdaq|waymo|deepmind|midjourney|perplexity)\b/i;
+
+const AMBIGUOUS = /\b(apple|python|swift|ruby|steam|meta|gemini|alexa|siri|copilot|edge|chrome|safari|oracle|arm|java|rust|go|windows|tesla|amazon|google|intel|ibm|sony|valve|epic|jio|tata|uber|ola)\b/i;
+const TECH_CONTEXT = /\b(software|hardware|app|apps|os|kernel|code|coding|developer|chip|chips|semiconductor|ai|model|models|chatbot|robot|phone|smartphone|laptop|computer|server|servers|cloud|data|dataset|browser|platform|startup|company|gaming|console|update|release|launch|security|privacy|law|lawsuit|ban)\b/i;
+
+// What a technology slide gets instead: real scenes, none of them a logo.
+export const NEUTRAL = [
+  'data center servers',
+  'computer chip macro',
+  'server room cables',
+  'code on screen',
+  'circuit board closeup',
+  'fibre optic cables',
+  'motherboard detail',
+  'network switch ports',
+];
+
+/** True when a query names a product rather than a thing that can be photographed. */
+export function isBranded(query) {
+  const q = String(query || '');
+  if (BRANDS.test(q)) return true;
+  return AMBIGUOUS.test(q) && TECH_CONTEXT.test(q);
+}
+
+/**
+ * A photographable query for a slide whose own query named a brand.
+ *
+ * The whole query is replaced, not just the brand word: dropping "linux" from
+ * "linux penguin" leaves "penguin", and the penguin was the problem.
+ */
+export function deBrand(query, index = 0) {
+  return isBranded(query) ? NEUTRAL[index % NEUTRAL.length] : query;
+}
+
 const FILLER = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|texture|pattern|gradient|copy\s?space|mockup)\b/i;
 
 /**
@@ -208,30 +250,35 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
     if (slide.background || !slide.query) { out.push(slide); continue; }
     const n = i + 1;
 
+    // A branded query is replaced before either library sees it.
+    const asked = slide.query;
+    const query = deBrand(asked, i);
+    if (query !== asked) note(`slide ${n}: "${asked}" names a product — searching "${query}" instead`);
+
     try {
       let chosen = null;
       let source = null;
 
-      if (SPACE.test(slide.query)) {
+      if (SPACE.test(query)) {
         try {
-          chosen = bestPhoto(await searchNasa({ query: slide.query }), { query: slide.query, used });
+          chosen = bestPhoto(await searchNasa({ query }), { query, used });
           if (chosen) {
             chosen = { ...chosen, src: await nasaAsset(chosen.nasaId) };
             source = 'NASA';
           }
         } catch (err) {
-          note(`NASA had nothing for "${slide.query}" (${String(err.message).slice(0, 60)})`);
+          note(`NASA had nothing for "${query}" (${String(err.message).slice(0, 60)})`);
         }
       }
 
       if (!chosen && key) {
-        chosen = bestPhoto(await searchPexels({ query: slide.query, key }), { query: slide.query, used });
+        chosen = bestPhoto(await searchPexels({ query, key }), { query, used });
         source = 'Pexels';
       }
 
       if (!chosen) {
         note(key
-          ? `nothing usable for "${slide.query}" — gradient on slide ${n}`
+          ? `nothing usable for "${query}" — gradient on slide ${n}`
           : 'no PEXELS_API_KEY — gradient behind every non-space slide');
         out.push(slide);
         continue;
