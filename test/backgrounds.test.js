@@ -119,3 +119,15 @@ test('a drawing of the subject loses to a photograph of it', () => {
 
   assert.equal(chosen.id, 2);
 });
+
+// From the first live news carousel: the follow card carried a photograph of a
+// stranger's real Instagram profile, handle and follower count included.
+test('somebody else\'s profile is not a background', async () => {
+  const { bestPhoto } = await import('../pipeline/src/render/backgrounds.js');
+  const chosen = bestPhoto([
+    { id: 1, alt: 'Smartphone displaying a social media profile with followers' },
+    { id: 2, alt: 'Newsroom desk with printed newspapers' },
+  ], { query: 'news desk', used: new Set() });
+
+  assert.equal(chosen.id, 2);
+});

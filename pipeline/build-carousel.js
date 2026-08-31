@@ -143,6 +143,10 @@ async function main() {
   // Without --generate the checked-in spec is a fixture, and a fixture posted
   // every morning is one post repeated forever. Generation is what makes this a
   // daily show; the spec on disk stays as the thing to fall back to.
+  // Which post this is, whether or not generation ran -- the background choice
+  // depends on it.
+  let slotUsed = args.slot || slotFor(new Date());
+
   let spec;
   if (args.generate) {
     console.log('Writing today\'s carousel');
@@ -151,6 +155,7 @@ async function main() {
     // a category picked from a pool. Routing on the slot keeps that difference
     // in one place.
     const slot = args.slot || slotFor(new Date());
+    slotUsed = slot;
     const write = slot === 'midday' ? generateNewsCarousel : generateCarousel;
 
     try {
@@ -218,9 +223,23 @@ async function main() {
     })),
   };
 
+  // The news post gets the gradient, not a stock photo.
+  //
+  // Three live builds, three bad photo sets: a penguin for a story about Linux
+  // law (twice), a robot arm holding a flower for enterprise software, and a
+  // stranger's actual Instagram profile on the follow card. Tech news has no
+  // stock photography -- the pictures exist, but they illustrate the word, not
+  // the story, and a wrong picture on a news slide reads as carelessness.
+  //
+  // The gradient is designed, on-brand and always legible. --photos overrides
+  // this for a day when the subject is something a camera can actually show.
+  const skipPhotos = args['no-photos'] || (slotUsed === 'midday' && !args.photos);
+
   let ready = withFootnotes;
-  if (args['no-photos']) {
-    note('--no-photos — generated gradient behind every slide');
+  if (skipPhotos) {
+    note(slotUsed === 'midday' && !args['no-photos']
+      ? 'news post — brand gradient behind every slide (--photos to override)'
+      : '--no-photos — generated gradient behind every slide');
   } else {
     console.log('Backgrounds');
     const { spec: withPhotos, attached } = await attachBackgrounds(withFootnotes, {
