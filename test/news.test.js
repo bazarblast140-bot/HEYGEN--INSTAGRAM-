@@ -83,3 +83,67 @@ test('a mascot is not the technology', async () => {
 
   assert.equal(chosen.id, 2);
 });
+
+// Google News is RSS, and the fields a slide needs are not where you would
+// first look: the link is a Google redirect, so the publisher has to come from
+// the <source> element.
+test('an RSS item yields the publisher, not news.google.com', async () => {
+  const { parseRss } = await import('../pipeline/src/carousel/news.js');
+  const [item] = parseRss(`<item>
+    <title>OpenAI ships a new model - Reuters</title>
+    <link>https://news.google.com/rss/articles/ABC</link>
+    <pubDate>Sun, 31 Aug 2026 04:00:00 GMT</pubDate>
+    <source url="https://www.reuters.com">Reuters</source>
+  </item>`);
+
+  assert.equal(item.site, 'Reuters');
+  assert.equal(item.title, 'OpenAI ships a new model');   // the " - Reuters" tail is dropped
+  assert.equal(item.date, '2026-08-31');
+});
+
+test('a story both sources carry is ranked first', async () => {
+  const { fetchStories } = await import('../pipeline/src/carousel/news.js');
+  const original = globalThis.fetch;
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('news.google.com')) {
+      return { ok: true, text: async () => `<item>
+        <title>Nvidia unveils a new AI chip</title><link>https://news.google.com/x</link>
+        <pubDate>${new Date().toUTCString()}</pubDate><source url="https://reuters.com">Reuters</source>
+      </item><item>
+        <title>A quieter story about batteries</title><link>https://news.google.com/y</link>
+        <pubDate>${new Date().toUTCString()}</pubDate><source url="https://bbc.com">BBC</source>
+      </item>` };
+    }
+    return { ok: true, json: async () => ({ hits: [
+      { title: 'Nvidia unveils new AI chip for datacenters', url: 'https://anandtech.com/z', points: 500, created_at: new Date().toISOString() },
+    ] }) };
+  };
+
+  try {
+    const stories = await fetchStories();
+    assert.equal(stories[0].title, 'Nvidia unveils a new AI chip');
+    assert.equal(stories[0].corroborated, true);
+  } finally { globalThis.fetch = original; }
+});
+
+// One source going down is a thinner list. Both going down is a missed post,
+// and that has to be said rather than filled in from memory.
+test('one source failing still yields stories', async () => {
+  const { fetchStories } = await import('../pipeline/src/carousel/news.js');
+  const original = globalThis.fetch;
+
+  globalThis.fetch = async (input) => {
+    if (String(input).includes('news.google.com')) throw new Error('down');
+    return { ok: true, json: async () => ({ hits: [
+      { title: 'An open-source LLM release', url: 'https://a.com/x', points: 200, created_at: new Date().toISOString() },
+    ] }) };
+  };
+
+  try {
+    const stories = await fetchStories();
+    assert.equal(stories.length, 1);
+    assert.equal(stories[0].site, 'a.com');
+  } finally { globalThis.fetch = original; }
+});

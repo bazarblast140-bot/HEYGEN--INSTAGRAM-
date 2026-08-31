@@ -11,12 +11,31 @@
 // real dates, and the model's only job is to explain them in Hindi. It cannot
 // invent a story it was never given.
 //
-// Hacker News' search API is the source: free, no key, no account, and it is
-// where this kind of story surfaces first. Points are a crude quality signal
-// but a real one -- a story a few thousand engineers upvoted today is more
-// likely to matter than the top result for a keyword.
+// Two sources, because one was the wrong shape.
+//
+//   Google News, India edition. Free, no key, and it is where the news a Hindi
+//   reader would call "AI news" actually is -- OpenAI, Google, Nvidia, Indian
+//   tech policy. Each item carries its publisher's own name, which is what a
+//   slide cites.
+//
+//   Hacker News. Free, no key, and where a story often surfaces first, with
+//   points as a crude but real quality signal. On its own it is too narrow for
+//   this account: the first live build led with Debian's AI policy, which is a
+//   genuine story and not one anybody outside engineering is waiting for.
+//
+// Merged, de-duplicated, and a story both of them carry ranks highest -- two
+// unrelated crowds finding the same thing interesting is the strongest signal
+// available for free.
 
-const API = 'https://hn.algolia.com/api/v1/search';
+const HN = 'https://hn.algolia.com/api/v1/search';
+const GOOGLE = 'https://news.google.com/rss/search';
+
+/** What the midday post is about, asked of Google News in its own words. */
+export const QUERIES = [
+  'artificial intelligence',
+  'AI technology India',
+  'technology innovation',
+];
 
 /**
  * Words that make a story about technology rather than about a company's share
@@ -39,9 +58,9 @@ const domain = (url) => {
  * examined one, and a post built on it can be repeating a claim that was
  * corrected two hours later.
  */
-export async function fetchStories({ hours = 36, limit = 12, minPoints = 30 } = {}) {
+export async function fetchHackerNews({ hours = 36, limit = 12, minPoints = 30 } = {}) {
   const since = Math.floor(Date.now() / 1000) - hours * 3600;
-  const url = new URL(API);
+  const url = new URL(HN);
   url.searchParams.set('tags', 'story');
   url.searchParams.set('numericFilters', `created_at_i>${since},points>${minPoints}`);
   url.searchParams.set('hitsPerPage', '100');
@@ -67,3 +86,99 @@ export async function fetchStories({ hours = 36, limit = 12, minPoints = 30 } = 
 }
 
 export { ON_TOPIC, OFF_TOPIC };
+
+
+/**
+ * Google News gives RSS, and RSS is XML, and this repository has no XML parser.
+ *
+ * It also does not need one. The feed is machine-generated and flat: a list of
+ * <item> blocks with four fields each. Pulling those out with a regex would be
+ * a bad idea against arbitrary XML and is a fine one against a feed whose shape
+ * is fixed -- and it keeps a dependency out of a pipeline that runs unattended.
+ *
+ * The link is a Google redirect, so the publisher must come from the <source>
+ * element. That name -- "Reuters", "The Verge" -- is what a slide cites, and it
+ * is more use to a reader than news.google.com would be.
+ */
+export function parseRss(xml) {
+  const items = String(xml).match(/<item>[\s\S]*?<\/item>/g) || [];
+  const field = (block, tag) => {
+    const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`));
+    if (!m) return null;
+    return m[1]
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .trim();
+  };
+
+  return items.map((block) => {
+    const site = field(block, 'source');
+    // Google appends " - Publisher" to every headline. The publisher is already
+    // a field of its own, and on a slide the repetition is just noise.
+    const title = (field(block, 'title') || '').replace(new RegExp(`\\s+[-–|]\\s*${site ? site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '$^'}\\s*$`), '');
+    const published = field(block, 'pubDate');
+    return {
+      title,
+      url: field(block, 'link'),
+      site,
+      date: published ? new Date(published).toISOString().slice(0, 10) : null,
+      at: published ? Date.parse(published) : 0,
+    };
+  }).filter((s) => s.title && s.site);
+}
+
+async function fetchGoogleNews({ query, hours = 36, limit = 12 }) {
+  const url = new URL(GOOGLE);
+  url.searchParams.set('q', `${query} when:2d`);
+  url.searchParams.set('hl', 'en-IN');
+  url.searchParams.set('gl', 'IN');
+  url.searchParams.set('ceid', 'IN:en');
+
+  const res = await fetch(url, { headers: { 'User-Agent': 'factvizer-carousel/1.0' } });
+  if (!res.ok) throw new Error(`Google News ${res.status}`);
+
+  const cutoff = Date.now() - hours * 3600 * 1000;
+  return parseRss(await res.text())
+    .filter((s) => s.at >= cutoff)
+    .filter((s) => !OFF_TOPIC.test(s.title))
+    .sort((a, b) => b.at - a.at)
+    .slice(0, limit);
+}
+
+/** Same story, differently worded, from two places. */
+const fingerprint = (title) => String(title).toLowerCase()
+  .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+  .filter((w) => w.length > 3).sort().slice(0, 8).join(' ');
+
+/**
+ * Today's stories, mainstream first, with anything both sources carry on top.
+ *
+ * Never throws on one source failing: Google News is not a documented API and
+ * Hacker News is a small volunteer service. Losing one is a thinner list, not a
+ * missed post -- losing both is, and that is reported honestly rather than
+ * papered over with whatever the model remembers.
+ */
+export async function fetchStories({ hours = 36, limit = 12 } = {}) {
+  const settled = await Promise.allSettled([
+    ...QUERIES.map((query) => fetchGoogleNews({ query, hours })),
+    fetchHackerNews({ hours }),
+  ]);
+
+  const seen = new Map();
+  for (const result of settled) {
+    if (result.status !== 'fulfilled') continue;
+    for (const story of result.value) {
+      const key = fingerprint(story.title);
+      const already = seen.get(key);
+      // A story both crowds carry is the one worth leading with.
+      if (already) already.corroborated = true;
+      else seen.set(key, { ...story, corroborated: false });
+    }
+  }
+
+  return [...seen.values()]
+    .sort((a, b) => (b.corroborated - a.corroborated) || ((b.points || 0) - (a.points || 0)) || ((b.at || 0) - (a.at || 0)))
+    .slice(0, limit);
+}

@@ -23,7 +23,13 @@ export const SYSTEM = `तुम "FACTVIZER" के लिए रोज़ द�
 
 export function buildUserPrompt({ stories, date, recentTopics = [] }) {
   const list = stories
-    .map((s, i) => `${i + 1}. ${s.title}\n   स्रोत: ${s.site}  ·  तारीख़: ${s.date}  ·  ${s.points} points`)
+    .map((s, i) => {
+      const marks = [
+        s.corroborated ? 'दो स्रोतों में' : null,
+        s.points ? `${s.points} points` : null,
+      ].filter(Boolean).join('  ·  ');
+      return `${i + 1}. ${s.title}\n   स्रोत: ${s.site}  ·  तारीख़: ${s.date}${marks ? `  ·  ${marks}` : ''}`;
+    })
     .join('\n');
 
   const alreadyCovered = recentTopics.length
@@ -39,6 +45,9 @@ ${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}
 
 नीचे आज की असली ख़बरें हैं. इन्हीं में से 3 से 4 चुनो — जो सबसे ज़्यादा मायने
 रखती हैं, जिन्हें आम पाठक को समझाया जा सके. बाक़ी छोड़ दो.
+
+जिन पर "दो स्रोतों में" लिखा है उन्हें पहले देखो — वो दो अलग जगहों से आयी हैं.
+कोई ख़बर बहुत तकनीकी हो और आम पाठक के काम की न हो तो छोड़ दो, चाहे ऊपर हो.
 </task>
 
 <stories>
