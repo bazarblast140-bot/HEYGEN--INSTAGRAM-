@@ -46,7 +46,11 @@ export const STRIDE = 5;
  */
 export const SLOT_OFFSET = 10;
 
-/** Morning post or evening post. The cron fires at 06:00 and 17:00 IST. */
+/**
+ * The two slots this rotation covers. The midday post is deliberately NOT here:
+ * it is built from fetched news rather than chosen from a category pool, so it
+ * has no place in the walk and must not consume one of its steps.
+ */
 export const SLOTS = ['morning', 'evening'];
 
 /**
@@ -76,11 +80,14 @@ export function dayNumber(date = new Date()) {
  * A scheduled run knows its own cron only as a time, and a hand-started run
  * knows nothing at all, so guessing wrong would be silent. IST is UTC+5:30: the
  * 06:00 post fires at 00:30 UTC and the 17:00 post at 11:30 UTC, and any hour
- * before 06:00 UTC is unambiguously the morning one.
+ * before 06:00 UTC is unambiguously the morning one, and the midday post sits
+ * in the wide gap between them.
  */
 export function slotFor(date = new Date()) {
   const hour = typeof date === 'string' ? 0 : date.getUTCHours();
-  return hour < 6 ? 'morning' : 'evening';
+  if (hour < 6) return 'morning';      // 06:07 IST fires at 00:37 UTC
+  if (hour < 11) return 'midday';      // 13:07 IST fires at 07:37 UTC
+  return 'evening';                    // 17:07 IST fires at 11:37 UTC
 }
 
 export function categoryFor(date = new Date(), slot = 'morning') {

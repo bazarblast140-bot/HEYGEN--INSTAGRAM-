@@ -22,7 +22,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
 import { attachBackgrounds } from './src/render/backgrounds.js';
-import { generateCarousel } from './src/carousel/generate.js';
+import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
+import { slotFor } from './src/carousel/categories.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -145,9 +146,16 @@ async function main() {
   let spec;
   if (args.generate) {
     console.log('Writing today\'s carousel');
+    // The midday post is a different thing wearing the same clothes: same six
+    // slides, same brand, but built on stories fetched an hour ago rather than
+    // a category picked from a pool. Routing on the slot keeps that difference
+    // in one place.
+    const slot = args.slot || slotFor(new Date());
+    const write = slot === 'midday' ? generateNewsCarousel : generateCarousel;
+
     try {
-      const written = await generateCarousel({
-        ...(args.slot ? { slot: args.slot } : {}),
+      const written = await write({
+        ...(slot === 'midday' ? {} : { slot }),
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };

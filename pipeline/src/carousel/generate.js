@@ -21,6 +21,8 @@ import { z } from 'zod';
 import { resolveProvider, callOpenAICompatible, VENDORS } from '../script/providers.js';
 import { readHistory, findRepeat, recordTopic } from '../script/topics.js';
 import { categoryFor, slotFor } from './categories.js';
+import { fetchStories } from './news.js';
+import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -137,4 +139,79 @@ export async function generateCarousel({
   }
 
   throw new Error(`Carousel spec still invalid after 3 attempts: ${lastProblems.join('; ')}`);
+}
+
+
+/**
+ * The midday technology post, built on stories fetched today.
+ *
+ * Same provider, same retry loop, same ledger. What is different is where the
+ * facts come from and one extra check: every source a slide names must be a
+ * site that appeared in the fetched list. That check is the whole defence
+ * against the failure this post exists to avoid -- a model filling a gap with a
+ * remembered headline. The instruction not to invent is a request; a rejected
+ * spec is a rule.
+ */
+export async function generateNewsCarousel({
+  date = new Date().toISOString().slice(0, 10),
+  model,
+  onAttempt,
+  stories,
+} = {}) {
+  const provider = resolveProvider();
+  if (!provider) throw new Error('No script model configured.');
+
+  const chosenModel = model || provider.model;
+  if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
+
+  const found = stories || await fetchStories();
+  if (found.length < 3) {
+    throw new Error(`only ${found.length} usable stories today — not enough for a carousel`);
+  }
+
+  const sites = new Set(found.map((s) => s.site.toLowerCase()));
+  const recentTopics = await readHistory(LEDGER);
+
+  let lastProblems = [];
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let userPrompt = buildNewsPrompt({ stories: found, date, recentTopics });
+    if (lastProblems.length) {
+      userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.`;
+    }
+
+    onAttempt?.(attempt, `${provider.name}/${chosenModel}`, 'technology');
+
+    try {
+      const { output, model: used } = await callOpenAICompatible({
+        provider: { ...provider, model: chosenModel },
+        system: NEWS_SYSTEM, user: userPrompt, schema: CarouselSpec,
+      });
+
+      lastProblems = [...validateShape(output, recentTopics), ...checkSources(output, sites)];
+      if (!lastProblems.length) {
+        await recordTopic({ topic: output.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
+        return { spec: output, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found };
+      }
+    } catch (err) {
+      if (!err.schemaIssues || attempt === 3) throw err;
+      lastProblems = err.schemaIssues;
+    }
+  }
+
+  throw new Error(`News carousel still invalid after 3 attempts: ${lastProblems.join('; ')}`);
+}
+
+/** Every cited site must be one that was actually handed to the model. */
+export function checkSources(spec, sites) {
+  const problems = [];
+  (spec.slides || []).forEach((slide, i) => {
+    if (slide.band === 'center' || slide.cta) return;
+    const cited = String(slide.source || '').toLowerCase();
+    if (!cited) return;                       // validateShape already says so
+    const known = [...sites].some((site) => cited.includes(site) || site.includes(cited.replace(/\s+/g, '')));
+    if (!known) {
+      problems.push(`slide ${i + 1} cites "${slide.source}", which is not one of today's stories — use a site from the list`);
+    }
+  });
+  return problems;
 }

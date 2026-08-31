@@ -4,7 +4,12 @@ name: Build carousel
 # new feature; sharing a workflow would mean a change here can break the post
 # that already goes out.
 #
-# Two posts a day, morning and evening IST. Actions cron is UTC, IST is UTC+5:30.
+# Three posts a day IST. Actions cron is UTC, IST is UTC+5:30.
+#
+# Morning and evening are fact carousels, picked from the category rotation.
+# Midday is technology and AI, and it is built differently on purpose: the
+# stories are FETCHED, because a language model asked for today's news writes
+# something fluent and either months old or invented. See src/carousel/news.js.
 #
 # A scheduled run PUBLISHES. That is the point of it, and it is also the reason
 # every guard in this pipeline exists: an unsourced slide is rejected, a repeated
@@ -21,9 +26,11 @@ name: Build carousel
 
 on:
   schedule:
-    - cron: '37 0 * * *'     # 06:07 IST
+    - cron: '37 0 * * *'     # 06:07 IST -- a fact carousel
     - cron: '22 1 * * *'     # 06:52 IST -- catch-up if the first was dropped
-    - cron: '37 11 * * *'    # 17:07 IST
+    - cron: '37 7 * * *'     # 13:07 IST -- technology and AI, from today's stories
+    - cron: '22 8 * * *'     # 13:52 IST -- catch-up
+    - cron: '37 11 * * *'    # 17:07 IST -- a fact carousel
     - cron: '22 12 * * *'    # 17:52 IST -- catch-up
   workflow_dispatch:
     inputs:
