@@ -80,11 +80,17 @@ function validateShape(spec, recentTopics) {
   if (!firstLine) problems.push('caption is empty — the first line is what search and the feed show');
   else if (firstLine.length > 125) problems.push(`caption's first line is ${firstLine.length} characters — Instagram cuts it at about 125`);
 
-  // The caption's own hashtag row is a duplicate of the hashtags field, and it
-  // reached the feed once already -- the same ten tags printed twice.
-  if (/#[^\s#]/.test(String(spec.caption || ''))) {
-    problems.push('caption contains hashtags — they belong in "hashtags", and printing both repeats them');
-  }
+  // Hashtags in the caption are NOT rejected, and that is deliberate.
+  //
+  // They were, for one morning, and the post never went out: the model wrote a
+  // tag row in its caption on all three attempts, every attempt was rejected,
+  // and --require-generated turned that into a skipped day. The duplicate is
+  // real but composeCaption() already lifts the row out and merges it, so the
+  // check was refusing work the pipeline knows how to finish.
+  //
+  // A validator earns a veto only over what cannot be repaired here: a missing
+  // source, a repeated topic, a broken word. Anything the build can fix, the
+  // build fixes.
 
   // "इस कारousel में" went out on a live post: half Devanagari, half Latin,
   // inside one word. A reader sees a typo, not a loanword.

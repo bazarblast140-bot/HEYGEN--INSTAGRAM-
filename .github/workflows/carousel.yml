@@ -4,21 +4,27 @@ name: Build carousel
 # new feature; sharing a workflow would mean a change here can break the post
 # that already goes out.
 #
-# Two posts a day, 06:00 and 17:00 IST. Actions cron is UTC and IST is UTC+5:30,
-# so those are 00:30 and 11:30 UTC.
+# Two posts a day, morning and evening IST. Actions cron is UTC, IST is UTC+5:30.
 #
 # A scheduled run PUBLISHES. That is the point of it, and it is also the reason
 # every guard in this pipeline exists: an unsourced slide is rejected, a repeated
 # topic is rejected, a non-JPEG build is refused. Nobody is watching at 06:00.
 #
-# GitHub does not fire cron on time under load -- late by 5 to 30 minutes is
-# normal and it is not worth chasing. The two slots are far enough apart that a
-# late morning run cannot collide with the evening one.
+# Each slot is scheduled TWICE, and not out of caution -- the first 06:00 post
+# never happened. GitHub queued no run at all: no failure, no entry in the list,
+# nothing to retry. Its scheduler is best-effort and drops work under load,
+# worst at round minutes like :00 and :30, which is why these sit at :37 and :22.
+#
+# The second firing is a catch-up, and the ledger is what stops it posting twice:
+# a slot with an entry for today is already done, so the run ends in seconds. See
+# pipeline/slot-status.js.
 
 on:
   schedule:
-    - cron: '30 0 * * *'     # 06:00 IST
-    - cron: '30 11 * * *'    # 17:00 IST
+    - cron: '37 0 * * *'     # 06:07 IST
+    - cron: '22 1 * * *'     # 06:52 IST -- catch-up if the first was dropped
+    - cron: '37 11 * * *'    # 17:07 IST
+    - cron: '22 12 * * *'    # 17:52 IST -- catch-up
   workflow_dispatch:
     inputs:
       spec:
@@ -63,6 +69,14 @@ jobs:
 
       - run: npm ci
 
+      # A scheduled run is one of two firings for the same slot. If the earlier
+      # one already posted, this ends here rather than posting the day twice.
+      # A hand-started run is never skipped -- asking for a post is asking for
+      # a post.
+      - name: Is this slot still pending?
+        id: slot
+        run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
+
       # Answers "is the script key live?" without spending a token. It is here
       # rather than in the reel job because that job's failure mode is a whole
       # silent reel; this one just prints the vendor's own verdict.
@@ -103,6 +117,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Chromium for Playwright
+        if: ${{ github.event_name != 'schedule' || steps.slot.outputs.pending == 'true' }}
         run: npx playwright install --with-deps chromium
 
       # The bundled Devanagari face is a hard requirement, not a nicety. The
@@ -110,6 +125,7 @@ jobs:
       # anything, so a missing or corrupt font fails this step loudly instead of
       # shipping tofu that is only visible once the image is on Instagram.
       - name: Build the carousel
+        if: ${{ github.event_name != 'schedule' || steps.slot.outputs.pending == 'true' }}
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -162,7 +178,7 @@ jobs:
       # asked for and never by default.
       - name: Publish to Instagram
         id: publish
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        if: ${{ (github.event_name == 'schedule' && steps.slot.outputs.pending == 'true') || github.event.inputs.publish == 'true' }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
