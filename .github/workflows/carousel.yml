@@ -44,6 +44,10 @@ on:
     - cron: '22 12 * * *'    # 17:52 IST -- catch-up
   workflow_dispatch:
     inputs:
+      force:
+        description: Publish even if this slot already posted today
+        type: boolean
+        default: false
       spec:
         description: Carousel spec to build
         default: pipeline/specs/carousel-hindi.json
@@ -217,7 +221,13 @@ jobs:
       # asked for and never by default.
       - name: Publish to Instagram
         id: publish
-        if: ${{ (env.AUTOMATED == 'true' && steps.slot.outputs.pending == 'true') || github.event.inputs.publish == 'true' }}
+        # The ledger governs every publish, not only the unattended ones. It
+        # used to be bypassed whenever publish=true was passed by hand, which
+        # was fine while a person was the only one pressing the button and is
+        # not fine now that a second scheduler can press it too: two triggers
+        # for one slot would post the carousel twice. `force` is the way out,
+        # and it has to be asked for.
+        if: ${{ (steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true' }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
