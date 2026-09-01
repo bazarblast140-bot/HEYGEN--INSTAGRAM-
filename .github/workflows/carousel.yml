@@ -15,10 +15,20 @@ name: Build carousel
 # every guard in this pipeline exists: an unsourced slide is rejected, a repeated
 # topic is rejected, a non-JPEG build is refused. Nobody is watching at 06:00.
 #
-# Each slot is scheduled TWICE, and not out of caution -- the first 06:00 post
-# never happened. GitHub queued no run at all: no failure, no entry in the list,
-# nothing to retry. Its scheduler is best-effort and drops work under load,
-# worst at round minutes like :00 and :30, which is why these sit at :37 and :22.
+# Each slot is scheduled THREE TIMES, and not out of caution -- the first 06:00
+# post never happened. GitHub queued no run at all: no failure, no entry in the
+# list, nothing to retry. Its scheduler is best-effort and drops work under
+# load, worst at round minutes like :00 and :30, which is why these sit at :37,
+# :22 and :48.
+#
+# Three rather than two because this repository is PUBLIC, so its Actions
+# minutes are free: a firing that finds the slot already posted costs about ten
+# seconds and nothing else. The cost of one more attempt is nil; the cost of a
+# missed post is a day of the account's output.
+#
+# A late firing is no longer a wrong one. The slot comes from the cron entry
+# (see slotForCron), so a morning run that GitHub delivers at noon still posts
+# the morning carousel rather than relabelling itself midday.
 #
 # The second firing is a catch-up, and the ledger is what stops it posting twice:
 # a slot with an entry for today is already done, so the run ends in seconds. See
@@ -37,11 +47,16 @@ on:
   # up with one the dispatch already made.
   schedule:
     - cron: '37 0 * * *'     # 06:07 IST -- a fact carousel
-    - cron: '22 1 * * *'     # 06:52 IST -- catch-up if the first was dropped
+    - cron: '22 1 * * *'     # 06:52 IST -- catch-up
+    - cron: '48 2 * * *'     # 08:18 IST -- last catch-up
+
     - cron: '37 7 * * *'     # 13:07 IST -- technology and AI, from today's stories
     - cron: '22 8 * * *'     # 13:52 IST -- catch-up
+    - cron: '48 9 * * *'     # 15:18 IST -- last catch-up
+
     - cron: '37 11 * * *'    # 17:07 IST -- a fact carousel
     - cron: '22 12 * * *'    # 17:52 IST -- catch-up
+    - cron: '48 13 * * *'    # 19:18 IST -- last catch-up
   workflow_dispatch:
     inputs:
       force:

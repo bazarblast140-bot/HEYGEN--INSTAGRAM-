@@ -111,10 +111,13 @@ export function dayNumber(date = new Date()) {
 export const CRON_SLOTS = {
   '37 0 * * *': 'morning',
   '22 1 * * *': 'morning',
+  '48 2 * * *': 'morning',
   '37 7 * * *': 'midday',
   '22 8 * * *': 'midday',
+  '48 9 * * *': 'midday',
   '37 11 * * *': 'evening',
   '22 12 * * *': 'evening',
+  '48 13 * * *': 'evening',
 };
 
 export function slotForCron(cron) {
