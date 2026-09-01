@@ -91,6 +91,37 @@ export function dayNumber(date = new Date()) {
  * before 06:00 UTC is unambiguously the morning one, and the midday post sits
  * in the wide gap between them.
  */
+/**
+ * Which slot a cron entry is FOR, regardless of when the runner gets to it.
+ *
+ * slotFor() reads the clock, and the clock lies about intent. GitHub's
+ * scheduler is best-effort and has been firing these entries six to eight
+ * hours late: the 00:37 morning entry ran at 07:05, where slotFor() sees hour 7
+ * and answers "midday". The morning post could not happen -- not dropped, not
+ * failed, just relabelled on arrival.
+ *
+ * The cron string is what GitHub hands the run in `github.event.schedule`, and
+ * it says what the run was scheduled to be. A delayed morning post is late; a
+ * morning post that became a midday post is gone.
+ *
+ * Keep this table and the workflow's `on.schedule` identical -- a test asserts
+ * it, because an entry missing here falls back to the clock and the failure is
+ * invisible until a post does not appear.
+ */
+export const CRON_SLOTS = {
+  '37 0 * * *': 'morning',
+  '22 1 * * *': 'morning',
+  '37 7 * * *': 'midday',
+  '22 8 * * *': 'midday',
+  '37 11 * * *': 'evening',
+  '22 12 * * *': 'evening',
+};
+
+export function slotForCron(cron) {
+  const key = String(cron || '').trim().replace(/\s+/g, ' ');
+  return CRON_SLOTS[key] || null;
+}
+
 export function slotFor(date = new Date()) {
   const hour = typeof date === 'string' ? 0 : date.getUTCHours();
   if (hour < 6) return 'morning';      // 06:07 IST fires at 00:37 UTC

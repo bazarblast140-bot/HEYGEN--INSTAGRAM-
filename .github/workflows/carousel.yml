@@ -87,6 +87,13 @@ jobs:
       # a post.
       - name: Is this slot still pending?
         id: slot
+        env:
+          # Which post this run is FOR. GitHub has been firing these entries six
+          # to eight hours late, and the slot used to be read off the clock at
+          # run time -- so the 00:37 morning entry arrived at 07:05 and became a
+          # midday run. The cron string says what was scheduled; the clock does
+          # not. See slotForCron in src/carousel/categories.js.
+          SCHEDULED_CRON: ${{ github.event.schedule }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Answers "is the script key live?" without spending a token. It is here
@@ -152,7 +159,7 @@ jobs:
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
-            ${{ github.event.inputs.slot && format('--slot {0}', github.event.inputs.slot) || '' }} \
+            ${{ github.event.inputs.slot && format('--slot {0}', github.event.inputs.slot) || (steps.slot.outputs.slot && format('--slot {0}', steps.slot.outputs.slot)) || '' }} \
             ${{ (github.event_name == 'schedule' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
             2>&1 | tee carousel.log
           {

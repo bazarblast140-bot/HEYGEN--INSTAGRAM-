@@ -21,11 +21,14 @@ import fs from 'node:fs/promises';
 
 import { readHistory } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
-import { slotFor } from './src/carousel/categories.js';
+import { slotFor, slotForCron } from './src/carousel/categories.js';
 
 const now = new Date();
 const date = now.toISOString().slice(0, 10);
-const slot = slotFor(now);
+// The cron this run was scheduled from, when there is one. See slotForCron:
+// these entries have been firing hours late, and the clock at run time says
+// nothing about which post was due.
+const slot = slotForCron(process.env.SCHEDULED_CRON) || slotFor(now);
 const key = `${date} ${slot}`;
 
 const entries = await readHistory(LEDGER);
@@ -38,5 +41,8 @@ if (posted) {
 }
 
 if (process.env.GITHUB_OUTPUT) {
-  await fs.appendFile(process.env.GITHUB_OUTPUT, `pending=${posted ? 'false' : 'true'}\n`);
+  await fs.appendFile(
+    process.env.GITHUB_OUTPUT,
+    `pending=${posted ? 'false' : 'true'}\nslot=${slot}\n`,
+  );
 }
