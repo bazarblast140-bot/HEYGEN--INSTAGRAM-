@@ -25,6 +25,16 @@ name: Build carousel
 # pipeline/slot-status.js.
 
 on:
+  # An outside scheduler fires this, and that is the punctual path: a dispatched
+  # run starts within seconds, while GitHub's own cron has been arriving six to
+  # eight hours late. The caller says which post it wants; nothing is inferred.
+  # See scheduler/README.md.
+  repository_dispatch:
+    types: [carousel]
+
+  # Kept as a backstop, late as it is. If the outside scheduler stops, a post
+  # some hours late still beats no post, and the ledger stops it from doubling
+  # up with one the dispatch already made.
   schedule:
     - cron: '37 0 * * *'     # 06:07 IST -- a fact carousel
     - cron: '22 1 * * *'     # 06:52 IST -- catch-up if the first was dropped
@@ -66,6 +76,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    env:
+      # Schedule and repository_dispatch are the same thing from here on: an
+      # unattended run that publishes. Written once, because six separate
+      # `event_name == 'schedule'` tests is six chances to add the new event to
+      # five of them.
+      AUTOMATED: ${{ github.event_name == 'schedule' || github.event_name == 'repository_dispatch' }}
+
     # contents: write is for the release the slides are hosted on -- Instagram
     # fetches each image from a public URL and never accepts an upload.
     permissions:
@@ -94,6 +111,8 @@ jobs:
           # midday run. The cron string says what was scheduled; the clock does
           # not. See slotForCron in src/carousel/categories.js.
           SCHEDULED_CRON: ${{ github.event.schedule }}
+          # A dispatch names its slot outright, which beats deriving it.
+          DISPATCH_SLOT: ${{ github.event.client_payload.slot }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Answers "is the script key live?" without spending a token. It is here
@@ -136,7 +155,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Chromium for Playwright
-        if: ${{ github.event_name != 'schedule' || steps.slot.outputs.pending == 'true' }}
+        if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
         run: npx playwright install --with-deps chromium
 
       # The bundled Devanagari face is a hard requirement, not a nicety. The
@@ -144,7 +163,7 @@ jobs:
       # anything, so a missing or corrupt font fails this step loudly instead of
       # shipping tofu that is only visible once the image is on Instagram.
       - name: Build the carousel
-        if: ${{ github.event_name != 'schedule' || steps.slot.outputs.pending == 'true' }}
+        if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -160,7 +179,7 @@ jobs:
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
             ${{ github.event.inputs.slot && format('--slot {0}', github.event.inputs.slot) || (steps.slot.outputs.slot && format('--slot {0}', steps.slot.outputs.slot)) || '' }} \
-            ${{ (github.event_name == 'schedule' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
+            ${{ (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
             2>&1 | tee carousel.log
           {
             echo '## Carousel'
@@ -177,7 +196,7 @@ jobs:
       # got mangled or a token that resolves to the wrong account, at the point
       # where that is still free to fix.
       - name: What would be posted
-        if: github.event_name != 'schedule' && github.event.inputs.publish != 'true'
+        if: env.AUTOMATED != 'true' && github.event.inputs.publish != 'true'
         continue-on-error: true
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
@@ -198,7 +217,7 @@ jobs:
       # asked for and never by default.
       - name: Publish to Instagram
         id: publish
-        if: ${{ (github.event_name == 'schedule' && steps.slot.outputs.pending == 'true') || github.event.inputs.publish == 'true' }}
+        if: ${{ (env.AUTOMATED == 'true' && steps.slot.outputs.pending == 'true') || github.event.inputs.publish == 'true' }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -252,7 +271,7 @@ jobs:
       # they are buried under the Chromium download; at the end of the job they
       # are the end of the log.
       - name: Check what ElevenLabs allows
-        if: ${{ always() && github.event_name != 'schedule' }}
+        if: ${{ always() && env.AUTOMATED != 'true' }}
         continue-on-error: true
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}

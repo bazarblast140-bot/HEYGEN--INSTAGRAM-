@@ -1,0 +1,14 @@
+name = "factvizer-scheduler"
+main = "src/worker.js"
+compatibility_date = "2026-01-01"
+
+# UTC, like GitHub's. Keep these identical to SLOTS in src/worker.js -- the
+# Worker throws on a cron it cannot map rather than firing nothing.
+[triggers]
+crons = ["37 0 * * *", "37 7 * * *", "37 11 * * *"]
+
+[vars]
+REPO = "bazarblast140-bot/HEYGEN--INSTAGRAM-"
+
+# GITHUB_TOKEN is a secret, not a var:
+#   npx wrangler secret put GITHUB_TOKEN

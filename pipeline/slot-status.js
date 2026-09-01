@@ -28,7 +28,12 @@ const date = now.toISOString().slice(0, 10);
 // The cron this run was scheduled from, when there is one. See slotForCron:
 // these entries have been firing hours late, and the clock at run time says
 // nothing about which post was due.
-const slot = slotForCron(process.env.SCHEDULED_CRON) || slotFor(now);
+const slot =
+  // An outside scheduler names the slot outright. Nothing to derive, nothing to
+  // get wrong however late the runner starts.
+  (process.env.DISPATCH_SLOT || '').trim()
+  || slotForCron(process.env.SCHEDULED_CRON)
+  || slotFor(now);
 const key = `${date} ${slot}`;
 
 const entries = await readHistory(LEDGER);
