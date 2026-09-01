@@ -24,7 +24,50 @@ infers anything.
 GitHub's own crons stay in the workflow as a backstop. If this Worker stops, a
 late post still beats no post, and the ledger stops the two from doubling up.
 
-## Setting it up
+## Setting it up — browser only, no CLI
+
+Nothing here needs Node or a terminal. Exact button labels move around; the
+things being looked for do not.
+
+1. **A GitHub token.** github.com → Settings → Developer settings → Personal
+   access tokens → **Fine-grained tokens** → generate one.
+   - Repository access: only `HEYGEN--INSTAGRAM-`
+   - Repository permissions: **Contents → Read and write**, nothing else. That
+     is what `repository_dispatch` needs.
+   - Expiry: the longest offered, and put a reminder in your calendar. An
+     expired token stops the posts and says nothing about it.
+   - Copy it once — GitHub will not show it again. Do not paste it into a chat.
+
+2. **A Worker.** dash.cloudflare.com → Workers & Pages → create a Worker.
+   Open its editor, delete the placeholder, and paste all of
+   `scheduler/src/worker.js` from this repo. Save and deploy.
+
+3. **Its two settings.** In the Worker's Settings → Variables:
+   - a plain variable `REPO` = `bazarblast140-bot/HEYGEN--INSTAGRAM-`
+   - a **secret** (encrypted, not a plain variable) `GITHUB_TOKEN` = the token
+
+4. **Its three times.** In the Worker's Settings → Triggers → Cron Triggers,
+   add these three, exactly. They are UTC, like GitHub's; IST is UTC+5:30.
+
+   ```
+   37 0 * * *      06:07 IST -- a fact carousel
+   37 7 * * *      13:07 IST -- technology and AI
+   37 11 * * *     17:07 IST -- a fact carousel
+   ```
+
+5. **Check it now, without waiting for 06:07.** The Worker has a URL; POST to it:
+
+   ```
+   curl -X POST "https://<your-worker>.workers.dev/?slot=morning"
+   ```
+
+   `dispatched morning` means the token works and a run has started. If today's
+   morning post already went out, the run ends in a few seconds saying so — that
+   is the ledger doing its job, not a failure.
+
+## Setting it up — from a terminal instead
+
+
 
 1. **A GitHub token.** github.com → Settings → Developer settings → Personal
    access tokens → **Fine-grained tokens** → Generate new token.
@@ -35,6 +78,8 @@ late post still beats no post, and the ledger stops the two from doubling up.
      expired token stops the posts and says nothing.
 
 2. **Deploy.** With Node installed, from this folder:
+
+From this folder, with the token from step 1 above:
 
    ```
    npx wrangler login
