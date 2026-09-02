@@ -49,6 +49,11 @@
       "date": "2026-09-02 morning",
       "topic": "सूर्य के वायुमंडल का रहस्य",
       "angle": "space"
+    },
+    {
+      "date": "2026-09-02 midday",
+      "topic": "AI समाचार: Google, OpenAI और नई Range Rover",
+      "angle": "technology"
     }
   ],
   "stories": [
@@ -95,6 +100,50 @@
     {
       "date": "2026-09-01",
       "key": "instagram limits profiles puts undisclosed"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "capability companies into native operating turn workflows"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "2026 announced august latest news"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "google hollywood more need needs studios than"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "faces lawsuits more openai ridge shooting tied tumbler"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "2027 drive electric first here look range rover"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "actually benchmarks benchmirt measuring what"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "hypergraph hyperworld improves learned models serialization state structured"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "artificial edutech intelligence"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "claude claude fable mythos"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "astra capabilities critical frontier path safeguards"
+    },
+    {
+      "date": "2026-09-02",
+      "key": "creation easy editing google google image pics workspace"
     }
   ]
 }
