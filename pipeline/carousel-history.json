@@ -2,11 +2,6 @@
   "entries": [
     {
       "date": "2026-08-30 evening",
-      "topic": "ग्रहों की घूर्णन अवधि — दिन बनाम साल",
-      "angle": "space"
-    },
-    {
-      "date": "2026-08-30 evening",
       "topic": "जानवरों की छिपी क्षमताएँ",
       "angle": "animals"
     },
@@ -99,6 +94,11 @@
       "date": "2026-09-05 midday",
       "topic": "AI एजेंटों का खतरा",
       "angle": "technology"
+    },
+    {
+      "date": "2026-09-05 evening",
+      "topic": "बर्फ़ के अंदर जीवन",
+      "angle": "science"
     }
   ],
   "stories": [
