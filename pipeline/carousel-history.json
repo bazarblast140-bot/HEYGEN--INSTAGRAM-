@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-08-30 evening",
-      "topic": "जानवरों की छिपी क्षमताएँ",
-      "angle": "animals"
-    },
-    {
       "date": "2026-08-31 morning",
       "topic": "प्राचीन मिस्र की चिकित्सा",
       "angle": "history"
@@ -99,6 +94,11 @@
       "date": "2026-09-05 evening",
       "topic": "बर्फ़ के अंदर जीवन",
       "angle": "science"
+    },
+    {
+      "date": "2026-09-06 morning",
+      "topic": "बृहस्पति के बादलों का रहस्य",
+      "angle": "space"
     }
   ],
   "stories": [
