@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-08-31 morning",
-      "topic": "प्राचीन मिस्र की चिकित्सा",
-      "angle": "history"
-    },
-    {
       "date": "2026-08-31 midday",
       "topic": "आज की टेक ख़बरें",
       "angle": "technology"
@@ -99,6 +94,11 @@
       "date": "2026-09-06 morning",
       "topic": "बृहस्पति के बादलों का रहस्य",
       "angle": "space"
+    },
+    {
+      "date": "2026-09-06 midday",
+      "topic": "AI और अंतरिक्ष की बड़ी ख़बरें",
+      "angle": "technology"
     }
   ],
   "stories": [
@@ -321,6 +321,42 @@
     {
       "date": "2026-09-05",
       "key": "agents discussed escape openai public sandbox their ways"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "latest microsoft newsday openai publications seattle times"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "already been cybercab deployed investigation tesla under"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "briefs built challenges drafts emails foster robot staff"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "european from german history makes orbit private reaches"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "after gemini google hikers planning rescued using"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "also china contend dire facing graduates market must"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "engineers handles incidents lose systems their touch with"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "confirms disclosure framework incident more openai says wiki"
+    },
+    {
+      "date": "2026-09-06",
+      "key": "achieve allow china country dominance never victor will"
     }
   ]
 }
