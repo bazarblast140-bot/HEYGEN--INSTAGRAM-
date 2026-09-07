@@ -174,10 +174,10 @@ async function json(url, opts) {
 }
 
 /** Portrait crops sit better under a 4:5 slide than the landscape default. */
-async function searchPexels({ query, key, perPage = 20 }) {
+async function searchPexels({ query, key, perPage = 20, orientation = 'portrait' }) {
   const url = new URL(PEXELS);
   url.searchParams.set('query', query);
-  url.searchParams.set('orientation', 'portrait');
+  url.searchParams.set('orientation', orientation);
   url.searchParams.set('per_page', String(perPage));
 
   const { photos = [] } = await json(url, { headers: { Authorization: key } });
@@ -294,6 +294,78 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
     } catch (err) {
       // One slide's failure is one gradient, not a dead build.
       note(`slide ${n} photo failed (${String(err.message).slice(0, 90)}) — gradient instead`);
+      out.push(slide);
+    }
+  }
+
+  return { spec: { ...spec, slides: out }, attached };
+}
+
+/**
+ * Wealth-style circular portrait insets.
+ *
+ * When a slide carries a `person` field (celebrity, CEO, founder, businessman),
+ * fetch a portrait and place a circular inset in the top-right — the same
+ * pattern the Wealth account uses on luxury-home posts.
+ *
+ * Position is fixed (x: 720, y: 90, size: 280) so every celebrity slide looks
+ * consistent. Failure is silent: the slide simply has no inset.
+ */
+export async function attachInsets(spec, { outDir, key = env('PEXELS_API_KEY'), onNote } = {}) {
+  const slides = spec.slides || [];
+  const note = (msg) => onNote?.(msg);
+
+  if (!key) {
+    note('no PEXELS_API_KEY — skipping celebrity insets');
+    return { spec, attached: 0 };
+  }
+
+  await fs.mkdir(outDir, { recursive: true });
+
+  const used = new Set();
+  let attached = 0;
+  const out = [];
+
+  for (const [i, slide] of slides.entries()) {
+    const person = String(slide.person || '').trim();
+    if (!person) {
+      out.push(slide);
+      continue;
+    }
+
+    const n = i + 1;
+    const query = `${person} portrait professional`;
+
+    try {
+      const candidates = await searchPexels({ query, key, perPage: 15, orientation: 'portrait' });
+      // Prefer photos that actually look like a headshot (relevance helps a bit).
+      const chosen = bestPhoto(candidates, { query: person, used })
+        || candidates.find((c) => !used.has(String(c.id)))
+        || null;
+
+      if (!chosen) {
+        note(`slide ${n}: no portrait found for "${person}" — no inset`);
+        out.push(slide);
+        continue;
+      }
+
+      used.add(String(chosen.id));
+      const dest = path.join(outDir, `inset-${String(n).padStart(2, '0')}.jpg`);
+      await download({ url: chosen.src, dest });
+
+      // Wealth-style placement: large circle, top-right.
+      const inset = {
+        image: dest,
+        x: 720,
+        y: 90,
+        size: 280,
+      };
+
+      note(`slide ${n}: inset portrait for ${person}`);
+      out.push({ ...slide, insets: [inset] });
+      attached += 1;
+    } catch (err) {
+      note(`slide ${n}: inset failed for "${person}" (${String(err.message).slice(0, 70)})`);
       out.push(slide);
     }
   }
