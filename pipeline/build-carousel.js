@@ -21,7 +21,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
-import { attachBackgrounds } from './src/render/backgrounds.js';
+import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
 import { slotFor } from './src/carousel/categories.js';
@@ -277,10 +277,19 @@ async function main() {
     });
     // Only now, for whatever the search left as a gradient: see pictures.js.
     const { spec: withGivenPictures, filled } = await fillGaps(withPhotos, { onNote: note });
-    ready = withGivenPictures;
+
+    // Wealth-style circular celebrity / CEO insets (when person field is set).
+    console.log('Celebrity insets');
+    const { spec: withInsets, attached: insets } = await attachInsets(withGivenPictures, {
+      outDir: path.join(HERE, 'out', 'photos'),
+      onNote: note,
+    });
+    ready = withInsets;
+
     const given = ours + filled;
     console.log(`  ${attached + given}/${spec.slides.length} slides carry a picture`
-      + (given ? `  (${given} of them yours)` : ''));
+      + (given ? `  (${given} of them yours)` : '')
+      + (insets ? `  ·  ${insets} celebrity inset(s)` : ''));
   }
 
   console.log('Rendering');
@@ -301,6 +310,7 @@ async function main() {
     width: WIDTH, height: HEIGHT, format,
     files: files.map((f) => path.relative(process.cwd(), f)),
     photos: ready.slides.filter((s) => s.background).length,
+    insets: ready.slides.filter((s) => s.insets?.length).length,
     topic: spec.topic || null,
     notes,
   };
