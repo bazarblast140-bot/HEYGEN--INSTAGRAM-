@@ -37,6 +37,11 @@ const Slide = z.object({
   source: z.string().nullable(),
   cta: z.boolean(),
   query: z.string(),
+  // When the slide is about a specific real person (celebrity, CEO, founder,
+  // businessman, athlete, scientist famous enough to have a face), put their
+  // full English name here. The build will fetch a portrait and place a circular
+  // inset exactly like the Wealth account style. Leave null for everything else.
+  person: z.string().nullable().optional(),
 });
 
 export const CarouselSpec = z.object({
@@ -69,6 +74,9 @@ export function validateShape(spec, recentTopics) {
     // rejected, for the same reason.
     if (!/^[\x20-\x7E]+$/.test(String(slide.query || ''))) {
       problems.push(`slide ${n} query must be plain English — Pexels does not index Devanagari`);
+    }
+    if (slide.person && !/^[\x20-\x7E]+$/.test(String(slide.person))) {
+      problems.push(`slide ${n} person name must be plain English (e.g. "Elon Musk")`);
     }
   });
 

@@ -65,6 +65,26 @@ Cover की headline 3 पंक्तियों तक जा सकती �
 सबसे ज़रूरी text है. ऊपर के साँचे नक़ल मत करो, उनका लहजा उठाओ और नया बनाओ.
 </hook>
 
+<person_rule>
+अगर किसी slide का विषय कोई असली मशहूर व्यक्ति है (celebrity, CEO, founder,
+businessman, athlete, scientist, inventor) तो उस slide में "person" field भरो:
+
+  "person": "Elon Musk"
+  "person": "Mukesh Ambani"
+  "person": "Cristiano Ronaldo"
+  "person": "Jeff Bezos"
+
+सिर्फ़ पूरा अंग्रेज़ी नाम लिखो. कोई title मत लगाओ ("CEO of..." मत लिखो).
+
+जब person भरा हो तो background query को luxury / office / mansion / jet / stage
+jaisa relevant scene बनाओ (Wealth account style). Example:
+  person: "Elon Musk" → query: "modern luxury mansion night"
+  person: "Mukesh Ambani" → query: "luxury skyscraper mumbai night"
+  person: "Cristiano Ronaldo" → query: "luxury villa portugal pool"
+
+अगर व्यक्ति नहीं है तो person: null रखो.
+</person_rule>
+
 <structure>
 ठीक ${SLIDES} slides, इसी क्रम में:
 
@@ -94,7 +114,8 @@ Slides एक कहानी की तरह चलें: cover जो सव
       "subline": null,
       "source": null,
       "cta": false,
-      "query": "english search words for a photo"
+      "query": "english search words for a photo",
+      "person": null
     },
     {
       "band": "bottom",
@@ -102,7 +123,8 @@ Slides एक कहानी की तरह चलें: cover जो सव
       "subline": "आँकड़ा, दो पंक्तियों में\\nबीच में \\n",
       "source": "स्रोत का नाम",
       "cta": false,
-      "query": "english search words for a photo"
+      "query": "english search words for a photo",
+      "person": null
     }
   ],
   "caption": "पहली पंक्ति: सवाल, 125 अक्षर से कम. फिर 2 से 3 वाक्य. फिर स्रोत की पंक्ति.",
@@ -117,8 +139,9 @@ fields:
   source    — cover और cta पर null. बाक़ी हर slide पर ज़रूरी. गढ़ना मना है.
   query     — हमेशा अंग्रेज़ी में, 2 से 4 शब्द, जो चीज़ तस्वीर में दिखनी चाहिए:
               "venus planet space", "human brain scan", "ancient stone temple".
-              Pexels हिंदी नहीं समझता, और वो अर्थ नहीं तस्वीरें ढूँढ़ता है — इसलिए
-              "जिज्ञासा" जैसा शब्द कुछ नहीं लाएगा.
+              जब person भरा हो तो luxury/mansion/office scene लिखो.
+  person    — अगर slide किसी celebrity/CEO/founder के बारे में है तो उसका पूरा
+              अंग्रेज़ी नाम ("Elon Musk"). वरना null.
   caption   — इसमें hashtag मत डालो. वो अलग field में जाते हैं, और दोनों जगह
               लिखोगे तो post पर दो बार छपते हैं.
               शब्द आधा हिंदी आधा अंग्रेज़ी मत लिखो — "कारousel" जैसा शब्द पढ़ने
