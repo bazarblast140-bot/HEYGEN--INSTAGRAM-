@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-08-31 midday",
-      "topic": "टेक की दुनिया: खोया इतिहास, नई AI और सुरक्षा",
-      "angle": "technology"
-    },
-    {
       "date": "2026-09-01 morning",
       "topic": "समुद्री घोड़ों की अनोखी दुनिया",
       "angle": "animals"
@@ -99,6 +94,11 @@
       "date": "2026-09-07 morning",
       "topic": "बर्फ़ की सबसे बड़ी चादर",
       "angle": "science"
+    },
+    {
+      "date": "2026-09-07 evening",
+      "topic": "पृथ्वी के महासागरों की गहराई",
+      "angle": "geography"
     }
   ],
   "stories": [
