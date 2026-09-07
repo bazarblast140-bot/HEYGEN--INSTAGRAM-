@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-01 morning",
-      "topic": "समुद्री घोड़ों की अनोखी दुनिया",
-      "angle": "animals"
-    },
-    {
       "date": "2026-09-01 midday",
       "topic": "AI सुरक्षा, Mars और खुला सॉफ्टवेयर",
       "angle": "technology"
@@ -98,6 +93,11 @@
     {
       "date": "2026-09-07 evening",
       "topic": "पृथ्वी के महासागरों की गहराई",
+      "angle": "geography"
+    },
+    {
+      "date": "2026-09-07 evening",
+      "topic": "पृथ्वी का घूर्णन धीमा होना",
       "angle": "geography"
     }
   ],
