@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-01 midday",
-      "topic": "AI सुरक्षा, Mars और खुला सॉफ्टवेयर",
-      "angle": "technology"
-    },
-    {
       "date": "2026-09-01 evening",
       "topic": "मानव शरीर की छिपी क्षमताएँ",
       "angle": "body"
@@ -99,6 +94,11 @@
       "date": "2026-09-07 evening",
       "topic": "पृथ्वी का घूर्णन धीमा होना",
       "angle": "geography"
+    },
+    {
+      "date": "2026-09-07 midday",
+      "topic": "AI कंपनियों पर कॉपीराइट का दबाव",
+      "angle": "technology"
     }
   ],
   "stories": [
@@ -357,6 +357,50 @@
     {
       "date": "2026-09-06",
       "key": "achieve allow china country dominance never victor will"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "backs cooperation deeper emerging global india meeting semiconductors"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "capability center center expands facility global global india"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "independent journalism supporting ukraine"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "infringement microsoft newsday openai seattle times"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "agents anthropic authors back claims make publishers push"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "behind billion center complex corporate data"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "375b apache from horizon models releases"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "exaone finance forecast"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "deming dismisses harvard integrity remarks with"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "2025 author intellectual open post when your"
+    },
+    {
+      "date": "2026-09-07",
+      "key": "alien mind"
     }
   ]
 }
