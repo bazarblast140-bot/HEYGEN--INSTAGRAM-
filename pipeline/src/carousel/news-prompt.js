@@ -82,6 +82,23 @@ Cover की headline 3 पंक्तियों तक जा सकती �
 सबसे ज़रूरी text है. ऊपर के साँचे नक़ल मत करो, उनका लहजा उठाओ और नया बनाओ.
 </hook>
 
+<person_rule>
+अगर किसी slide का विषय कोई असली मशहूर व्यक्ति है (CEO, founder, celebrity,
+businessman) तो उस slide में "person" field भरो:
+
+  "person": "Sam Altman"
+  "person": "Elon Musk"
+  "person": "Sundar Pichai"
+  "person": "Jensen Huang"
+
+सिर्फ़ पूरा अंग्रेज़ी नाम लिखो. कोई title मत लगाओ.
+
+जब person भरा हो तो background query को office / stage / modern building / jet
+jaisa relevant scene बनाओ (Wealth account style).
+
+अगर व्यक्ति नहीं है तो person: null रखो.
+</person_rule>
+
 <structure>
 ठीक ${SLIDES} slides, इसी क्रम में:
 
@@ -108,7 +125,8 @@ Slide 2 पर सबसे बड़ी ख़बर रखो. Instagram प�
       "subline": null,
       "source": null,
       "cta": false,
-      "query": "english search words for a photo"
+      "query": "english search words for a photo",
+      "person": null
     },
     {
       "band": "bottom",
@@ -116,7 +134,8 @@ Slide 2 पर सबसे बड़ी ख़बर रखो. Instagram प�
       "subline": "क्या हुआ, दो पंक्तियों में\\nबीच में \\n",
       "source": "site का नाम",
       "cta": false,
-      "query": "english search words for a photo"
+      "query": "english search words for a photo",
+      "person": null
     }
   ],
   "caption": "पहली पंक्ति: सबसे बड़ी ख़बर, 125 अक्षर से कम. फिर 2 से 3 वाक्य.",
@@ -131,9 +150,10 @@ fields:
   query     — हमेशा अंग्रेज़ी में, 2 से 4 शब्द. एक असली दृश्य लिखो जिसकी तस्वीर
               खींची जा सकती हो: "data center servers", "computer chip macro",
               "server room cables", "code on screen", "robot arm factory".
-              कंपनी का नाम, mascot या logo कभी मत लिखो. "linux penguin" लिखोगे
-              तो सचमुच पेंगुइन की तस्वीर आएगी — असली में यही हुआ था.
-              Pexels हिंदी नहीं समझता, और वो अर्थ नहीं दृश्य ढूँढ़ता है.
+              जब person भरा हो तो office/stage/luxury scene लिखो.
+              कंपनी का नाम, mascot या logo कभी मत लिखो.
+  person    — अगर slide किसी CEO/founder/celebrity के बारे में है तो उसका पूरा
+              अंग्रेज़ी नाम. वरना null.
   hashtags  — 8 से 15, कम से कम 3 हिंदी और 3 अंग्रेज़ी.
 </output_format>
 
