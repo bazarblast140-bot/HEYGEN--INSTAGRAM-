@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-02 midday",
-      "topic": "AI समाचार: Google, OpenAI और नई Range Rover",
-      "angle": "technology"
-    },
-    {
       "date": "2026-09-02 evening",
       "topic": "इंटरनेट की रीढ़: सबमरीन केबल",
       "angle": "technology"
@@ -99,6 +94,11 @@
       "date": "2026-09-08 evening",
       "topic": "शुक्र की सतह का तापमान",
       "angle": "space"
+    },
+    {
+      "date": "2026-09-08 midday",
+      "topic": "आज की टेक ख़बरें",
+      "angle": "technology"
     }
   ],
   "stories": [
@@ -401,6 +401,46 @@
     {
       "date": "2026-09-07",
       "key": "alien mind"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "know opaque other probably recurrence should terms that"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "agents ahead developing entrepreneur plan that this unexpected"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "cent cuts document errors model page parsing pass"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "artificial behind business cent intelligence italia lagging managers"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "open source tala"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "across averaging benchmarks built dense device minicpm5 model"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "across agenda artificial aukus britain capacity defence drones"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "figure installers killing leaving losses roof solar tesla"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "axis axis based browser data engine manipulation releases"
+    },
+    {
+      "date": "2026-09-08",
+      "key": "enterprise future growth robot samsung sectors targets transformation"
     }
   ]
 }
