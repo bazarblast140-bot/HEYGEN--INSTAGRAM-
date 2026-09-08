@@ -22,6 +22,7 @@ import { resolveProvider, callOpenAICompatible, VENDORS } from '../script/provid
 import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } from '../script/topics.js';
 import { categoryFor, slotFor, SLIDES } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
+import { checkEcho } from './echo.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
@@ -63,6 +64,8 @@ export function validateShape(spec, recentTopics) {
   if (slides.length !== SLIDES) problems.push(`${slides.length} slides — exactly ${SLIDES} are wanted`);
   if (slides[0] && slides[0].band !== 'center') problems.push('slide 1 must be the cover (band "center")');
   if (slides.length && !slides.at(-1)?.cta) problems.push('the last slide must be the follow card (cta true)');
+
+  problems.push(...checkEcho(spec));
 
   slides.forEach((slide, i) => {
     const n = i + 1;
