@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-01 evening",
-      "topic": "मानव शरीर की छिपी क्षमताएँ",
-      "angle": "body"
-    },
-    {
       "date": "2026-09-02 morning",
       "topic": "सूर्य के वायुमंडल का रहस्य",
       "angle": "space"
@@ -98,6 +93,11 @@
     {
       "date": "2026-09-07 midday",
       "topic": "AI कंपनियों पर कॉपीराइट का दबाव",
+      "angle": "technology"
+    },
+    {
+      "date": "2026-09-08 morning",
+      "topic": "सैटेलाइट इंटरनेट की दुनिया",
       "angle": "technology"
     }
   ],
