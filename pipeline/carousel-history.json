@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-02 morning",
-      "topic": "सूर्य के वायुमंडल का रहस्य",
-      "angle": "space"
-    },
-    {
       "date": "2026-09-02 midday",
       "topic": "AI समाचार: Google, OpenAI और नई Range Rover",
       "angle": "technology"
@@ -99,6 +94,11 @@
       "date": "2026-09-08 morning",
       "topic": "सैटेलाइट इंटरनेट की दुनिया",
       "angle": "technology"
+    },
+    {
+      "date": "2026-09-08 evening",
+      "topic": "शुक्र की सतह का तापमान",
+      "angle": "space"
     }
   ],
   "stories": [
