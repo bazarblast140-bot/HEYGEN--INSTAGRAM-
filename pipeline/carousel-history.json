@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-02 evening",
-      "topic": "इंटरनेट की रीढ़: सबमरीन केबल",
-      "angle": "technology"
-    },
-    {
       "date": "2026-09-03 morning",
       "topic": "मानव शरीर में बैक्टीरिया",
       "angle": "body"
@@ -99,6 +94,11 @@
       "date": "2026-09-08 midday",
       "topic": "आज की टेक ख़बरें",
       "angle": "technology"
+    },
+    {
+      "date": "2026-09-09 morning",
+      "topic": "पृथ्वी की सबसे ऊँची जगह",
+      "angle": "geography"
     }
   ],
   "stories": [
