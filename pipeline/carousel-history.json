@@ -1,11 +1,6 @@
 {
   "entries": [
     {
-      "date": "2026-09-03 morning",
-      "topic": "मानव शरीर में बैक्टीरिया",
-      "angle": "body"
-    },
-    {
       "date": "2026-09-03 midday",
       "topic": "साइबर सुरक्षा और AI दवा",
       "angle": "technology"
@@ -99,6 +94,11 @@
       "date": "2026-09-09 morning",
       "topic": "पृथ्वी की सबसे ऊँची जगह",
       "angle": "geography"
+    },
+    {
+      "date": "2026-09-09 midday",
+      "topic": "AI विवाद और हैकिंग",
+      "angle": "technology"
     }
   ],
   "stories": [
@@ -441,6 +441,50 @@
     {
       "date": "2026-09-08",
       "key": "enterprise future growth robot samsung sectors targets transformation"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "challenge india research solving using"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "computing experiments helps quantum"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "around drama legendary mathematical milestone openai swirls"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "claude from hackers stealing subscribers tokens"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "about controversy future latest math openai tells what"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "devices other party phones scanning shown third"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "refusing right safety subset topic topic whole whom"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "brand design gradium launches prompt seconds synthetic voice"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "beyond evaluating language large models order reasoning right"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "adoption china clarivate leads library report says"
+    },
+    {
+      "date": "2026-09-09",
+      "key": "after breaks declaring download features libreoffice records"
     }
   ]
 }
