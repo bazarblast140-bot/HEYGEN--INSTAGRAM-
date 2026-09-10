@@ -187,6 +187,7 @@ jobs:
       # anything, so a missing or corrupt font fails this step loudly instead of
       # shipping tofu that is only visible once the image is on Instagram.
       - name: Build the carousel
+        id: build
         if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
@@ -358,6 +359,17 @@ jobs:
             sed -e 's/\x1b\[[0-9;]*m//g' eleven.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The build's reason, last, for the same reason as the publish's.
+      #
+      # A failed build prints its error, then sixty lines of artifact upload,
+      # audit and three doctors run after it. Reading why a post did not exist
+      # meant paging back through all of that, four times in one day.
+      - name: Why the build failed
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
+        run: |
+          echo '--- build failed, last lines ---'
+          sed -e 's/\x1b\[[0-9;]*m//g' carousel.log | tail -n 25
 
       # The reason, last, where a log reader lands.
       #
