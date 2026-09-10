@@ -43,7 +43,7 @@ export const POOL = [
   'history',
   'geography',
   'animals',
-  'economy',
+  'buildings',
   'food',
   'medicine',
   'language',
@@ -96,6 +96,20 @@ export const SLOTS = ['morning', 'evening'];
  * What each category is about, in the words the prompt needs. Kept here rather
  * than in the prompt so that adding a category is one edit, not two.
  */
+// The evening subjects. Money, and nothing that could be read as advice --
+// see the rule in prompt.js. Eight of them, so a subject comes round once a
+// week and a half rather than every third day.
+export const FINANCE = [
+  'markets',
+  'money',
+  'economy',
+  'business',
+  'banking',
+  'tax',
+  'insurance',
+  'scams',
+];
+
 export const BRIEFS = {
   space: 'ग्रह, तारे, अंतरिक्ष मिशन, ब्रह्मांड के पैमाने',
   science: 'भौतिकी, रसायन, गणित, प्रकृति के नियम',
@@ -113,6 +127,18 @@ export const BRIEFS = {
   plants: 'पेड़, जंगल, फूल, बीज, प्रकाश संश्लेषण',
   transport: 'रेल, हवाई जहाज़, जहाज़, सड़क, इंजन',
   india: 'भारत के तथ्य — नक्शा, रिकॉर्ड, संस्कृति, निर्माण, रेलवे',
+  buildings: 'इमारतें, पुल, बाँध, सुरंगें, वास्तुकला के आँकड़े',
+
+  // Evening — money. Facts and history, never advice.
+  markets: 'शेयर बाज़ार कैसे काम करता है — सूचकांक, सर्किट, IPO, ऐतिहासिक गिरावटें',
+  money: 'पैसे का इतिहास — नोट, सिक्के, मुद्रास्फीति, UPI, नक़ली नोट पहचान',
+  economy: 'GDP, रोज़गार, आयात-निर्यात, भारत की अर्थव्यवस्था के आँकड़े',
+
+  business: 'कंपनियाँ कैसे बनीं और गिरीं, ब्रांड की कहानियाँ, कारोबार के आँकड़े',
+  banking: 'बैंक, ब्याज, RBI, चक्रवृद्धि, लोन और EMI का गणित',
+  tax: 'टैक्स कैसे लगता है, GST, इतिहास, दुनिया भर की अजीब टैक्स कहानियाँ',
+  insurance: 'बीमा कैसे काम करता है, जोखिम का गणित, क्लेम के आँकड़े',
+  scams: 'मशहूर वित्तीय घोटाले और ठगी — कैसे हुए, कैसे पकड़े गए, कैसे बचें',
 };
 
 /** Days since the epoch — the same date always chooses the same category. */
@@ -172,6 +198,16 @@ export function slotFor(date = new Date()) {
 }
 
 export function categoryFor(date = new Date(), slot = 'morning') {
+  // The evening post is money. 506 people followed an account called
+  // @rajesh_technical_trader and were being shown planets and seahorses, and
+  // eight posts earned eleven likes between them. So one of the three slots now
+  // speaks to the audience that is actually there, and in a fortnight the likes
+  // will say whether that was right -- see audit.js. Morning stays general
+  // facts, midday stays technology news.
+  if (slot === 'evening') {
+    return FINANCE[dayNumber(date) % FINANCE.length];
+  }
+
   const index = SLOTS.indexOf(slot);
   if (index === -1) throw new Error(`Unknown slot "${slot}" — ${SLOTS.join(' or ')}.`);
   return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];

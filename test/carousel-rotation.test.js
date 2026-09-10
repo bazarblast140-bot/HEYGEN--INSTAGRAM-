@@ -83,19 +83,15 @@ test('no two posts in a row repeat, reading the day as morning then evening', ()
   assert.deepEqual(runs, []);
 });
 
-test('over a full cycle each category comes up exactly twice its weight', () => {
+// The evening slot no longer draws from this pool -- it is money now, from
+// FINANCE -- so the general subjects get one morning each per cycle.
+test('over a full cycle each general subject gets exactly one morning', () => {
   const counts = new Map();
   for (const day of dates(POOL.length)) {
-    for (const slot of SLOTS) {
-      const c = categoryFor(day, slot);
-      counts.set(c, (counts.get(c) || 0) + 1);
-    }
+    const c = categoryFor(day, 'morning');
+    counts.set(c, (counts.get(c) || 0) + 1);
   }
-  // Weights, doubled: the pool holds each category `weight` times, and each
-  // slot walks the whole pool once per cycle.
-  const weights = new Map();
-  for (const c of POOL) weights.set(c, (weights.get(c) || 0) + 1);
-  for (const [category, weight] of weights) assert.equal(counts.get(category), weight * 2, category);
+  for (const category of POOL) assert.equal(counts.get(category), 1, category);
 });
 
 // The offset has to clear the widest block of one category, in both directions:
