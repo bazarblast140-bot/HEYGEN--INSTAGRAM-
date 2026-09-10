@@ -198,6 +198,9 @@ async function main() {
       const written = await write({
         ...(slot === 'midday' ? { onNote: note } : { slot }),
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
+        // Why a draft was thrown away. Fed to the model already; printing it too
+        // is what turns "deepseek in 3 attempt(s)" from a number into a reason.
+        onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
@@ -312,6 +315,14 @@ async function main() {
     photos: ready.slides.filter((s) => s.background).length,
     insets: ready.slides.filter((s) => s.insets?.length).length,
     topic: spec.topic || null,
+    // The lines themselves. A report that says "9 slides" and a topic tells you
+    // the run worked; it does not tell you what the account is about to say.
+    lines: (ready.slides || []).map((s, i) => ({
+      n: i + 1,
+      headline: (s.headline || '').replace(/\n/g, ' '),
+      subline: (s.subline || '').replace(/\n/g, ' ') || null,
+      source: s.source || null,
+    })),
     notes,
   };
   await fs.writeFile(path.join(path.dirname(outDir), 'carousel-report.json'), JSON.stringify(report, null, 2));

@@ -120,6 +120,7 @@ export async function generateCarousel({
   category = categoryFor(date, slot),
   model,
   onAttempt,
+  onReject,
 } = {}) {
   const provider = resolveProvider();
   if (!provider) {
@@ -150,6 +151,7 @@ export async function generateCarousel({
       });
 
       lastProblems = [...validateShape(output, recentTopics), ...(attempt < 3 ? softProblems(output) : [])];
+      if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
         // Recorded only once accepted, so a rejected draft does not burn a
         // subject that never actually went out.
@@ -159,6 +161,7 @@ export async function generateCarousel({
     } catch (err) {
       if (!err.schemaIssues || attempt === 3) throw err;
       lastProblems = err.schemaIssues;
+      onReject?.(attempt, lastProblems);
     }
   }
 
@@ -180,6 +183,7 @@ export async function generateNewsCarousel({
   date = new Date().toISOString().slice(0, 10),
   model,
   onAttempt,
+  onReject,
   onNote,
   stories,
 } = {}) {
@@ -228,6 +232,7 @@ export async function generateNewsCarousel({
       });
 
       lastProblems = [...validateShape(output, recentTopics), ...checkSources(output, sites), ...(attempt < 3 ? softProblems(output) : [])];
+      if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
         await recordTopic({ topic: output.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
         // Every story offered, not only the ones that reached a slide: the ones
@@ -239,6 +244,7 @@ export async function generateNewsCarousel({
     } catch (err) {
       if (!err.schemaIssues || attempt === 3) throw err;
       lastProblems = err.schemaIssues;
+      onReject?.(attempt, lastProblems);
     }
   }
 

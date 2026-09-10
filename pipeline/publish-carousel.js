@@ -52,7 +52,16 @@ async function main() {
   const caption = await fs.readFile(captionPath, 'utf8').catch(() => '');
 
   console.log(`Carousel  ${files.length} slides  ${report.width}x${report.height}  ${dim(report.topic || '')}`);
-  for (const f of files) console.log(`  ${dim(f)}`);
+
+  // What the slides actually say. A dry run exists to be read before a post goes
+  // out, and a list of filenames is not readable — the whole point of stopping
+  // here is to see the words. Older reports have no lines; they still print.
+  for (const line of report.lines || []) {
+    console.log(`  ${String(line.n).padStart(2)}  ${line.headline}`);
+    if (line.subline) console.log(`      ${dim(line.subline)}`);
+    if (line.source) console.log(`      ${dim(`स्रोत: ${line.source}`)}`);
+  }
+  if (!report.lines) for (const f of files) console.log(`  ${dim(f)}`);
 
   // Where the pictures came from. The build prints this too, but by the time
   // anyone reads a CI log they are reading the end of it, and "which slide got
