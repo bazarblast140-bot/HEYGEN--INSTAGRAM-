@@ -370,3 +370,20 @@ jobs:
         run: |
           echo '--- publish failed, last lines ---'
           sed -e 's/\x1b\[[0-9;]*m//g' publish.log | tail -n 20
+
+      # Did the story go up?
+      #
+      # The carousel of 2026-09-10 published and the story did not, and finding
+      # out why meant reaching into the middle of a 760-line log -- the story
+      # block sits inside a step that SUCCEEDED, so the failure summary above
+      # does not fire for it. The story is deliberately allowed to fail without
+      # taking the post down; that is exactly why its outcome has to be said out
+      # loud somewhere a reader lands.
+      - name: Did the story go up?
+        if: ${{ always() && steps.publish.outcome != 'skipped' }}
+        run: |
+          echo '--- story ---'
+          sed -e 's/\x1b\[[0-9;]*m//g' publish.log \
+            | sed -n '/^Story$/,$p' \
+            | head -n 15
+          echo '--- end story ---'
