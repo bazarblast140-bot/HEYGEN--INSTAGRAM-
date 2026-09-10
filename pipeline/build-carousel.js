@@ -318,7 +318,13 @@ async function main() {
       width: STORY_WIDTH, height: STORY_HEIGHT, bottomInset: STORY_INSET,
       ...(args.format ? { format: args.format } : {}),
     });
-    story = path.relative(process.cwd(), storyFiles[0]);
+    // renderSlides names its output by index, so the story came out as 01.jpg
+    // -- the same asset name as slide 1. Hosting uploads by basename and
+    // replaces a name it already used, so the story overwrote the first slide
+    // and the whole post died in the release. It gets its own name.
+    const named = path.join(path.dirname(storyFiles[0]), `story${path.extname(storyFiles[0])}`);
+    await fs.rename(storyFiles[0], named);
+    story = path.relative(process.cwd(), named);
     console.log(`story    ${STORY_WIDTH}x${STORY_HEIGHT} ${format}  ->  ${story}`);
   } catch (err) {
     // A story is a nudge toward the post. The post is the thing.

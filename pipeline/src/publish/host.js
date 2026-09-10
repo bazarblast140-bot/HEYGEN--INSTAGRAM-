@@ -121,7 +121,13 @@ async function upload({ repo, token, release, file, name }) {
   // An asset name can only exist once per release; drop the old one so a re-run
   // replaces the file instead of failing.
   const existing = (release.assets || []).find((a) => a.name === name);
-  if (existing) await gh(`${API}/repos/${repo}/releases/assets/${existing.id}`, { token, method: 'DELETE' });
+  if (existing) {
+    await gh(`${API}/repos/${repo}/releases/assets/${existing.id}`, { token, method: 'DELETE' })
+      // Already gone is the state this call wanted. The release listing is a
+      // snapshot and another run may have cleared it since; refusing to upload
+      // over an asset that no longer exists costs a post to protect nothing.
+      .catch((err) => { if (!String(err.message).includes('404')) throw err; });
+  }
 
   const data = fs.readFileSync(file);
   const asset = await gh(
