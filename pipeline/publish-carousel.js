@@ -89,11 +89,11 @@ async function main() {
   // The story rides along in the same release. One upload, one tag, and the
   // story URL is simply the last asset — a second release for one JPEG would
   // double the failure surface for the optional half of the job.
-  const wantStory = args.story !== false && Boolean(report.story);
+  const storyFiles = args.story === false ? [] : (report.stories || (report.story ? [report.story] : []));
 
   console.log('\nHosting');
   const { assets, tag } = await hostFiles({
-    files: wantStory ? [...files, report.story] : files,
+    files: [...files, ...storyFiles],
     // Per run, not per day.
     //
     // Re-using one tag for a whole day means a re-run deletes each asset and
@@ -112,7 +112,7 @@ async function main() {
   process.stdout.write('\n');
   const hosted = assets.map((a) => a.url);
   const imageUrls = hosted.slice(0, files.length);
-  const storyUrl = wantStory ? hosted.at(-1) : null;
+  const storyUrls = storyFiles.length ? hosted.slice(files.length) : [];
   console.log(`  release ${tag}`);
 
   const problems = checkCarousel({ imageUrls, caption });
@@ -133,19 +133,23 @@ async function main() {
   // After the post, never instead of it. A story that fails is a story that
   // did not go out; a post that fails because of a story is a day lost, so
   // nothing below here is allowed to change the exit code.
-  if (storyUrl) {
+  if (storyUrls.length) {
     console.log('\nStory');
-    try {
-      const { mediaId: storyId } = await publishStory({
-        imageUrl: storyUrl,
-        surface: env('IG_SURFACE') || me.working,
-        onStatus: (stage, value) => console.log(`  ${stage}: ${value}`),
-      });
-      console.log(`  ${ok('story published')} ${storyId}`);
-    } catch (err) {
-      console.log(`  ${bad('story failed')} ${err.message.slice(0, 200)}`);
-      console.log(`  ${dim('the carousel is posted and unaffected')}`);
+    for (const [i, imageUrl] of storyUrls.entries()) {
+      try {
+        const { mediaId: storyId } = await publishStory({
+          imageUrl,
+          surface: env('IG_SURFACE') || me.working,
+          onStatus: (stage, value) => console.log(`  ${i + 1}/${storyUrls.length} ${stage}: ${value}`),
+        });
+        console.log(`  ${ok(`story ${i + 1}/${storyUrls.length} published`)} ${storyId}`);
+      } catch (err) {
+        // One frame failing does not cancel the next: two half-stories is worse
+        // than one, but no story at all is worse than either.
+        console.log(`  ${bad(`story ${i + 1}/${storyUrls.length} failed`)} ${err.message.slice(0, 200)}`);
+      }
     }
+    console.log(`  ${dim('the carousel is posted and unaffected either way')}`);
   }
 }
 

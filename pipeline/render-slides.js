@@ -140,6 +140,7 @@ export async function renderSlides({
         brandInk: spec.brandInk,
         ...slide,
         bottomInset,
+        callout: slide.callout || '',
         background: toUrl(slide.background),
         logo: toUrl(slide.logo || spec.logo),
         insets: (slide.insets || []).map((it) => ({ ...it, image: toUrl(it.image) })),

@@ -25,6 +25,7 @@ import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
 import { slotFor } from './src/carousel/categories.js';
+import { storyFrames } from './src/carousel/story.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -303,29 +304,40 @@ async function main() {
   });
   process.stdout.write('\n');
 
-  // The same cover, 9:16, for the story.
+  // The story: two frames, 9:16.
   //
   // A carousel goes to whoever the feed decides to show it to; a story goes to
   // the top of the screen of everyone who already follows. With 506 followers
   // and eleven likes a fortnight, the followers are the audience worth having.
-  // It is one extra screenshot from a browser that is already open, so it costs
-  // a second and is built whether or not it ends up being posted.
-  let story = null;
+  //
+  // Two frames rather than one, because the first story this account posted was
+  // the cover alone -- a question, no answer, no sign anything followed it, and
+  // nothing to stop a thumb. Now the cover says how many slides are waiting and
+  // the second frame pays out the best number in the post. See story.js; the
+  // reason it has to be words and not a link sticker is written there.
+  let stories = [];
   try {
+    // No handle passed on purpose. BRAND.tag is "#factvizer", a hashtag, and
+    // "पूरी पोस्ट #factvizer पर" is nonsense; the account's real handle is only
+    // known at publish time, from the token. "प्रोफ़ाइल पर" is true either way.
+    const frames = storyFrames(ready);
     const { files: storyFiles } = await renderSlides({
-      spec: { ...ready, slides: [ready.slides[0]] },
+      spec: { ...ready, slides: frames },
       outDir: path.join(path.dirname(outDir), 'story'),
       width: STORY_WIDTH, height: STORY_HEIGHT, bottomInset: STORY_INSET,
       ...(args.format ? { format: args.format } : {}),
     });
-    // renderSlides names its output by index, so the story came out as 01.jpg
-    // -- the same asset name as slide 1. Hosting uploads by basename and
-    // replaces a name it already used, so the story overwrote the first slide
-    // and the whole post died in the release. It gets its own name.
-    const named = path.join(path.dirname(storyFiles[0]), `story${path.extname(storyFiles[0])}`);
-    await fs.rename(storyFiles[0], named);
-    story = path.relative(process.cwd(), named);
-    console.log(`story    ${STORY_WIDTH}x${STORY_HEIGHT} ${format}  ->  ${story}`);
+    // renderSlides names its output by index, so these come out as 01.jpg and
+    // 02.jpg -- the same asset names as the first two slides. Hosting uploads by
+    // basename and replaces a name it already used, so unrenamed the story would
+    // overwrite the post. It did, once.
+    stories = [];
+    for (const [i, file] of storyFiles.entries()) {
+      const named = path.join(path.dirname(file), `story-${i + 1}${path.extname(file)}`);
+      await fs.rename(file, named);
+      stories.push(path.relative(process.cwd(), named));
+    }
+    console.log(`story    ${stories.length} frame(s)  ${STORY_WIDTH}x${STORY_HEIGHT} ${format}`);
   } catch (err) {
     // A story is a nudge toward the post. The post is the thing.
     console.log(`story    not built — ${err.message.slice(0, 120)}`);
@@ -343,7 +355,7 @@ async function main() {
     photos: ready.slides.filter((s) => s.background).length,
     insets: ready.slides.filter((s) => s.insets?.length).length,
     topic: spec.topic || null,
-    story,
+    stories,
     // The lines themselves. A report that says "9 slides" and a topic tells you
     // the run worked; it does not tell you what the account is about to say.
     lines: (ready.slides || []).map((s, i) => ({

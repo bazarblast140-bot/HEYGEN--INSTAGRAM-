@@ -116,6 +116,18 @@
     font-size: 34px; line-height: 1.3;
     margin-top: 26px;
   }
+  /* The story's call to action. A separate line from the footnote, because the
+     footnote is the source and a story needs its source as much as the feed
+     does -- overriding it with the call to action deleted the citation from a
+     money slide, which is the exact fault the dated-source rule exists to stop.
+     No sticker or link can be attached to an API-published story, so this line
+     is the only route from the story to the post, and it is sized like it. */
+  #callout {
+    color: var(--brand-ink, #F2F2F2);
+    font-weight: 700; font-variation-settings: 'wght' 700;
+    font-size: 46px; line-height: 1.25;
+    margin-top: 34px;
+  }
 
   .hidden { display: none; }
 </style>
@@ -135,6 +147,7 @@
       <div id="headline"></div>
       <div id="subline"></div>
       <div id="footnote"></div>
+      <div id="callout" class="hidden"></div>
     </div>
   </div>
 
@@ -198,7 +211,8 @@
         background,          // file:// or https:// image for the photo layer
         insets = [],         // [{ image, x, y, size }] in design px
         band = 'bottom',     // 'bottom' (list slides) | 'center' (cover slide)
-      bottomInset = 0,     // px of untouchable frame at the bottom (stories)
+        bottomInset = 0,     // px of untouchable frame at the bottom (stories)
+        callout = '',        // the story's call to action; empty on feed slides
       } = data;
 
       if (ink) document.documentElement.style.setProperty('--ink', ink);
@@ -237,6 +251,10 @@
       f.textContent = footnote;
       s.classList.toggle('hidden', !subline);
       f.classList.toggle('hidden', !footnote);
+
+      const c = $('callout');
+      c.textContent = callout;
+      c.classList.toggle('hidden', !callout);
 
       // Cover slide carries one long headline; list slides carry a short
       // yellow label over a white fact, so they get different budgets.
