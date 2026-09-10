@@ -101,7 +101,7 @@ test('an RSS item yields the publisher, not news.google.com', async () => {
   assert.equal(item.date, '2026-08-31');
 });
 
-test('a story both sources carry is ranked first', async () => {
+test('a story two newsrooms carry is ranked first', async () => {
   const { fetchStories } = await import('../pipeline/src/carousel/news.js');
   const original = globalThis.fetch;
 
@@ -117,7 +117,7 @@ test('a story both sources carry is ranked first', async () => {
       </item>` };
     }
     return { ok: true, json: async () => ({ hits: [
-      { title: 'Nvidia unveils new AI chip for datacenters', url: 'https://anandtech.com/z', points: 500, created_at: new Date().toISOString() },
+      { title: 'Nvidia unveils a new AI chip', url: 'https://anandtech.com/z', points: 500, created_at: new Date().toISOString() },
     ] }) };
   };
 
@@ -125,6 +125,9 @@ test('a story both sources carry is ranked first', async () => {
     const stories = await fetchStories();
     assert.equal(stories[0].title, 'Nvidia unveils a new AI chip');
     assert.equal(stories[0].corroborated, true);
+    // Counted by publisher: Reuters and Hacker News are two, and two Google
+    // News queries returning the same Reuters piece would have been one.
+    assert.equal(stories[0].sources.size, 2);
   } finally { globalThis.fetch = original; }
 });
 

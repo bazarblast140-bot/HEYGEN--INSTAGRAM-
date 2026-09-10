@@ -27,7 +27,7 @@ export function buildUserPrompt({ stories, date, recentTopics = [] }) {
   const list = stories
     .map((s, i) => {
       const marks = [
-        s.corroborated ? 'दो स्रोतों में' : null,
+        s.sources?.size > 1 ? `${s.sources.size} अलग जगह छपी` : null,
         s.points ? `${s.points} points` : null,
       ].filter(Boolean).join('  ·  ');
       return `${i + 1}. ${s.title}\n   स्रोत: ${s.site}  ·  तारीख़: ${s.date}${marks ? `  ·  ${marks}` : ''}`;
@@ -59,6 +59,8 @@ arXiv के research papers अक्सर ऐसे ही होते ह�
 </task>
 
 <stories>
+सूची बड़ी ख़बर से छोटी की ओर है. जो ख़बर जितनी ज़्यादा जगह छपी, वो उतनी ऊपर —
+आज की सबसे बड़ी ख़बर पहले नंबर पर है.
 ${list}
 </stories>${alreadyCovered}
 
@@ -113,7 +115,9 @@ jaisa relevant scene बनाओ (Wealth account style).
 अलग विषय उठाओ — फ़ोन, चिप, अंतरिक्ष, सुरक्षा, भारत, विज्ञान, गेम, इंटरनेट.
 पूरी post अगर एक ही विषय की हो तो पढ़ने वाले को रोज़ वही दिखता है.
 
-Slide 2 पर सबसे बड़ी ख़बर रखो. Instagram पर ज़्यादातर लोग तीसरी slide तक ही जाते हैं.
+Slide 2 पर सूची की पहली ख़बर रखो — वही आज की सबसे बड़ी है. Instagram पर
+ज़्यादातर लोग तीसरी slide तक ही जाते हैं, इसलिए दिन की सबसे बड़ी बात वहीं होनी
+चाहिए, कोई छोटी ख़बर नहीं.
 </structure>
 
 <output_format>

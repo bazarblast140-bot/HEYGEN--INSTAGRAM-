@@ -262,14 +262,33 @@ export async function fetchStories({ hours = 36, limit = 12, onNote, skip = new 
       // California Linux exemption went out in two posts on one day.
       if (skip.has(key)) continue;
       const already = seen.get(key);
-      if (already) already.corroborated = true;
-      else seen.set(key, { ...story, corroborated: false });
+      // How MANY places carried it, not merely whether two did. That count is
+      // the only measure of "big" available without a shared score: a story
+      // eight newsrooms ran this morning is the day's news, and one that only
+      // one site ran is one site's news.
+      // Counted by PUBLISHER, not by feed. Two Google News queries returning
+      // the same Reuters piece is one newsroom, and the old boolean called
+      // that corroboration; the same story reaching us as Reuters and as BBC
+      // is two, whichever feed carried each.
+      const source = story.site || story.from;
+      if (already) already.sources.add(source);
+      else seen.set(key, { ...story, sources: new Set([source]) });
     }
   }
 
-  const all = [...seen.values()];
-  const corroborated = all.filter((s) => s.corroborated);
+  const all = [...seen.values()].map((s) => ({ ...s, corroborated: s.sources.size > 1 }));
 
+  // The day's top stories, most widely carried first, newest breaking a tie.
+  // The list is handed to the model in this order and the prompt tells it the
+  // first entry is the biggest, so slide 2 -- the one most people reach -- is
+  // the story of the day rather than whichever feed happened to be first.
+  const corroborated = all
+    .filter((s) => s.corroborated)
+    .sort((a, b) => b.sources.size - a.sources.size || (b.at || 0) - (a.at || 0));
+
+  // Everything else stays round-robin. One story per source in turn is what
+  // stops a feed that publishes forty items a day from being the whole post,
+  // and it is where the variety comes from once the big stories are in.
   const queues = jobs.map((j) => all.filter((s) => !s.corroborated && s.from === j.label.replace(/^Google News.*/, 'Google News')));
   const mixed = [];
   while (mixed.length + corroborated.length < limit && queues.some((q) => q.length)) {
@@ -280,7 +299,9 @@ export async function fetchStories({ hours = 36, limit = 12, onNote, skip = new 
   }
 
   const stories = [...corroborated, ...mixed].slice(0, limit);
-  onNote?.(`${stories.length} stories from ${new Set(stories.map((s) => s.from)).size} sources`);
+  const top = stories[0];
+  onNote?.(`${stories.length} stories from ${new Set(stories.map((s) => s.from)).size} sources`
+    + (top?.sources?.size > 1 ? ` — top story carried by ${top.sources.size}` : ''));
   return stories;
 }
 
