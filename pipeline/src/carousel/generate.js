@@ -57,6 +57,21 @@ export const CarouselSpec = z.object({
  * Checks the model cannot do for itself: the ones that need the ledger, or that
  * need to count. The schema already guarantees the fields exist.
  */
+/**
+ * Faults worth one more attempt, but never worth losing the day over.
+ *
+ * A slide that says the same thing twice is ugly; a slide that does not exist
+ * is a missed post. checkEcho was fatal for two days and cost the 10 September
+ * morning post: the model could not satisfy it, all three attempts were spent
+ * on it, and nothing went out. So it is fed back while there are attempts left
+ * and dropped on the last one -- the same rule that governs every other
+ * cosmetic fault here. Only what cannot be repaired AND cannot be lived with
+ * stays fatal: a missing source, a repeated topic, a broken half-Hindi word.
+ */
+export function softProblems(spec) {
+  return checkEcho(spec);
+}
+
 export function validateShape(spec, recentTopics) {
   const problems = [];
   const slides = spec.slides || [];
@@ -64,8 +79,6 @@ export function validateShape(spec, recentTopics) {
   if (slides.length !== SLIDES) problems.push(`${slides.length} slides — exactly ${SLIDES} are wanted`);
   if (slides[0] && slides[0].band !== 'center') problems.push('slide 1 must be the cover (band "center")');
   if (slides.length && !slides.at(-1)?.cta) problems.push('the last slide must be the follow card (cta true)');
-
-  problems.push(...checkEcho(spec));
 
   slides.forEach((slide, i) => {
     const n = i + 1;
@@ -136,7 +149,7 @@ export async function generateCarousel({
         system: SYSTEM, user: userPrompt, schema: CarouselSpec,
       });
 
-      lastProblems = validateShape(output, recentTopics);
+      lastProblems = [...validateShape(output, recentTopics), ...(attempt < 3 ? softProblems(output) : [])];
       if (!lastProblems.length) {
         // Recorded only once accepted, so a rejected draft does not burn a
         // subject that never actually went out.
@@ -214,7 +227,7 @@ export async function generateNewsCarousel({
         system: NEWS_SYSTEM, user: userPrompt, schema: CarouselSpec,
       });
 
-      lastProblems = [...validateShape(output, recentTopics), ...checkSources(output, sites)];
+      lastProblems = [...validateShape(output, recentTopics), ...checkSources(output, sites), ...(attempt < 3 ? softProblems(output) : [])];
       if (!lastProblems.length) {
         await recordTopic({ topic: output.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
         // Every story offered, not only the ones that reached a slide: the ones

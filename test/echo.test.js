@@ -63,3 +63,40 @@ test('a clean carousel reports nothing', () => {
   };
   assert.deepEqual(checkEcho(spec), []);
 });
+
+// The echo check was fatal for two days and cost the 10 September morning post:
+// the model could not satisfy it, all three attempts went on it, and nothing
+// was published. A slide that repeats itself is ugly; a slide that does not
+// exist is a missed day.
+
+import { softProblems, validateShape } from '../pipeline/src/carousel/generate.js';
+
+const echoing = () => ({
+  topic: 'शुक्र ग्रह का दिन',
+  slides: [
+    { band: 'center', headline: 'क्या आप जानते हैं?', cta: false, query: 'venus planet' },
+    ...Array.from({ length: 7 }, (_, i) => ({
+      band: 'bottom',
+      headline: 'पृथ्वी का घूर्णन',
+      subline: 'पृथ्वी का घूर्णन धीमा है',
+      source: 'NASA',
+      cta: false,
+      query: `venus ${i}`,
+    })),
+    { band: 'bottom', headline: 'फ़ॉलो करें', cta: true, query: 'venus planet' },
+  ],
+});
+
+test('an echo is reported as soft, never as a shape error', () => {
+  const spec = echoing();
+  assert.ok(softProblems(spec).length > 0, 'the echo must still be seen');
+  assert.deepEqual(
+    validateShape(spec, []).filter((p) => p.includes('said again')),
+    [],
+    'an echo must not be a hard failure',
+  );
+});
+
+test('a spec whose only fault is an echo is otherwise valid', () => {
+  assert.deepEqual(validateShape(echoing(), []), []);
+});
