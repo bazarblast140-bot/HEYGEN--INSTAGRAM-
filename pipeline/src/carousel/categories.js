@@ -16,15 +16,42 @@
 // The weight decides how often; the stride decides how far apart.
 
 /** Weights are entry counts. They must sum to a length coprime with STRIDE. */
+// Sixteen subjects, twice each. It used to be eight, with space four times
+// over and everything else once to three times, and the feed read as two
+// things: space and AI. Nothing on the account was about food, medicine,
+// language, sport, weather, plants, transport or India at all.
+//
+// Two of each rather than a weighting, because a weighting is how space came
+// to be a fifth of the account. Thirty-two entries and a stride of five stay
+// coprime, so every subject comes round before any repeats.
+// Sixteen subjects, once each, and the rotation does the rest.
+//
+// It used to be eight subjects with space listed four times over, and the
+// account read as two things: space and AI. Nothing on it was ever about food,
+// medicine, language, sport, weather, plants, transport or India.
+//
+// Once each, not weighted: a weighting is exactly how space came to be a fifth
+// of everything. Sixteen entries with a stride of five are coprime, and the
+// evening offset is half the pool, so over any sixteen days every subject gets
+// exactly one morning and one evening -- no subject twice before all of them
+// have had a turn.
 export const POOL = [
-  ...Array(4).fill('space'),
-  ...Array(3).fill('science'),
-  ...Array(3).fill('body'),
-  ...Array(3).fill('technology'),
-  ...Array(3).fill('history'),
-  ...Array(2).fill('geography'),
-  ...Array(2).fill('animals'),
-  ...Array(1).fill('economy'),
+  'space',
+  'science',
+  'body',
+  'technology',
+  'history',
+  'geography',
+  'animals',
+  'economy',
+  'food',
+  'medicine',
+  'language',
+  'sports',
+  'weather',
+  'plants',
+  'transport',
+  'india',
 ];
 
 export const STRIDE = 5;
@@ -52,7 +79,11 @@ export const SLIDES = 9;
  * weights still hold exactly: over 21 days each category comes up twice its
  * weight, not once with a fudge.
  */
-export const SLOT_OFFSET = 10;
+// Half the pool. At 10 the evening pick was the morning pick of two days
+// later, so subjects came in pairs and a three-week stretch could miss some
+// entirely; at half the length the same collision is sixteen days away, which
+// is the whole cycle.
+export const SLOT_OFFSET = 8;
 
 /**
  * The two slots this rotation covers. The midday post is deliberately NOT here:
@@ -74,6 +105,14 @@ export const BRIEFS = {
   geography: 'पृथ्वी, महासागर, पहाड़, जलवायु',
   animals: 'जानवर, पक्षी, समुद्री जीव, उनकी क्षमताएँ',
   economy: 'पैसा, कंपनियाँ, व्यापार, मुद्रा',
+  food: 'खाना, मसाले, फ़सलें, रसोई का विज्ञान, पेय',
+  medicine: 'दवाइयाँ, टीके, बीमारियाँ, इलाज का इतिहास, सर्जरी',
+  language: 'भाषाएँ, लिपियाँ, शब्दों की जड़ें, अनुवाद',
+  sports: 'खेल, रिकॉर्ड, खिलाड़ियों के आँकड़े, खेल का विज्ञान',
+  weather: 'मौसम, तूफ़ान, बारिश, बिजली, मौसम का अनुमान',
+  plants: 'पेड़, जंगल, फूल, बीज, प्रकाश संश्लेषण',
+  transport: 'रेल, हवाई जहाज़, जहाज़, सड़क, इंजन',
+  india: 'भारत के तथ्य — नक्शा, रिकॉर्ड, संस्कृति, निर्माण, रेलवे',
 };
 
 /** Days since the epoch — the same date always chooses the same category. */

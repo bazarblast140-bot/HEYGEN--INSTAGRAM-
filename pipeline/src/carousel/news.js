@@ -33,29 +33,46 @@
  * the long tail.
  */
 export const FEEDS = [
+  // General technology and science first, and most of the list. It used to be
+  // nine AI feeds out of ten -- the AI sections of The Verge, TechCrunch and
+  // MIT Tech Review, plus arXiv cs.AI -- so an AI story was the only kind of
+  // story the midday post could possibly carry. Phones, chips, space missions,
+  // security, Indian technology and plain science had no way in.
+  { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
+  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
+  { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
+  { name: 'Engadget', url: 'https://www.engadget.com/rss.xml' },
+  { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
+  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml' },
+  { name: 'Gadgets 360', url: 'https://www.gadgets360.com/rss/news' },
+  { name: 'ScienceDaily', url: 'https://www.sciencedaily.com/rss/top/technology.xml' },
+  { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/' },
+
+  // The AI labs stay, because a launch is announced here before it is
+  // reported anywhere -- but three of them, not nine.
   { name: 'OpenAI', url: 'https://openai.com/news/rss.xml' },
   { name: 'Google AI', url: 'https://blog.google/technology/ai/rss/' },
-  { name: 'The Verge', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
-  { name: 'TechCrunch', url: 'https://techcrunch.com/category/artificial-intelligence/feed/' },
-  { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed/' },
-  { name: 'VentureBeat', url: 'https://venturebeat.com/category/ai/feed/' },
-  { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
   { name: 'Hugging Face', url: 'https://huggingface.co/blog/feed.xml' },
-  { name: 'MarkTechPost', url: 'https://www.marktechpost.com/feed/' },
-  { name: 'arXiv cs.AI', url: 'https://rss.arxiv.org/rss/cs.AI' },
 ];
 
 const HN = 'https://hn.algolia.com/api/v1/search';
 const GOOGLE = 'https://news.google.com/rss/search';
 
 /** What to ask Google News, in its own words. */
-export const QUERIES = ['artificial intelligence', 'AI technology India'];
+// Both queries used to say "artificial intelligence", which made Google News a
+// fourth AI feed rather than the way in for everything else.
+export const QUERIES = [
+  'technology India',
+  'science discovery',
+  'gadget launch',
+  'artificial intelligence',
+];
 
 /**
  * Words that make a story about technology rather than about a share price.
  * Only Hacker News needs this -- every other source is already on topic.
  */
-const ON_TOPIC = /\b(ai|llm|gpt|claude|gemini|llama|model|neural|robot|chip|gpu|semiconductor|quantum|open[- ]?source|algorithm|dataset|training|inference|agent|rust|linux|kernel|browser|encryption|satellite|battery|solar|fusion|biotech|genome|space|rocket)\b/i;
+const ON_TOPIC = /\b(ai|llm|gpt|claude|gemini|llama|model|neural|robot|chip|gpu|semiconductor|quantum|open[- ]?source|algorithm|dataset|training|inference|agent|rust|linux|kernel|browser|encryption|satellite|battery|solar|fusion|biotech|genome|space|rocket|phone|smartphone|laptop|camera|display|processor|storage|network|5g|internet|software|hardware|security|privacy|physics|climate|energy|vaccine|medicine|dna|telescope|mission|launch|discovery|research|study)\b/i;
 
 /** Noise on a facts account whatever its source. */
 const OFF_TOPIC = /\b(hiring|who is hiring|ask hn|show hn|layoffs?|lawsuit|funding round|series [a-e]\b|ipo|stock|shares|earnings|obituary|died|passed away|deals?|discount|coupon|sale ends|best .* under)\b/i;
