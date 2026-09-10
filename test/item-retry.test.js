@@ -24,7 +24,9 @@ function flaky(failures) {
   return () => seen;
 }
 
-const args = { igUserId: '1', imageUrl: 'https://example.com/03.jpg', token: 't', waitMs: 1 };
+// attempts is pinned here so the test states the contract it checks rather
+// than tracking whatever the default was raised to this week.
+const args = { igUserId: '1', imageUrl: 'https://example.com/03.jpg', token: 't', waitMs: 1, attempts: 3 };
 
 test('a slide rejected once is asked again and goes through', async () => {
   const calls = flaky(1);

@@ -38,7 +38,7 @@ function fakeGitHub({ deleteStatus = 204 } = {}) {
     // The public URL check that upload() now makes before returning. Covered by
     // its own tests in served.test.js; here it just has to answer.
     if (url.hostname === 'example.com') {
-      return { ok: true, status: 200, headers: { get: () => 'image/jpeg' } };
+      return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([0xff, 0xd8, 0xff]).buffer };
     }
 
     if (method === 'DELETE') {

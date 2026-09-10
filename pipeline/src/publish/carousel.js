@@ -56,7 +56,7 @@ export function checkCarousel({ imageUrls, caption }) {
 }
 
 /** Step 1 — one container per image. No caption here; it goes on the parent. */
-export async function createItemContainer({ igUserId, imageUrl, token, surface, attempts = 3, waitMs = 4000, onRetry }) {
+export async function createItemContainer({ igUserId, imageUrl, token, surface, attempts = 5, waitMs = 8000, onRetry }) {
   // Retried, because this call is Instagram reaching out across the internet to
   // fetch a file it has never seen, and that is not a reliable thing.
   //

@@ -144,24 +144,21 @@ async function upload({ repo, token, release, file, name }) {
 }
 
 /**
- * Wait until the public URL actually returns the image.
+ * Wait until the public URL actually returns the file.
  *
- * A successful upload means GitHub has the file. It does not mean the download
- * URL is serving it yet, and the gap is seconds. Instagram is handed that URL,
- * fetches it in the same breath, gets whatever stands in for the file until it
- * is ready, and answers:
+ * A successful upload means GitHub has the file. It does not always mean the
+ * download URL is serving it, and a URL that answers 404 is a URL Instagram
+ * rejects with "Only photo or video can be accepted as media type" -- a verdict
+ * on the image, for a problem that has nothing to do with it.
  *
- *   Only photo or video can be accepted as media type. (code 9004)
- *
- * which reads as a verdict on the image and is nothing of the sort. Measured on
- * 2026-09-10 against a brand-new release: slide 1 was refused once and taken on
- * the retry four seconds later; slide 2 was refused three times over twelve
- * seconds and the post was abandoned. Same renderer, same size, same release.
- *
- * Retrying at Instagram treats the symptom and costs an API call each time. The
- * question worth asking is the one asked here, unauthenticated, exactly as
- * Instagram would ask it: is this URL serving an image yet?
+ * What this must NOT check is the Content-Type. GitHub serves every release
+ * asset as application/octet-stream; the releases behind the posts of 8 and 9
+ * September do it too, and those published. Requiring image/* here rejected a
+ * perfectly good file eight times and cost another run. The bytes are the
+ * evidence: a JPEG starts FF D8 FF, and nothing else does.
  */
+const JPEG_MAGIC = [0xff, 0xd8, 0xff];
+
 export async function waitUntilServed(url, { attempts = 8, waitMs = 1500, onWait } = {}) {
   let last = 'never asked';
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -169,9 +166,13 @@ export async function waitUntilServed(url, { attempts = 8, waitMs = 1500, onWait
       // No Authorization header, on purpose: this has to be the fetch a stranger
       // makes, because that is the fetch Instagram makes.
       const res = await fetch(url, { redirect: 'follow' });
-      const type = res.headers.get('content-type') || '';
-      if (res.ok && /^(image|video)\//.test(type)) return { attempts: attempt };
-      last = `${res.status} ${type || 'no content-type'}`;
+      if (res.ok) {
+        const head = new Uint8Array((await res.arrayBuffer()).slice(0, 3));
+        if (JPEG_MAGIC.every((b, i) => head[i] === b)) return { attempts: attempt };
+        last = `${res.status} but the first bytes are not a JPEG`;
+      } else {
+        last = String(res.status);
+      }
     } catch (err) {
       last = err.message;
     }
