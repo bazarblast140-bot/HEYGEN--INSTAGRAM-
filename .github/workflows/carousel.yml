@@ -130,8 +130,13 @@ jobs:
           # midday run. The cron string says what was scheduled; the clock does
           # not. See slotForCron in src/carousel/categories.js.
           SCHEDULED_CRON: ${{ github.event.schedule }}
-          # A dispatch names its slot outright, which beats deriving it.
-          DISPATCH_SLOT: ${{ github.event.client_payload.slot }}
+          # A dispatch names its slot outright, which beats deriving it. Both
+          # kinds count: repository_dispatch carries it in client_payload, and
+          # a hand-run names it in inputs. The build step already honours the
+          # input, so without this line a manual "post the morning one" would
+          # build a morning carousel and record it under whatever slot the
+          # clock happened to be in -- leaving the real morning slot pending.
+          DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Answers "is the script key live?" without spending a token. It is here
