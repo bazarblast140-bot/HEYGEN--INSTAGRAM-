@@ -254,6 +254,13 @@ jobs:
           IG_SURFACE: ${{ vars.IG_SURFACE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Without this, `node ... | tee` reports tee's exit status -- always 0.
+          # On 2026-09-10 the morning publish failed on slide 3 and the step went
+          # green, so "Remember this post's topic" ran, committed the ledger, and
+          # marked the morning slot posted. Every later trigger then skipped it,
+          # by design, and the day was gone. A publish that did not publish must
+          # never be able to say it did.
+          set -o pipefail
           node pipeline/publish-carousel.js --report pipeline/out/carousel-report.json --yes 2>&1 | tee publish.log
           {
             echo '## Published'

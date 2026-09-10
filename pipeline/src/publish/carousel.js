@@ -56,12 +56,32 @@ export function checkCarousel({ imageUrls, caption }) {
 }
 
 /** Step 1 — one container per image. No caption here; it goes on the parent. */
-export async function createItemContainer({ igUserId, imageUrl, token, surface }) {
-  const { id } = await call(`${igUserId}/media`, {
-    method: 'POST', token, surface,
-    params: { image_url: imageUrl, is_carousel_item: 'true' },
-  });
-  return id;
+export async function createItemContainer({ igUserId, imageUrl, token, surface, attempts = 3, waitMs = 4000, onRetry }) {
+  // Retried, because this call is Instagram reaching out across the internet to
+  // fetch a file it has never seen, and that is not a reliable thing.
+  //
+  // On 2026-09-10 slides 1 and 2 were accepted and slide 3 came back "Only
+  // photo or video can be accepted as media type" in 650ms -- too fast to be a
+  // verdict on the image, which is identical in format and size to the two that
+  // had just been taken. A freshly uploaded release asset is not always being
+  // served yet. One image losing the whole day's post is the wrong trade, so it
+  // is asked again before the carousel is abandoned.
+  let last;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const { id } = await call(`${igUserId}/media`, {
+        method: 'POST', token, surface,
+        params: { image_url: imageUrl, is_carousel_item: 'true' },
+      });
+      return id;
+    } catch (err) {
+      last = err;
+      if (attempt === attempts) break;
+      onRetry?.(attempt, err.message);
+      await new Promise((r) => setTimeout(r, waitMs * attempt));
+    }
+  }
+  throw last;
 }
 
 /** Step 2 — the parent that ties the children together, in order. */
@@ -94,7 +114,10 @@ export async function publishCarousel({
   // Sequential, and indexed. Order on the feed is this array's order.
   const children = [];
   for (const [i, imageUrl] of imageUrls.entries()) {
-    children.push(await createItemContainer({ igUserId, imageUrl, token, surface }));
+    children.push(await createItemContainer({
+      igUserId, imageUrl, token, surface,
+      onRetry: (n, why) => onStatus?.('retry', `${i + 1}/${imageUrls.length} attempt ${n}: ${why.slice(0, 120)}`),
+    }));
     onStatus?.('item', `${i + 1}/${imageUrls.length} ${children.at(-1)}`);
   }
 
