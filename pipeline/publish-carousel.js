@@ -94,7 +94,19 @@ async function main() {
   console.log('\nHosting');
   const { assets, tag } = await hostFiles({
     files: wantStory ? [...files, report.story] : files,
-    tag: `carousel-${new Date().toISOString().slice(0, 10)}`,
+    // Per run, not per day.
+    //
+    // Re-using one tag for a whole day means a re-run deletes each asset and
+    // uploads a new file to the SAME public URL. GitHub serves those downloads
+    // through a cache, and a URL that has been deleted and replaced three times
+    // in ninety minutes does not reliably serve the current file -- Instagram
+    // fetches it, does not get an image, and says "Only photo or video can be
+    // accepted as media type". Slides 1 and 2 went through on 2026-09-10 and
+    // slide 3 failed all three attempts, which is not what a flaky network
+    // looks like; it is what a poisoned URL looks like.
+    //
+    // A fresh tag per run means every URL is new and is never written twice.
+    tag: `carousel-${new Date().toISOString().slice(0, 10)}-${process.env.GITHUB_RUN_ID || Date.now().toString(36)}`,
     onProgress: (n, total) => process.stdout.write(`\r  ${n}/${total}`),
   });
   process.stdout.write('\n');
