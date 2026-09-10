@@ -293,9 +293,27 @@ jobs:
           if-no-files-found: warn
 
       # What the account is actually doing. Likes and comments come off the
-      # media node; reach and saves need a permission we may not have, and the
-      # only way to know is to ask. Read-only, and it publishes nothing.
+      # media node; reach and saves are not permitted -- the insights edge
+      # answers "(#10) Application does not have permission" -- so this is the
+      # whole of the evidence, and it runs on every post so the record builds
+      # itself rather than waiting for someone to ask.
       - name: How the account is doing
+        if: always()
+        continue-on-error: true
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: |
+          node pipeline/audit.js 2>&1 | tee audit.log || true
+          {
+            echo '## Audit'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' audit.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: What the token may read
         if: ${{ always() && env.AUTOMATED != 'true' }}
         continue-on-error: true
         env:

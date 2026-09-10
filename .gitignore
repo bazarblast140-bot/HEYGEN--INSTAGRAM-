@@ -7,3 +7,5 @@ downloads/
 
 # pipeline render artifacts
 pipeline/out/
+
+pipeline/engagement.json

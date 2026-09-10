@@ -18,7 +18,11 @@ export const LEDGER = path.resolve(HERE, '..', '..', 'topic-history.json');
 
 // Long enough that a fortnight of trading days cannot loop, short enough that a
 // genuinely recurring subject (a budget, a rate decision) can come back later.
-export const REMEMBER = 20;
+// Forty days of posts. It was 20, which at three posts a day is under a week --
+// so the audit reported three weeks of "missed" slots that had in fact gone out
+// and been trimmed off the end of the ledger. A wrong alarm is worse than none,
+// and this is also the window the repeat check reads.
+export const REMEMBER = 120;
 
 // Stories are remembered separately from topics, and far more of them: one post
 // consumes a dozen, and a topic line ("आज की टेक ख़बरें") says nothing about
