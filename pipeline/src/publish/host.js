@@ -138,7 +138,47 @@ async function upload({ repo, token, release, file, name }) {
     },
   );
 
-  return { url: asset.browser_download_url, name, sizeBytes: data.length };
+  const url = asset.browser_download_url;
+  await waitUntilServed(url);
+  return { url, name, sizeBytes: data.length };
+}
+
+/**
+ * Wait until the public URL actually returns the image.
+ *
+ * A successful upload means GitHub has the file. It does not mean the download
+ * URL is serving it yet, and the gap is seconds. Instagram is handed that URL,
+ * fetches it in the same breath, gets whatever stands in for the file until it
+ * is ready, and answers:
+ *
+ *   Only photo or video can be accepted as media type. (code 9004)
+ *
+ * which reads as a verdict on the image and is nothing of the sort. Measured on
+ * 2026-09-10 against a brand-new release: slide 1 was refused once and taken on
+ * the retry four seconds later; slide 2 was refused three times over twelve
+ * seconds and the post was abandoned. Same renderer, same size, same release.
+ *
+ * Retrying at Instagram treats the symptom and costs an API call each time. The
+ * question worth asking is the one asked here, unauthenticated, exactly as
+ * Instagram would ask it: is this URL serving an image yet?
+ */
+export async function waitUntilServed(url, { attempts = 8, waitMs = 1500, onWait } = {}) {
+  let last = 'never asked';
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      // No Authorization header, on purpose: this has to be the fetch a stranger
+      // makes, because that is the fetch Instagram makes.
+      const res = await fetch(url, { redirect: 'follow' });
+      const type = res.headers.get('content-type') || '';
+      if (res.ok && /^(image|video)\//.test(type)) return { attempts: attempt };
+      last = `${res.status} ${type || 'no content-type'}`;
+    } catch (err) {
+      last = err.message;
+    }
+    onWait?.(attempt, last);
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, waitMs));
+  }
+  throw new Error(`${url} is still not being served after ${attempts} tries (${last}). Instagram would reject it.`);
 }
 
 export async function hostVideo({ file, tag = `reel-${new Date().toISOString().slice(0, 10)}` }) {
