@@ -30,13 +30,15 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   html, body {
-    width: 1080px; height: 1350px;
+    /* 1080x1350 is the feed. A story is the same scene at 1080x1920, so the
+       stage reads its size from a variable instead of hard-coding the feed. */
+    width: var(--stage-w, 1080px); height: var(--stage-h, 1350px);
     background: #000;
     font-family: 'Noto Devanagari', sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
-  #stage { position: relative; width: 1080px; height: 1350px; overflow: hidden; }
+  #stage { position: relative; width: var(--stage-w, 1080px); height: var(--stage-h, 1350px); overflow: hidden; }
 
   /* Background photo, or a generated field when no photo is supplied. */
   #bg {
@@ -177,6 +179,13 @@
   }
 
   window.__slide = {
+    /** Resize the stage. Called once per page, before the first load(). */
+    size(w, h) {
+      const root = document.documentElement.style;
+      root.setProperty('--stage-w', w + 'px');
+      root.setProperty('--stage-h', h + 'px');
+    },
+
     load(data) {
       const {
         headline = '',
@@ -189,6 +198,7 @@
         background,          // file:// or https:// image for the photo layer
         insets = [],         // [{ image, x, y, size }] in design px
         band = 'bottom',     // 'bottom' (list slides) | 'center' (cover slide)
+      bottomInset = 0,     // px of untouchable frame at the bottom (stories)
       } = data;
 
       if (ink) document.documentElement.style.setProperty('--ink', ink);
@@ -238,7 +248,14 @@
       // Lay the block out from the bottom so a two-line and a four-line slide
       // share the same baseline instead of drifting up the frame.
       const copy = $('copy');
-      copy.style.bottom = (cover ? 116 : 104) + 'px';
+      // A story is not a feed post twice over. Instagram lays its own reply bar
+      // across the bottom of the frame, so text at 116px is under the UI rather
+      // than on it; and the frame is 570px taller, so bottom-anchored copy
+      // leaves the top two thirds empty while the eye sits in the middle. On a
+      // story the block is placed a third of the way up instead.
+      copy.style.bottom = bottomInset
+        ? Math.round(document.getElementById('stage').clientHeight * 0.34) + 'px'
+        : (cover ? 116 : 104) + 'px';
       copy.style.top = 'auto';
       s.style.marginTop = subline ? '18px' : '0';
 

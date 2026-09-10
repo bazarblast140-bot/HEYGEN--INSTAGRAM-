@@ -15,6 +15,7 @@ import fs from 'node:fs/promises';
 
 import { hostFiles } from './src/publish/host.js';
 import { publishCarousel, checkCarousel } from './src/publish/carousel.js';
+import { publishStory } from './src/publish/story.js';
 import { whoami } from './src/publish/instagram.js';
 import { env } from '../src/config.js';
 
@@ -85,14 +86,21 @@ async function main() {
     return;
   }
 
+  // The story rides along in the same release. One upload, one tag, and the
+  // story URL is simply the last asset — a second release for one JPEG would
+  // double the failure surface for the optional half of the job.
+  const wantStory = args.story !== false && Boolean(report.story);
+
   console.log('\nHosting');
   const { assets, tag } = await hostFiles({
-    files,
+    files: wantStory ? [...files, report.story] : files,
     tag: `carousel-${new Date().toISOString().slice(0, 10)}`,
     onProgress: (n, total) => process.stdout.write(`\r  ${n}/${total}`),
   });
   process.stdout.write('\n');
-  const imageUrls = assets.map((a) => a.url);
+  const hosted = assets.map((a) => a.url);
+  const imageUrls = hosted.slice(0, files.length);
+  const storyUrl = wantStory ? hosted.at(-1) : null;
   console.log(`  release ${tag}`);
 
   const problems = checkCarousel({ imageUrls, caption });
@@ -109,6 +117,24 @@ async function main() {
   });
 
   console.log(`\n${ok('published')} ${mediaId}`);
+
+  // After the post, never instead of it. A story that fails is a story that
+  // did not go out; a post that fails because of a story is a day lost, so
+  // nothing below here is allowed to change the exit code.
+  if (storyUrl) {
+    console.log('\nStory');
+    try {
+      const { mediaId: storyId } = await publishStory({
+        imageUrl: storyUrl,
+        surface: env('IG_SURFACE') || me.working,
+        onStatus: (stage, value) => console.log(`  ${stage}: ${value}`),
+      });
+      console.log(`  ${ok('story published')} ${storyId}`);
+    } catch (err) {
+      console.log(`  ${bad('story failed')} ${err.message.slice(0, 200)}`);
+      console.log(`  ${dim('the carousel is posted and unaffected')}`);
+    }
+  }
 }
 
 main().catch((err) => { console.error(`\n${err.message}`); process.exit(1); });

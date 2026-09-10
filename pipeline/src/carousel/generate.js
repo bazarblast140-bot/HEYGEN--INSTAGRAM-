@@ -23,6 +23,7 @@ import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } 
 import { categoryFor, slotFor, SLIDES } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
 import { checkEcho } from './echo.js';
+import { checkMoneySources } from './money.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
@@ -69,7 +70,7 @@ export const CarouselSpec = z.object({
  * stays fatal: a missing source, a repeated topic, a broken half-Hindi word.
  */
 export function softProblems(spec) {
-  return checkEcho(spec);
+  return [...checkEcho(spec), ...checkMoneySources(spec)];
 }
 
 export function validateShape(spec, recentTopics) {

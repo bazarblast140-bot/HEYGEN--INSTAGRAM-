@@ -20,7 +20,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { renderSlides, WIDTH, HEIGHT } from './render-slides.js';
+import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } from './render-slides.js';
 import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
@@ -303,6 +303,28 @@ async function main() {
   });
   process.stdout.write('\n');
 
+  // The same cover, 9:16, for the story.
+  //
+  // A carousel goes to whoever the feed decides to show it to; a story goes to
+  // the top of the screen of everyone who already follows. With 506 followers
+  // and eleven likes a fortnight, the followers are the audience worth having.
+  // It is one extra screenshot from a browser that is already open, so it costs
+  // a second and is built whether or not it ends up being posted.
+  let story = null;
+  try {
+    const { files: storyFiles } = await renderSlides({
+      spec: { ...ready, slides: [ready.slides[0]] },
+      outDir: path.join(path.dirname(outDir), 'story'),
+      width: STORY_WIDTH, height: STORY_HEIGHT, bottomInset: STORY_INSET,
+      ...(args.format ? { format: args.format } : {}),
+    });
+    story = path.relative(process.cwd(), storyFiles[0]);
+    console.log(`story    ${STORY_WIDTH}x${STORY_HEIGHT} ${format}  ->  ${story}`);
+  } catch (err) {
+    // A story is a nudge toward the post. The post is the thing.
+    console.log(`story    not built — ${err.message.slice(0, 120)}`);
+  }
+
   const caption = composeCaption(spec, BRAND.tag);
 
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
@@ -315,6 +337,7 @@ async function main() {
     photos: ready.slides.filter((s) => s.background).length,
     insets: ready.slides.filter((s) => s.insets?.length).length,
     topic: spec.topic || null,
+    story,
     // The lines themselves. A report that says "9 slides" and a topic tells you
     // the run worked; it does not tell you what the account is about to say.
     lines: (ready.slides || []).map((s, i) => ({

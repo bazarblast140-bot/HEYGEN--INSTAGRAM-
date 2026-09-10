@@ -81,7 +81,14 @@ function toUrl(src) {
   return pathToFileURL(path.resolve(src)).href;
 }
 
-export async function renderSlides({ spec, outDir, onProgress, format = FORMAT, quality = QUALITY }) {
+export const STORY_WIDTH = 1080;
+export const STORY_HEIGHT = 1920;    // 9:16 — the story frame
+export const STORY_INSET = 260;      // Instagram's own UI sits over the bottom
+
+export async function renderSlides({
+  spec, outDir, onProgress, format = FORMAT, quality = QUALITY,
+  width = WIDTH, height = HEIGHT, bottomInset = 0,
+}) {
   if (!['jpeg', 'png'].includes(format)) throw new Error(`Unknown format "${format}" — jpeg or png.`);
   const slides = spec.slides || [];
   if (!slides.length) throw new Error('Spec has no slides.');
@@ -98,13 +105,14 @@ export async function renderSlides({ spec, outDir, onProgress, format = FORMAT, 
   const files = [];
   try {
     const page = await browser.newPage({
-      viewport: { width: WIDTH, height: HEIGHT },
+      viewport: { width, height },
       deviceScaleFactor: 1,
       reducedMotion: 'reduce',
     });
     page.on('pageerror', (err) => { throw new Error(`Slide scene threw: ${err.message}`); });
 
     await page.goto(pathToFileURL(SCENE).href, { waitUntil: 'load' });
+    await page.evaluate(([w, h]) => window.__slide.size(w, h), [width, height]);
 
     // Force every bundled face to load before the first slide is measured.
     //
@@ -131,6 +139,7 @@ export async function renderSlides({ spec, outDir, onProgress, format = FORMAT, 
         ink: spec.ink,
         brandInk: spec.brandInk,
         ...slide,
+        bottomInset,
         background: toUrl(slide.background),
         logo: toUrl(slide.logo || spec.logo),
         insets: (slide.insets || []).map((it) => ({ ...it, image: toUrl(it.image) })),
@@ -152,7 +161,7 @@ export async function renderSlides({ spec, outDir, onProgress, format = FORMAT, 
     await browser.close();
   }
 
-  return { files, width: WIDTH, height: HEIGHT, format };
+  return { files, width, height, format };
 }
 
 async function main() {

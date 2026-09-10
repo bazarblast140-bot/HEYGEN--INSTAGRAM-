@@ -286,6 +286,7 @@ jobs:
           name: carousel
           path: |
             pipeline/out/slides
+            pipeline/out/story
             pipeline/out/spec-generated.json
             pipeline/out/caption.txt
             pipeline/out/carousel-report.json
