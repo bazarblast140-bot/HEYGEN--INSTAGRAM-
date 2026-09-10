@@ -292,6 +292,25 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      # What the account is actually doing. Likes and comments come off the
+      # media node; reach and saves need a permission we may not have, and the
+      # only way to know is to ask. Read-only, and it publishes nothing.
+      - name: How the account is doing
+        if: ${{ always() && env.AUTOMATED != 'true' }}
+        continue-on-error: true
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: |
+          node pipeline/insights-doctor.js 2>&1 | tee insights.log || true
+          {
+            echo '## Account'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' insights.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Last, deliberately. Its whole output is four lines, and anywhere earlier
       # they are buried under the Chromium download; at the end of the job they
       # are the end of the log.
