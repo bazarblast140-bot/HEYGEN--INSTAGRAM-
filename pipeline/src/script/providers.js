@@ -66,29 +66,47 @@ export function resolveProvider() {
   return null;
 }
 
+function isDeepSeek(provider) {
+  const model = String(provider.model || '').toLowerCase();
+  const base = String(provider.baseUrl || '').toLowerCase();
+  return provider.name === 'deepseek' || model.includes('deepseek') || base.includes('deepseek.com');
+}
+
 /**
  * OpenAI-compatible chat completions in JSON mode.
  *
  * JSON mode guarantees parseable JSON, not a shape, so the schema is checked here
  * rather than enforced by the server. A shape failure carries the field paths so
  * the retry can name what was wrong.
+ *
+ * DeepSeek V4.x defaults to thinking mode: message.content is often empty and the
+ * answer sits in reasoning_content (or never lands). Disable thinking for script
+ * generation so JSON mode actually returns JSON in content.
  */
 export async function callOpenAICompatible({ provider, system, user, schema }) {
   const baseUrl = provider.baseUrl.replace(/\/$/, '');
+  const deepseek = isDeepSeek(provider);
+
+  const body = {
+    model: provider.model,
+    max_tokens: 8000,
+    temperature: 0.6,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+  };
+
+  // V4 Flash / Pro: thinking on by default → empty content with --require-generated.
+  if (deepseek) {
+    body.thinking = { type: 'disabled' };
+  }
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: provider.model,
-      max_tokens: 8000,
-      temperature: 0.6,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
 
   const payload = await res.json().catch(() => ({}));
@@ -103,7 +121,12 @@ export async function callOpenAICompatible({ provider, system, user, schema }) {
     throw new Error(`${provider.name} request failed: ${detail}`);
   }
 
-  const text = payload?.choices?.[0]?.message?.content;
+  const msg = payload?.choices?.[0]?.message || {};
+  let text = msg.content;
+  // Some thinking responses leave content empty; last resort is reasoning_content.
+  if (!text && typeof msg.reasoning_content === 'string') {
+    text = msg.reasoning_content;
+  }
   if (!text) throw new Error(`${provider.name} returned no content`);
 
   let parsed;
