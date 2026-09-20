@@ -52,34 +52,20 @@ const notes = [];
 const note = (msg) => { notes.push(msg); console.log(`  · ${msg}`); };
 
 /**
- * Reject the spec before rendering rather than after posting.
+ * Turn a literal backslash-n into a real newline.
  *
- * The `source` rule is the one that matters. On an account whose whole promise
- * is that the numbers are right, an unsourced figure is worse than a missed
- * day — a missed day costs nothing, a wrong number costs the reason anyone
- * follows. So a list slide without a source is a hard failure, not a warning.
+ * Specs written by hand sometimes store "line1\\nline2" (two characters) instead
+ * of an actual line break. The slide scene uses white-space:pre-line, so those
+ * two characters print as "\\n" on Instagram — which is exactly what the
+ * 2026-09-20 celebrity-homes post did. Expand once, here, so every path is safe.
  */
-/**
- * One hashtag block, not two.
- *
- * The live post had them twice: the model wrote its own row of tags at the end
- * of the caption AND returned them in the hashtags field, and the caption was
- * simply the two concatenated. So any tags the caption already ends with are
- * lifted out of it, merged with the field, and written once.
- *
- * Matching is case-insensitive: #Venus and #venus are one tag to Instagram and
- * two rows to a reader.
- */
+function expandNewlines(text) {
+  if (text == null) return text;
+  return String(text).replace(/\\n/g, '\n');
+}
+
 export const HOOK_LIMIT = 125;
 
-/**
- * Instagram shows one line above "more", and search shows roughly the same.
- *
- * A model asked for a short opening line sometimes writes one 193-character
- * paragraph instead, and then the hook is a sentence fragment cut mid-word. So
- * a long opening is split at its first sentence end -- the hook the writer
- * actually wrote -- and the remainder becomes the next line. Nothing is lost.
- */
 export function reflowHook(text, limit = HOOK_LIMIT) {
   const [first, ...rest] = String(text).split('\n');
   if (first.length <= limit) return text;
@@ -92,20 +78,6 @@ export function reflowHook(text, limit = HOOK_LIMIT) {
     .filter(Boolean).join('\n');
 }
 
-/**
- * A subline is two lines. Anything else comes out small.
- *
- * The renderer shrinks text until it fits its band AND occupies exactly the
- * number of lines the spec asked for, so a subline written as one long
- * unbroken sentence is shrunk all the way to the floor trying to stay on one
- * line -- which is how "कैलिफोर्निया में उम्र सत्यापन कानून से Linux मुक्त,
- * डेवलपर्स के लिए राहत" reached the feed at the minimum size. Three lines fold
- * into two; one long line is broken at the word boundary nearest the middle,
- * so both halves are about as wide and the type stays big.
- *
- * Repaired here rather than sent back to the model: a rejected attempt costs a
- * whole generation, and this is a fault with one right answer.
- */
 export const SUBLINE_ONE_LINE = 30;
 
 export function balanceSubline(text, limit = SUBLINE_ONE_LINE) {
@@ -115,7 +87,6 @@ export function balanceSubline(text, limit = SUBLINE_ONE_LINE) {
   if (lines.length > 2) return [lines[0], lines.slice(1).join(' ')].join('\n');
   if (lines.length === 2 || lines[0].length <= limit) return lines.join('\n');
 
-  // One long line: break as near the middle as a space allows.
   const only = lines[0];
   const middle = Math.floor(only.length / 2);
   let cut = -1;
@@ -123,19 +94,16 @@ export function balanceSubline(text, limit = SUBLINE_ONE_LINE) {
     if (only[i] !== ' ') continue;
     if (cut === -1 || Math.abs(i - middle) < Math.abs(cut - middle)) cut = i;
   }
-  if (cut <= 0) return only;                       // one very long word, nothing to do
+  if (cut <= 0) return only;
   return [only.slice(0, cut).trim(), only.slice(cut + 1).trim()].join('\n');
 }
 
 export function composeCaption(spec, brandTag) {
-  const written = reflowHook(String(spec.caption || '').trim());
+  const written = reflowHook(expandNewlines(String(spec.caption || '').trim()));
   const trailing = written.match(/(?:^|\n)[ \t]*(?:#[^\s#]+[ \t]*)+$/);
   const body = trailing ? written.slice(0, trailing.index).trim() : written;
   const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
 
-  // The brand tag is added here rather than asked for in the prompt: it is the
-  // one hashtag that must be on every post, and a model that forgets it once
-  // breaks the only tag that collects the account's own back catalogue.
   const seen = new Map();
   for (const tag of [...inline, ...(spec.hashtags || []), brandTag]) {
     const key = String(tag).toLowerCase();
@@ -160,9 +128,6 @@ export function validateSpec(spec) {
     const n = i + 1;
     if (!String(slide.headline || '').trim()) problems.push(`slide ${n} has no headline`);
 
-    // The cover asks a question and the closing card asks for a follow; neither
-    // states a figure, so neither needs a citation. Every slide that carries a
-    // fact does.
     const carriesFact = slide.band !== 'center' && !slide.cta;
     if (carriesFact && !String(slide.source || slide.footnote || '').trim()) {
       problems.push(`slide ${n} states a fact with no "source"`);
@@ -177,20 +142,11 @@ async function main() {
   const specPath = args.spec || path.join(HERE, 'specs', 'carousel-hindi.json');
   const outDir = path.resolve(args.out || path.join(HERE, 'out', 'slides'));
 
-  // Without --generate the checked-in spec is a fixture, and a fixture posted
-  // every morning is one post repeated forever. Generation is what makes this a
-  // daily show; the spec on disk stays as the thing to fall back to.
-  // Which post this is, whether or not generation ran -- the background choice
-  // depends on it.
   let slotUsed = args.slot || slotFor(new Date());
 
   let spec;
   if (args.generate) {
     console.log('Writing today\'s carousel');
-    // The midday post is a different thing wearing the same clothes: same six
-    // slides, same brand, but built on stories fetched an hour ago rather than
-    // a category picked from a pool. Routing on the slot keeps that difference
-    // in one place.
     const slot = args.slot || slotFor(new Date());
     slotUsed = slot;
     const write = slot === 'midday' ? generateNewsCarousel : generateCarousel;
@@ -199,29 +155,17 @@ async function main() {
       const written = await write({
         ...(slot === 'midday' ? { onNote: note } : { slot }),
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
-        // Why a draft was thrown away. Fed to the model already; printing it too
-        // is what turns "deepseek in 3 attempt(s)" from a number into a reason.
         onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
       });
       spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
       if (written.stories) {
-        // Which source actually fed the post. Invisible once, and that is how
-        // Google News contributed nothing for a whole run without anyone
-        // noticing.
         const by = written.stories.reduce((acc, st) => ({ ...acc, [st.from]: (acc[st.from] || 0) + 1 }), {});
         note(`stories: ${Object.entries(by).map(([k, v]) => `${v} ${k}`).join(', ')}`);
       }
       await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
     } catch (err) {
-      // On a run that publishes, falling back is worse than failing.
-      //
-      // The checked-in spec is one fixed carousel. Falling back to it on a
-      // scheduled run does not mean "no new fact today", it means posting a
-      // carousel the account has already posted -- and the ledger cannot catch
-      // that, because the fallback never goes through the ledger. A skipped day
-      // costs nothing; a duplicate costs the reason people follow.
       if (args['require-generated']) {
         console.error(`\nGeneration failed and --require-generated is set, so nothing was built.`);
         console.error(`  ${err.message.slice(0, 300)}`);
@@ -236,19 +180,24 @@ async function main() {
     console.log(`Spec  ${path.relative(process.cwd(), specPath)}  (${(spec.slides || []).length} slides)`);
   }
 
+  // Defensive: expand any leftover literal \\n from hand-written or model specs.
+  spec = {
+    ...spec,
+    caption: expandNewlines(spec.caption),
+    slides: (spec.slides || []).map((s) => ({
+      ...s,
+      headline: expandNewlines(s.headline),
+      subline: expandNewlines(s.subline),
+      source: expandNewlines(s.source),
+      footnote: expandNewlines(s.footnote),
+    })),
+  };
+
   const problems = validateSpec(spec);
   if (problems.length) {
     console.error(`REJECTED:\n  ${problems.join('\n  ')}`);
     process.exit(1);
   }
-
-  // The scene renders `footnote`; the spec carries `source`. Keeping them
-  // separate means the validator can insist on a citation without dictating
-  // how it is worded on screen.
-  // Devanagari sets tall and a third line overflows the band; the renderer
-  // shrinks to fit, so it comes out small rather than clipped, which is worse
-  // because nothing looks broken. Two lines, with the overflow folded into the
-  // second -- repaired here rather than sent back to the model.
 
   const withFootnotes = {
     ...spec,
@@ -259,30 +208,18 @@ async function main() {
     })),
   };
 
-  // Photos on every post, news included.
-  //
-  // They were switched off here for a day after three bad sets -- a penguin for
-  // a Linux story, a stranger's Instagram profile on the follow card. The
-  // reference account this is modelled on runs photographs on every slide and
-  // they always fit, but its pictures are GENERATED for each fact, not searched
-  // for. A stock library cannot do that, so the ranking has to work harder:
-  // see backgrounds.js. --no-photos still forces the gradient.
   let ready = withFootnotes;
   if (args['no-photos']) {
     note('--no-photos — generated gradient behind every slide');
   } else {
     console.log('Backgrounds');
-    // The account's own pictures first -- cover and follow card are ours, and
-    // a search must not get a vote on them: see pictures.js.
     const { spec: withOurs, attached: ours } = await attachFixed(withFootnotes, { onNote: note });
     const { spec: withPhotos, attached } = await attachBackgrounds(withOurs, {
       outDir: path.join(HERE, 'out', 'photos'),
       onNote: note,
     });
-    // Only now, for whatever the search left as a gradient: see pictures.js.
     const { spec: withGivenPictures, filled } = await fillGaps(withPhotos, { onNote: note });
 
-    // Wealth-style circular celebrity / CEO insets (when person field is set).
     console.log('Celebrity insets');
     const { spec: withInsets, attached: insets } = await attachInsets(withGivenPictures, {
       outDir: path.join(HERE, 'out', 'photos'),
@@ -304,22 +241,8 @@ async function main() {
   });
   process.stdout.write('\n');
 
-  // The story: two frames, 9:16.
-  //
-  // A carousel goes to whoever the feed decides to show it to; a story goes to
-  // the top of the screen of everyone who already follows. With 506 followers
-  // and eleven likes a fortnight, the followers are the audience worth having.
-  //
-  // Two frames rather than one, because the first story this account posted was
-  // the cover alone -- a question, no answer, no sign anything followed it, and
-  // nothing to stop a thumb. Now the cover says how many slides are waiting and
-  // the second frame pays out the best number in the post. See story.js; the
-  // reason it has to be words and not a link sticker is written there.
   let stories = [];
   try {
-    // No handle passed on purpose. BRAND.tag is "#factvizer", a hashtag, and
-    // "पूरी पोस्ट #factvizer पर" is nonsense; the account's real handle is only
-    // known at publish time, from the token. "प्रोफ़ाइल पर" is true either way.
     const frames = storyFrames(ready);
     const { files: storyFiles } = await renderSlides({
       spec: { ...ready, slides: frames },
@@ -327,10 +250,6 @@ async function main() {
       width: STORY_WIDTH, height: STORY_HEIGHT, bottomInset: STORY_INSET,
       ...(args.format ? { format: args.format } : {}),
     });
-    // renderSlides names its output by index, so these come out as 01.jpg and
-    // 02.jpg -- the same asset names as the first two slides. Hosting uploads by
-    // basename and replaces a name it already used, so unrenamed the story would
-    // overwrite the post. It did, once.
     stories = [];
     for (const [i, file] of storyFiles.entries()) {
       const named = path.join(path.dirname(file), `story-${i + 1}${path.extname(file)}`);
@@ -339,7 +258,6 @@ async function main() {
     }
     console.log(`story    ${stories.length} frame(s)  ${STORY_WIDTH}x${STORY_HEIGHT} ${format}`);
   } catch (err) {
-    // A story is a nudge toward the post. The post is the thing.
     console.log(`story    not built — ${err.message.slice(0, 120)}`);
   }
 
@@ -356,8 +274,6 @@ async function main() {
     insets: ready.slides.filter((s) => s.insets?.length).length,
     topic: spec.topic || null,
     stories,
-    // The lines themselves. A report that says "9 slides" and a topic tells you
-    // the run worked; it does not tell you what the account is about to say.
     lines: (ready.slides || []).map((s, i) => ({
       n: i + 1,
       headline: (s.headline || '').replace(/\n/g, ' '),
