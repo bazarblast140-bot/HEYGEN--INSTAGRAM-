@@ -33,6 +33,7 @@ import { env } from '../../../src/config.js';
 
 const PEXELS = 'https://api.pexels.com/v1/search';
 const NASA = 'https://images-api.nasa.gov';
+const WIKI_SUMMARY = 'https://en.wikipedia.org/api/rest_v1/page/summary';
 
 /**
  * Queries NASA can answer better than a stock library can.
@@ -229,6 +230,39 @@ async function download({ url, dest }) {
 }
 
 /**
+ * Wikipedia page summary → portrait URL for a named person.
+ *
+ * Pexels has no celebrity licensing. Searching "Kim Kardashian portrait" returns
+ * random stock models; that reached the feed once. Wikipedia's summary API is
+ * free, key-less, and for notable people returns the article lead image — almost
+ * always a real photograph of the person.
+ *
+ * Returns null when the page is missing, disambiguation-only, or has no image.
+ */
+export async function wikiPortrait(person) {
+  const title = String(person || '').trim().replace(/ /g, '_');
+  if (!title) return null;
+
+  const res = await fetch(`${WIKI_SUMMARY}/${encodeURIComponent(title)}`, {
+    headers: { Accept: 'application/json', 'Api-User-Agent': 'FACTVIZER-carousel/1.0' },
+  });
+  if (!res.ok) return null;
+
+  const data = await res.json().catch(() => null);
+  if (!data || data.type === 'disambiguation') return null;
+
+  const src = data.originalimage?.source || data.thumbnail?.source;
+  if (!src || !/^https?:\/\//i.test(src)) return null;
+
+  return {
+    id: `wiki:${data.pageid || title}`,
+    alt: data.title || person,
+    credit: 'Wikipedia',
+    src: src.replace(/^http:/, 'https:'),
+  };
+}
+
+/**
  * Fills in `background` on any slide that has a `query` and no background yet.
  *
  * Mutates a copy — the spec on disk is left alone, so a re-run starts from the
@@ -272,7 +306,11 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
       }
 
       if (!chosen && key) {
-        chosen = bestPhoto(await searchPexels({ query, key }), { query, used });
+        // Mansions are landscape; portrait orientation was discarding the good shots.
+        const orient = /mansion|estate|villa|aerial|skyscraper|building/i.test(query)
+          ? 'landscape'
+          : 'portrait';
+        chosen = bestPhoto(await searchPexels({ query, key, orientation: orient }), { query, used });
         source = 'Pexels';
       }
 
@@ -305,20 +343,19 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
  * Wealth-style circular portrait insets.
  *
  * When a slide carries a `person` field (celebrity, CEO, founder, businessman),
- * fetch a portrait and place a circular inset in the top-right — the same
+ * fetch a real portrait and place a circular inset in the top-right — the same
  * pattern the Wealth account uses on luxury-home posts.
  *
- * Position is fixed (x: 720, y: 90, size: 280) so every celebrity slide looks
- * consistent. Failure is silent: the slide simply has no inset.
+ * Source order:
+ *   1. Wikipedia summary lead image (famous people, free, usually correct)
+ *   2. nothing — never fall back to random Pexels "portrait" stock
+ *
+ * A wrong face is worse than no face. The 2026-09-20 celebrity-homes post put a
+ * mountain road on The Weeknd and a stranger in a keffiyeh on Kim Kardashian.
  */
-export async function attachInsets(spec, { outDir, key = env('PEXELS_API_KEY'), onNote } = {}) {
+export async function attachInsets(spec, { outDir, onNote } = {}) {
   const slides = spec.slides || [];
   const note = (msg) => onNote?.(msg);
-
-  if (!key) {
-    note('no PEXELS_API_KEY — skipping celebrity insets');
-    return { spec, attached: 0 };
-  }
 
   await fs.mkdir(outDir, { recursive: true });
 
@@ -334,17 +371,11 @@ export async function attachInsets(spec, { outDir, key = env('PEXELS_API_KEY'), 
     }
 
     const n = i + 1;
-    const query = `${person} portrait professional`;
 
     try {
-      const candidates = await searchPexels({ query, key, perPage: 15, orientation: 'portrait' });
-      // Prefer photos that actually look like a headshot (relevance helps a bit).
-      const chosen = bestPhoto(candidates, { query: person, used })
-        || candidates.find((c) => !used.has(String(c.id)))
-        || null;
-
-      if (!chosen) {
-        note(`slide ${n}: no portrait found for "${person}" — no inset`);
+      const chosen = await wikiPortrait(person);
+      if (!chosen || used.has(String(chosen.id))) {
+        note(`slide ${n}: no Wikipedia portrait for "${person}" — no inset`);
         out.push(slide);
         continue;
       }
@@ -361,7 +392,7 @@ export async function attachInsets(spec, { outDir, key = env('PEXELS_API_KEY'), 
         size: 280,
       };
 
-      note(`slide ${n}: inset portrait for ${person}`);
+      note(`slide ${n}: Wikipedia portrait for ${person}`);
       out.push({ ...slide, insets: [inset] });
       attached += 1;
     } catch (err) {
