@@ -19,7 +19,7 @@ import { env } from '../../../src/config.js';
  */
 export const VENDORS = {
   moonshot: { key: 'MOONSHOT_API_KEY', baseUrl: 'https://api.moonshot.ai/v1', model: 'kimi-k2-0711-preview' },
-  deepseek: { key: 'DEEPSEEK_API_KEY', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  deepseek: { key: 'DEEPSEEK_API_KEY', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-flash' },
   groq:     { key: 'GROQ_API_KEY',     baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
   together: { key: 'TOGETHER_API_KEY', baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
   openrouter: { key: 'OPENROUTER_API_KEY', baseUrl: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat' },
