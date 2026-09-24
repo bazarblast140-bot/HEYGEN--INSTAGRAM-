@@ -16,25 +16,7 @@
 // The weight decides how often; the stride decides how far apart.
 
 /** Weights are entry counts. They must sum to a length coprime with STRIDE. */
-// Sixteen subjects, twice each. It used to be eight, with space four times
-// over and everything else once to three times, and the feed read as two
-// things: space and AI. Nothing on the account was about food, medicine,
-// language, sport, weather, plants, transport or India at all.
-//
-// Two of each rather than a weighting, because a weighting is how space came
-// to be a fifth of the account. Thirty-two entries and a stride of five stay
-// coprime, so every subject comes round before any repeats.
 // Sixteen subjects, once each, and the rotation does the rest.
-//
-// It used to be eight subjects with space listed four times over, and the
-// account read as two things: space and AI. Nothing on it was ever about food,
-// medicine, language, sport, weather, plants, transport or India.
-//
-// Once each, not weighted: a weighting is exactly how space came to be a fifth
-// of everything. Sixteen entries with a stride of five are coprime, and the
-// evening offset is half the pool, so over any sixteen days every subject gets
-// exactly one morning and one evening -- no subject twice before all of them
-// have had a turn.
 export const POOL = [
   'space',
   'science',
@@ -58,31 +40,11 @@ export const STRIDE = 5;
 
 // How many slides a post carries.
 //
-// Nine, not six: a carousel's reach is driven by how long people stay on it,
-// and three more slides is three more swipes without three more facts to find.
-// The last is always the follow card, so nine slides is eight of substance.
-// Instagram's own ceiling is ten -- see MAX_ITEMS in publish/carousel.js.
-export const SLIDES = 9;
+// 24-Sep-2026: raised from 9 → 10 (Instagram ceiling).
+// Last slide is always the follow card, so 10 slides = 9 of substance.
+export const SLIDES = 10;
 
-/**
- * Two posts a day, and the second one must not be a rerun of the first.
- *
- * The day's stride solves "yesterday vs today"; it says nothing about the two
- * posts inside one day, which land on the same index and so the same category.
- * The evening post steps a further 10.
- *
- * Ten works for the same reason five does. The sequence of indices becomes
- * d*5, d*5+10, (d+1)*5, ... so the gaps alternate +10 and -5, and both are
- * further than the longest block of one category (4) is wide — a block spans at
- * most indices i..i+3, so anything four or more apart is a different category
- * outright. And because each slot walks the whole pool once per cycle, the
- * weights still hold exactly: over 21 days each category comes up twice its
- * weight, not once with a fudge.
- */
-// Half the pool. At 10 the evening pick was the morning pick of two days
-// later, so subjects came in pairs and a three-week stretch could miss some
-// entirely; at half the length the same collision is sixteen days away, which
-// is the whole cycle.
+// Half the pool. Keeps morning vs evening subjects far apart.
 export const SLOT_OFFSET = 8;
 
 /**
@@ -92,13 +54,7 @@ export const SLOT_OFFSET = 8;
  */
 export const SLOTS = ['morning', 'evening'];
 
-/**
- * What each category is about, in the words the prompt needs. Kept here rather
- * than in the prompt so that adding a category is one edit, not two.
- */
-// The evening subjects. Money, and nothing that could be read as advice --
-// see the rule in prompt.js. Eight of them, so a subject comes round once a
-// week and a half rather than every third day.
+// Evening — money. Facts and history, never advice.
 export const FINANCE = [
   'markets',
   'money',
@@ -110,35 +66,34 @@ export const FINANCE = [
   'scams',
 ];
 
+// English briefs — useful educational angle, not random trivia.
 export const BRIEFS = {
-  space: 'ग्रह, तारे, अंतरिक्ष मिशन, ब्रह्मांड के पैमाने',
-  science: 'भौतिकी, रसायन, गणित, प्रकृति के नियम',
-  body: 'मानव शरीर, दिमाग, नींद, इंद्रियाँ',
-  technology: 'इंटरनेट, चिप, AI, इंजीनियरिंग',
-  history: 'प्राचीन सभ्यताएँ, आविष्कार, ऐतिहासिक घटनाएँ',
-  geography: 'पृथ्वी, महासागर, पहाड़, जलवायु',
-  animals: 'जानवर, पक्षी, समुद्री जीव, उनकी क्षमताएँ',
-  economy: 'पैसा, कंपनियाँ, व्यापार, मुद्रा',
-  food: 'खाना, मसाले, फ़सलें, रसोई का विज्ञान, पेय',
-  medicine: 'दवाइयाँ, टीके, बीमारियाँ, इलाज का इतिहास, सर्जरी',
-  language: 'भाषाएँ, लिपियाँ, शब्दों की जड़ें, अनुवाद',
-  sports: 'खेल, रिकॉर्ड, खिलाड़ियों के आँकड़े, खेल का विज्ञान',
-  weather: 'मौसम, तूफ़ान, बारिश, बिजली, मौसम का अनुमान',
-  plants: 'पेड़, जंगल, फूल, बीज, प्रकाश संश्लेषण',
-  transport: 'रेल, हवाई जहाज़, जहाज़, सड़क, इंजन',
-  india: 'भारत के तथ्य — नक्शा, रिकॉर्ड, संस्कृति, निर्माण, रेलवे',
-  buildings: 'इमारतें, पुल, बाँध, सुरंगें, वास्तुकला के आँकड़े',
+  space: 'planets, stars, space missions, scale of the universe — concrete numbers and real missions',
+  science: 'physics, chemistry, maths, laws of nature — how things actually work',
+  body: 'human body, brain, sleep, senses — practical and surprising mechanisms',
+  technology: 'internet, chips, AI, engineering — how the tools we use every day work',
+  history: 'civilisations, inventions, key events — cause and effect, not just dates',
+  geography: 'Earth, oceans, mountains, climate — real systems and numbers',
+  animals: 'animals, birds, sea life — capabilities and adaptations that matter',
+  food: 'food, spices, crops, kitchen science — chemistry and history you can use',
+  medicine: 'medicines, vaccines, diseases, surgery history — real medical facts',
+  language: 'languages, scripts, word origins — how communication evolved',
+  sports: 'sports, records, athlete data, sports science — numbers and mechanics',
+  weather: 'weather, storms, rain, lightning, forecasting — how prediction works',
+  plants: 'trees, forests, flowers, seeds, photosynthesis — living systems',
+  transport: 'rail, aircraft, ships, roads, engines — engineering that moves us',
+  india: 'India facts — maps, records, culture, infrastructure, railways',
+  buildings: 'buildings, bridges, dams, tunnels, architecture numbers',
 
   // Evening — money. Facts and history, never advice.
-  markets: 'शेयर बाज़ार कैसे काम करता है — सूचकांक, सर्किट, IPO, ऐतिहासिक गिरावटें',
-  money: 'पैसे का इतिहास — नोट, सिक्के, मुद्रास्फीति, UPI, नक़ली नोट पहचान',
-  economy: 'GDP, रोज़गार, आयात-निर्यात, भारत की अर्थव्यवस्था के आँकड़े',
-
-  business: 'कंपनियाँ कैसे बनीं और गिरीं, ब्रांड की कहानियाँ, कारोबार के आँकड़े',
-  banking: 'बैंक, ब्याज, RBI, चक्रवृद्धि, लोन और EMI का गणित',
-  tax: 'टैक्स कैसे लगता है, GST, इतिहास, दुनिया भर की अजीब टैक्स कहानियाँ',
-  insurance: 'बीमा कैसे काम करता है, जोखिम का गणित, क्लेम के आँकड़े',
-  scams: 'मशहूर वित्तीय घोटाले और ठगी — कैसे हुए, कैसे पकड़े गए, कैसे बचें',
+  markets: 'how stock markets work — indices, circuits, IPOs, historical crashes',
+  money: 'history of money — notes, coins, inflation, UPI, spotting fakes',
+  economy: 'GDP, jobs, trade, India economy numbers — how the system works',
+  business: 'how companies rose and fell, brand stories, business numbers',
+  banking: 'banks, interest, RBI, compounding, loans and EMI maths',
+  tax: 'how tax works, GST, history, unusual tax stories worldwide',
+  insurance: 'how insurance works, risk maths, claim statistics',
+  scams: 'famous financial scams — how they worked, how they were caught, how to avoid',
 };
 
 /** Days since the epoch — the same date always chooses the same category. */
@@ -147,32 +102,6 @@ export function dayNumber(date = new Date()) {
   return Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86400000);
 }
 
-/**
- * Which slot a run belongs to, worked out from the clock rather than passed in.
- *
- * A scheduled run knows its own cron only as a time, and a hand-started run
- * knows nothing at all, so guessing wrong would be silent. IST is UTC+5:30: the
- * 06:00 post fires at 00:30 UTC and the 17:00 post at 11:30 UTC, and any hour
- * before 06:00 UTC is unambiguously the morning one, and the midday post sits
- * in the wide gap between them.
- */
-/**
- * Which slot a cron entry is FOR, regardless of when the runner gets to it.
- *
- * slotFor() reads the clock, and the clock lies about intent. GitHub's
- * scheduler is best-effort and has been firing these entries six to eight
- * hours late: the 00:37 morning entry ran at 07:05, where slotFor() sees hour 7
- * and answers "midday". The morning post could not happen -- not dropped, not
- * failed, just relabelled on arrival.
- *
- * The cron string is what GitHub hands the run in `github.event.schedule`, and
- * it says what the run was scheduled to be. A delayed morning post is late; a
- * morning post that became a midday post is gone.
- *
- * Keep this table and the workflow's `on.schedule` identical -- a test asserts
- * it, because an entry missing here falls back to the clock and the failure is
- * invisible until a post does not appear.
- */
 export const CRON_SLOTS = {
   '37 0 * * *': 'morning',
   '22 1 * * *': 'morning',
@@ -198,12 +127,7 @@ export function slotFor(date = new Date()) {
 }
 
 export function categoryFor(date = new Date(), slot = 'morning') {
-  // The evening post is money. 506 people followed an account called
-  // @rajesh_technical_trader and were being shown planets and seahorses, and
-  // eight posts earned eleven likes between them. So one of the three slots now
-  // speaks to the audience that is actually there, and in a fortnight the likes
-  // will say whether that was right -- see audit.js. Morning stays general
-  // facts, midday stays technology news.
+  // Evening stays money. Morning stays general useful facts.
   if (slot === 'evening') {
     return FINANCE[dayNumber(date) % FINANCE.length];
   }
