@@ -119,8 +119,10 @@ export async function buildVoice({ parts, out, duration }) {
  *
  * The bed is ducked by the voice rather than simply set quiet, so it stays present
  * in the gaps — the reference reels never drop to silence, not once in five files.
+ *
+ * 24-Sep-2026: bedLevel lowered 0.32 → 0.22 for halka (soft) background music.
  */
-export async function mixAudio({ voice, music, out, duration, bedLevel = 0.32 }) {
+export async function mixAudio({ voice, music, out, duration, bedLevel = 0.22 }) {
   if (!music) {
     await run('ffmpeg', [
       '-y', '-v', 'error', '-i', voice,
