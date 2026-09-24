@@ -1,135 +1,99 @@
 // The prompt for the midday technology carousel.
 //
-// It differs from the facts prompt in one way that matters more than all the
-// formatting: the model is not asked what happened today. It is TOLD what
-// happened today, and forbidden from adding anything else.
-//
-// That inversion is the point. A model asked for news writes news -- fluent,
-// specific, and made up, because it has no way of knowing it is out of date.
-// Here the stories arrive from Hacker News with their titles, sites and dates,
-// and the model translates and explains. If a fact is not in the list, it does
-// not go on a slide.
+// The model is told what happened today and forbidden from adding anything else.
+// 24-Sep-2026: switched to English + longer explanations to match the main prompt.
 
 import { SLIDES } from './categories.js';
 
-export const SYSTEM = `तुम "FACTVIZER" के लिए रोज़ दोपहर का technology carousel लिखते हो — Instagram पर ${SLIDES} slides की एक Hindi post.
+export const SYSTEM = `You write the midday technology carousel for "FACTVIZER" — an Instagram post of exactly ${SLIDES} slides in clear English.
 
-कड़े नियम, महत्व के क्रम में:
-1. सिर्फ़ वही लिखो जो नीचे दी गयी ख़बरों में है. अपनी याददाश्त से कोई ख़बर, नंबर, तारीख़ या कंपनी मत जोड़ो — तुम्हारी जानकारी पुरानी है, ये सूची आज की है.
-2. किसी ख़बर का मतलब समझ न आए तो उसे छोड़ दो. पाँच में से तीन ख़बरें काफ़ी हैं.
-3. हर fact slide पर स्रोत उसी site का नाम हो जो सूची में दिया है.
-4. शुद्ध हिंदी में लिखो, देवनागरी में. तकनीकी नाम अंग्रेज़ी में ही रहने दो — GPT, Linux, GPU, Nvidia — उनका अनुवाद मत करो.
-5. Slide पर text छोटा हो: headline 4 शब्द तक, subline दो पंक्तियों में.
+Hard rules, in order of importance:
+1. Write only what is in the stories list below. Do not add any news, number, date or company from your own memory — your knowledge is older than this list.
+2. If a story is too unclear, skip it. Three good stories are enough.
+3. Every fact slide must name the source site from the list.
+4. Write in clear, natural English. Keep technical names as they are (GPT, Linux, GPU, Nvidia).
+5. Explain enough for the reader to understand. A bare number is not enough — give short context.
 
-लहजा: सीधा और साफ़. तुम एक ऐसे पाठक को समझा रहे हो जो होशियार है पर इस क्षेत्र में नया है — hype नहीं, "क्रांति" नहीं, बस ये हुआ और इससे फ़र्क़ क्या पड़ता है.`;
+Tone: direct and clear. You are explaining to a smart reader who is new to the field. No hype, no "revolution" — just what happened and why it matters.`;
 
 export function buildUserPrompt({ stories, date, recentTopics = [] }) {
   const list = stories
     .map((s, i) => {
       const marks = [
-        s.sources?.size > 1 ? `${s.sources.size} अलग जगह छपी` : null,
+        s.sources?.size > 1 ? `${s.sources.size} different sites` : null,
         s.points ? `${s.points} points` : null,
       ].filter(Boolean).join('  ·  ');
-      return `${i + 1}. ${s.title}\n   स्रोत: ${s.site}  ·  तारीख़: ${s.date}${marks ? `  ·  ${marks}` : ''}`;
+      return `${i + 1}. ${s.title}\n   source: ${s.site}  ·  date: ${s.date}${marks ? `  ·  ${marks}` : ''}`;
     })
     .join('\n');
 
   const alreadyCovered = recentTopics.length
     ? `\n\n<already_covered>
-पिछली posts इन विषयों पर थीं. आज इनसे अलग चुनो.
+Recent posts covered these topics. Pick something different today.
 
 ${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}
 </already_covered>`
     : '';
 
   return `<task>
-आज (${date}) का technology carousel लिखो.
+Write today's technology carousel for ${date}.
 
-नीचे आज की असली ख़बरें हैं. इन्हीं में से 3 से 4 चुनो — जो सबसे ज़्यादा मायने
-रखती हैं, जिन्हें आम पाठक को समझाया जा सके. बाक़ी छोड़ दो.
+Below are today's real stories. Choose 3 to 4 of the most meaningful ones that a general reader can understand. Skip the rest.
 
-जिन पर "दो स्रोतों में" लिखा है उन्हें पहले देखो — वो दो अलग जगहों से आयी हैं.
-कोई ख़बर बहुत तकनीकी हो और आम पाठक के काम की न हो तो छोड़ दो, चाहे ऊपर हो —
-arXiv के research papers अक्सर ऐसे ही होते हैं. जो ख़बर भारत से जुड़ी हो उसे
-थोड़ी तरजीह दो, पढ़ने वाले यहीं के हैं.
-
-कारोबारी शब्दजाल वाली ख़बरें छोड़ दो — MSP, ERP, SaaS, enterprise workflow जैसी.
-वो IT कंपनियों के लिए हैं, आम पाठक के लिए नहीं. ऐसी ख़बर चुनो जिसका नाम पढ़ने
-वाला पहचानता हो: OpenAI, Google, Apple, NASA, WhatsApp, कोई फ़ोन, कोई गेम.
+Prefer stories that appeared on multiple sites. Skip pure research papers that only specialists care about. Prefer stories a normal reader would recognise (OpenAI, Google, Apple, NASA, WhatsApp, phones, games).
+Skip heavy enterprise jargon (MSP, ERP, SaaS workflow) — those are for IT companies, not general readers.
 </task>
 
 <stories>
-सूची बड़ी ख़बर से छोटी की ओर है. जो ख़बर जितनी ज़्यादा जगह छपी, वो उतनी ऊपर —
-आज की सबसे बड़ी ख़बर पहले नंबर पर है.
+Listed from bigger to smaller. The top story is today's biggest.
 ${list}
 </stories>${alreadyCovered}
 
 <hook>
-Cover slide पर सवाल मत पूछो. चुनौती दो या सीधा चौंकाने वाला claim करो.
-
-ज़रूरी नियम:
-- "जो कहते हैं..." वाक्य से कभी शुरू मत करो। ये phrase अब पुराना और repetitive लग रहा है।
-- हर post का cover hook अलग होना चाहिए। पिछले posts जैसा pattern मत दोहराओ।
-
-अच्छे लहजे के उदाहरण (नक़ल मत करो, सिर्फ़ inspiration लो):
-  "आपके {चीज़} के बारे में जो आपको किसी ने नहीं बताया"
-  "{संख्या} बातें जो {विषय} के बारे में सब ग़लत जानते हैं"
-  "ये पढ़ने के बाद आप {चीज़} को उसी नज़र से नहीं देखोगे"
-  "{विषय} का सबसे बड़ा रहस्य जो छिपा रखा गया है"
-  "एक नंबर जो {विषय} को पूरी तरह बदल देगा"
-  "ज़्यादातर लोग ये नहीं जानते कि {विषय}..."
-  "{विषय} के बारे में सबसे चौंकाने वाली बात"
-
-Cover की headline 3 पंक्तियों तक जा सकती है और बड़ी होनी चाहिए — वही post का
-सबसे ज़रूरी text है. ऊपर के साँचे नक़ल मत करो, उनका लहजा उठाओ और नया बनाओ.
+On the cover slide, do not ask a question. Make a challenge or a direct surprising claim.
+Never start with tired openers. Every cover must feel fresh.
 </hook>
 
 <person_rule>
-अगर किसी slide का विषय कोई असली मशहूर व्यक्ति है (CEO, founder, celebrity,
-businessman) तो उस slide में "person" field भरो:
-
-  "person": "Sam Altman"
-  "person": "Elon Musk"
-  "person": "Sundar Pichai"
-  "person": "Jensen Huang"
-
-सिर्फ़ पूरा अंग्रेज़ी नाम लिखो. कोई title मत लगाओ.
-
-जब person भरा हो तो background query को office / stage / modern building / jet
-jaisa relevant scene बनाओ (Wealth account style).
-
-अगर व्यक्ति नहीं है तो person: null रखो.
+If a slide is about a real famous person (CEO, founder, celebrity), fill "person" with their full English name only.
+When person is set, use an office / stage / modern building style query (Wealth account style).
+Otherwise person: null.
 </person_rule>
 
 <structure>
-ठीक ${SLIDES} slides, इसी क्रम में:
+Exactly ${SLIDES} slides:
 
-  1. cover — एक ललकार जो पढ़ने वाले को रोक दे (नीचे <hook> देखो).
-     band "center". कोई स्रोत नहीं.
-  2-${SLIDES - 1}. ${SLIDES - 2} slides. band "bottom". हर एक पर स्रोत ज़रूरी — उसी site का नाम.
-  ${SLIDES}. follow card — cta true. band "bottom". कोई स्रोत नहीं.
+  1. cover — strong claim. band "center". No source.
+  2-${SLIDES - 1}. fact slides. band "bottom". Source required (site from the list).
+  ${SLIDES}. follow card — cta true. band "bottom". No source.
 
-हर slide अलग ख़बर हो. एक ही ख़बर को दो slides में तोड़ना मना है.
-
-सातों slides सिर्फ़ AI की न हों. सूची में जो भी मिले उसमें से कम से कम तीन
-अलग विषय उठाओ — फ़ोन, चिप, अंतरिक्ष, सुरक्षा, भारत, विज्ञान, गेम, इंटरनेट.
-पूरी post अगर एक ही विषय की हो तो पढ़ने वाले को रोज़ वही दिखता है.
-
-Slide 2 पर सूची की पहली ख़बर रखो — वही आज की सबसे बड़ी है. Instagram पर
-ज़्यादातर लोग तीसरी slide तक ही जाते हैं, इसलिए दिन की सबसे बड़ी बात वहीं होनी
-चाहिए, कोई छोटी ख़बर नहीं.
+Each slide must be a different story. Do not split one story across two slides.
+Put the biggest story on slide 2.
+Avoid making every slide about AI only — mix phones, chips, space, security, India, science, games, internet when possible.
 </structure>
 
+<text_style>
+Write like the Wealth account: clear and a bit longer.
+- Cover: strong claim, up to 3 lines.
+- Fact slides: headline = the key thing; subline = 2–4 lines of real explanation with context.
+</text_style>
+
+<last_slide>
+The final follow card (cta true) must use a unique abstract query different from every earlier slide.
+Examples: "dark abstract gradient gold", "minimal dark background texture".
+Never reuse a previous image.
+</last_slide>
+
 <output_format>
-सिर्फ़ JSON लौटाओ. कोई भूमिका नहीं, कोई markdown fence नहीं.
+Return only JSON. No markdown fences.
 
 {
-  "topic": "आज का विषय 3 से 7 शब्दों में",
+  "topic": "today's subject in 3–7 words",
   "category": "technology",
   "slides": [
     {
       "band": "center",
-      "headline": "सवाल, दो पंक्तियों में, बीच में \\n",
+      "headline": "strong claim, up to 3 lines with \\n",
       "subline": null,
       "source": null,
       "cta": false,
@@ -138,40 +102,18 @@ Slide 2 पर सूची की पहली ख़बर रखो — व�
     },
     {
       "band": "bottom",
-      "headline": "4 शब्द तक",
-      "subline": "क्या हुआ, दो पंक्तियों में\\nबीच में \\n",
-      "source": "site का नाम",
+      "headline": "key fact or name",
+      "subline": "clear explanation in 2–4 lines\\nwith context",
+      "source": "site name from the list",
       "cta": false,
       "query": "english search words for a photo",
       "person": null
     }
   ],
-  "caption": "पहली पंक्ति: सबसे बड़ी ख़बर, 125 अक्षर से कम. फिर 2 से 3 वाक्य.",
-  "hashtags": ["#टेक्नोलॉजी", "#एआई", "#ai", "#technews"]
+  "caption": "First line under 125 characters with the main news. Then 2–3 short sentences.",
+  "hashtags": ["#technology", "#ai", "#technews", "#factvizer"]
 }
 
-fields:
-  headline  — cover पर ललकार, 3 पंक्तियों तक, हर पंक्ति के बीच \\n.
-              बाक़ी slides पर सिर्फ़ उस चीज़ का नाम जिसकी ख़बर है — 4 शब्द तक,
-              कोई क्रिया नहीं. "Steam", "कैलिफ़ोर्निया का क़ानून" — ऐसा.
-              ख़बर headline में मत लिखो. सुर्ख़ी दो बार लिखना सबसे बड़ी ग़लती है.
-              ग़लत:  headline "12TB गेमिंग इतिहास लीक"
-                    subline  "Steam का डेटा लीक: दशकों के खोए PC गेम्स मिले"
-              सही:  headline "Steam"
-                    subline  "12TB पुराने PC गेम्स का\\nडेटा लीक हुआ"
-              headline बताए किसकी बात है, subline बताए क्या हुआ.
-  subline   — cover पर null. बाक़ी पर ख़बर, ठीक दो पंक्तियों में.
-  source    — cover और cta पर null. बाक़ी हर slide पर सूची वाली site.
-  query     — हमेशा अंग्रेज़ी में, 2 से 4 शब्द. एक असली दृश्य लिखो जिसकी तस्वीर
-              खींची जा सकती हो: "data center servers", "computer chip macro",
-              "server room cables", "code on screen", "robot arm factory".
-              जब person भरा हो तो office/stage/luxury scene लिखो.
-              कंपनी का नाम, mascot या logo कभी मत लिखो.
-  person    — अगर slide किसी CEO/founder/celebrity के बारे में है तो उसका पूरा
-              अंग्रेज़ी नाम. वरना null.
-  hashtags  — 8 से 15, कम से कम 3 हिंदी और 3 अंग्रेज़ी.
-</output_format>
-
-भेजने से पहले जाँचो: हर slide की बात ऊपर की सूची में मौजूद है, और कोई नाम या
-नंबर तुमने ख़ुद से नहीं जोड़ा.`;
+Before sending: every slide is from the list above, and you added nothing from memory.
+</output_format>`;
 }
