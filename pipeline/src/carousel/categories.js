@@ -58,7 +58,7 @@ export const BRIEFS = {
   india: 'भारत के तथ्य — नक्शा, रिकॉर्ड, संस्कृति, निर्माण, रेलवे',
   buildings: 'इमारतें, पुल, बाँध, सुरंगें, वास्तुकला के आँकड़े',
 
-  markets: 'शेयर बाज़ार कैसे काम करता है — सूचकांक, सर्किट, IPO, ऐतिहासिक गिरावटें',
+  markets: 'शेयर बाज़ार कैसे काम करता है — निवेशक, ब्रोकर, एक्सचेंज, ट्रेडिंग और डीमैट खाते, सूचकांक और ऐतिहासिक घटनाएँ. कोई खरीद/बिक्री सलाह नहीं.',
   money: 'पैसे का इतिहास — नोट, सिक्के, मुद्रास्फीति, UPI, नक़ली नोट',
   economy: 'GDP, रोज़गार, आयात-निर्यात, भारत की अर्थव्यवस्था',
   business: 'कंपनियाँ कैसे बनीं और गिरीं, ब्रांड की कहानियाँ',
@@ -98,6 +98,10 @@ export function slotFor(date = new Date()) {
 }
 
 export function categoryFor(date = new Date(), slot = 'morning') {
+  // One-time finance education post with disclosed referral links.
+  const dateKey = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
+  if (dateKey === '2026-09-25' && slot === 'evening') return 'markets';
+
   if (slot === 'evening') {
     return FINANCE[dayNumber(date) % FINANCE.length];
   }
