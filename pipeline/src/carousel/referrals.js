@@ -1,5 +1,4 @@
-// Referral links for daily finance carousels. Keep the disclosure with every link.
-import { FINANCE } from './categories.js';
+// Referral links belong only on market/trading topics. Keep the disclosure with every link.
 
 const DISCLOSURE = 'यह referral link है। इनमें से किसी link से account खोलने पर हमें referral benefit मिल सकता है। ये links किसी platform की सिफ़ारिश नहीं हैं।';
 const LINKS = [
@@ -10,6 +9,6 @@ const LINKS = [
 ];
 
 export function referralCaptionBlock({ category }) {
-  if (!FINANCE.includes(category)) return '';
-  return `\\n\\n${DISCLOSURE}\\n\\n${LINKS.map(([name, url]) => `${name}: ${url}`).join('\\n')}`;
+  if (category !== 'markets') return '';
+  return `\n\n${DISCLOSURE}\n\n${LINKS.map(([name, url]) => `${name}: ${url}`).join('\n')}`;
 }

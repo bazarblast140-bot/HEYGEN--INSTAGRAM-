@@ -158,7 +158,16 @@ async function main() {
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
         onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
       });
-      spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
+      // The scheduler selects the category. Keep it authoritative rather than
+      // trusting a model-supplied category, so market descriptions always receive
+      // their required referral disclosure and links.
+      spec = {
+        brand: BRAND.brand,
+        ink: BRAND.ink,
+        brandInk: BRAND.brandInk,
+        ...written.spec,
+        category: written.category,
+      };
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
       if (written.stories) {
         const by = written.stories.reduce((acc, st) => ({ ...acc, [st.from]: (acc[st.from] || 0) + 1 }), {});
