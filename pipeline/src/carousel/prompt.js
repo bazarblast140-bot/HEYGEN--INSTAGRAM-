@@ -97,6 +97,7 @@ Wealth account जैसा लिखो: साफ़, थोड़ा लं�
 
 <last_slide>
 आख़िरी slide follow card है (cta true).
+उसकी CTA line बिल्कुल `Follow me` हो — `FACTVIZER` या कोई account name follow करने के लिए न लिखो.
 इसका query हर पिछली slide के query से अलग और unique होना चाहिए.
 पिछली image दोबारा मत लगाओ. Abstract / brand style query बेहतर:
   "dark abstract gradient gold", "minimal dark background texture", "soft light particles dark"
