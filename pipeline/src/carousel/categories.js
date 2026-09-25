@@ -26,7 +26,7 @@ export const SLIDES = 10;
 
 export const SLOT_OFFSET = 8;
 
-export const SLOTS = ['morning', 'evening'];
+export const SLOTS = ['evening'];
 
 export const FINANCE = [
   'markets',
@@ -97,11 +97,7 @@ export function slotFor(date = new Date()) {
   return 'evening';
 }
 
-export function categoryFor(date = new Date(), slot = 'morning') {
-  // One-time finance education post with disclosed referral links.
-  const dateKey = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
-  if (dateKey === '2026-09-25' && slot === 'evening') return 'markets';
-
+export function categoryFor(date = new Date(), slot = 'evening') {
   if (slot === 'evening') {
     return FINANCE[dayNumber(date) % FINANCE.length];
   }
