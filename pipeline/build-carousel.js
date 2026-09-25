@@ -26,6 +26,7 @@ import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
 import { slotFor } from './src/carousel/categories.js';
 import { storyFrames } from './src/carousel/story.js';
+import { referralCaptionBlock } from './src/carousel/referrals.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -261,7 +262,15 @@ async function main() {
     console.log(`story    not built — ${err.message.slice(0, 120)}`);
   }
 
-  const caption = composeCaption(spec, BRAND.tag);
+  const referralBlock = referralCaptionBlock({
+    date: new Date().toISOString().slice(0, 10),
+    slot: slotUsed,
+    category: spec.category,
+  });
+  const caption = composeCaption({
+    ...spec,
+    caption: `${spec.caption || ''}${referralBlock}`,
+  }, BRAND.tag);
 
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
 
