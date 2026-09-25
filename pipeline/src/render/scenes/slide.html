@@ -53,6 +53,19 @@
       linear-gradient(160deg, #0b1020 0%, #14161f 55%, #05060a 100%);
   }
 
+  /* Story image window: do not let a 4:5 source photo become a full-height
+     background behind the copy. */
+  #bg.story-bg {
+    height: 62%;
+    bottom: auto;
+    transform: none;
+    background-position: center top;
+  }
+  #scrim.story-scrim {
+    bottom: 38%;
+    background: linear-gradient(to bottom, rgba(0,0,0,.10), rgba(0,0,0,.22));
+  }
+
   /* Legibility floor. The text band never sits on raw photo. */
   /* Legibility floor. The reference accounts do not fade text onto a photo —
      they drop a near-solid band under it, because a light subject (a glass
@@ -94,6 +107,18 @@
   }
 
   #copy { position: absolute; left: 44px; right: 44px; text-align: center; }
+
+  /* Story layout: keep the source image in the upper part of the frame and put
+     all copy on a solid black lower panel. This avoids text sitting on a photo
+     and keeps Instagram's reply/share UI out of the copy area. */
+  #copy.story-mode {
+    left: 0; right: 0;
+    background: #000;
+    padding: 56px 44px 42px;
+  }
+  #copy.story-mode #footnote { font-size: 30px; margin-top: 20px; }
+  #copy.story-mode #callout { font-size: 42px; margin-top: 22px; }
+
   #headline, #subline { white-space: pre-line; }
 
   #headline {
@@ -218,13 +243,22 @@
       if (ink) document.documentElement.style.setProperty('--ink', ink);
       if (brandInk) document.documentElement.style.setProperty('--brand-ink', brandInk);
 
+      const story = Boolean(bottomInset);
+
       const bg = $('bg');
+      bg.classList.toggle('story-bg', story);
       if (background) {
         bg.style.backgroundImage = `url("${background}")`;
         bg.classList.remove('generated');
       } else {
         bg.classList.add('generated');
       }
+
+      const scrim = $('scrim');
+      scrim.classList.toggle('story-scrim', story);
+
+      const copyMode = $('copy');
+      copyMode.classList.toggle('story-mode', story);
 
       $('insets').innerHTML = '';
       for (const it of insets) {
@@ -271,10 +305,15 @@
       // than on it; and the frame is 570px taller, so bottom-anchored copy
       // leaves the top two thirds empty while the eye sits in the middle. On a
       // story the block is placed a third of the way up instead.
-      copy.style.bottom = bottomInset
-        ? Math.round(document.getElementById('stage').clientHeight * 0.34) + 'px'
-        : (cover ? 116 : 104) + 'px';
-      copy.style.top = 'auto';
+      if (bottomInset) {
+        // The lower panel is a real block, not a gradient. Keep the complete
+        // image above it and reserve the bottom inset for Instagram controls.
+        copy.style.top = '62%';
+        copy.style.bottom = bottomInset + 'px';
+      } else {
+        copy.style.bottom = (cover ? 116 : 104) + 'px';
+        copy.style.top = 'auto';
+      }
       s.style.marginTop = subline ? '18px' : '0';
 
       const copyTop = copy.getBoundingClientRect().top;
