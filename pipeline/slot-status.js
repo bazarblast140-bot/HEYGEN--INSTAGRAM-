@@ -36,6 +36,16 @@ const slot =
   || slotFor(now);
 const key = `${date} ${slot}`;
 
+// Legacy Cloudflare cron triggers may still dispatch morning or midday until
+// the Worker is redeployed. Ignore them so the account publishes one post/day.
+if (slot !== 'evening') {
+  console.log(`${key} — disabled; only the daily evening finance post is active.`);
+  if (process.env.GITHUB_OUTPUT) {
+    await fs.appendFile(process.env.GITHUB_OUTPUT, `pending=false\\nslot=${slot}\\n`);
+  }
+  process.exit(0);
+}
+
 const entries = await readHistory(LEDGER);
 const posted = entries.find((e) => e.date === key);
 
