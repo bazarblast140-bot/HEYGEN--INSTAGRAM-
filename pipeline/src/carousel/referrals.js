@@ -14,5 +14,5 @@ const CAMPAIGN = Object.freeze({
 
 export function referralCaptionBlock({ date, slot, category }) {
   if (date !== CAMPAIGN.date || slot !== CAMPAIGN.slot || category !== CAMPAIGN.category) return '';
-  return `\\n\\n${CAMPAIGN.disclosure}\\n\\n${CAMPAIGN.links.map(([name, url]) => `${name}: ${url}`).join('\\n')}`;
+  return `\n\n${CAMPAIGN.disclosure}\n\n${CAMPAIGN.links.map(([name, url]) => `${name}: ${url}`).join('\n')}`;
 }
