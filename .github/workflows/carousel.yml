@@ -4,31 +4,15 @@ name: Build carousel
 # new feature; sharing a workflow would mean a change here can break the post
 # that already goes out.
 #
-# Three posts a day IST. Actions cron is UTC, IST is UTC+5:30.
-#
-# Morning and evening are fact carousels, picked from the category rotation.
-# Midday is technology and AI, and it is built differently on purpose: the
-# stories are FETCHED, because a language model asked for today's news writes
-# something fluent and either months old or invented. See src/carousel/news.js.
+# One finance carousel a day at 17:07 IST. Actions cron is UTC, IST is UTC+5:30.
+# The later entries are catch-ups for the same post; the ledger prevents duplicates.
 #
 # A scheduled run PUBLISHES. That is the point of it, and it is also the reason
 # every guard in this pipeline exists: an unsourced slide is rejected, a repeated
 # topic is rejected, a non-JPEG build is refused. Nobody is watching at 06:00.
 #
-# Each slot is scheduled THREE TIMES, and not out of caution -- the first 06:00
-# post never happened. GitHub queued no run at all: no failure, no entry in the
-# list, nothing to retry. Its scheduler is best-effort and drops work under
-# load, worst at round minutes like :00 and :30, which is why these sit at :37,
-# :22 and :48.
-#
-# Three rather than two because this repository is PUBLIC, so its Actions
-# minutes are free: a firing that finds the slot already posted costs about ten
-# seconds and nothing else. The cost of one more attempt is nil; the cost of a
-# missed post is a day of the account's output.
-#
-# A late firing is no longer a wrong one. The slot comes from the cron entry
-# (see slotForCron), so a morning run that GitHub delivers at noon still posts
-# the morning carousel rather than relabelling itself midday.
+# Each post has catch-up attempts because GitHub cron is best-effort. All
+# attempts target the same evening slot, and the ledger prevents duplicates.
 #
 # The second firing is a catch-up, and the ledger is what stops it posting twice:
 # a slot with an entry for today is already done, so the run ends in seconds. See
@@ -42,21 +26,11 @@ on:
   repository_dispatch:
     types: [carousel]
 
-  # Kept as a backstop, late as it is. If the outside scheduler stops, a post
-  # some hours late still beats no post, and the ledger stops it from doubling
-  # up with one the dispatch already made.
+# GitHub schedule is a backstop for the one daily finance post.
   schedule:
-    - cron: '37 0 * * *'     # 06:07 IST -- a fact carousel
-    - cron: '22 1 * * *'     # 06:52 IST -- catch-up
-    - cron: '48 2 * * *'     # 08:18 IST -- last catch-up
-
-    - cron: '37 7 * * *'     # 13:07 IST -- technology and AI, from today's stories
-    - cron: '22 8 * * *'     # 13:52 IST -- catch-up
-    - cron: '48 9 * * *'     # 15:18 IST -- last catch-up
-
-    - cron: '37 11 * * *'    # 17:07 IST -- a fact carousel
+    - cron: '37 11 * * *'    # 17:07 IST -- daily finance carousel
     - cron: '22 12 * * *'    # 17:52 IST -- catch-up
-    - cron: '48 13 * * *'    # 19:18 IST -- last catch-up
+    - cron: '48 13 * * *'    # 19:18 IST -- final catch-up
   workflow_dispatch:
     inputs:
       force:
@@ -75,10 +49,10 @@ on:
         type: boolean
         default: true
       slot:
-        description: "Which post to build (blank = whichever the clock says)"
+        description: "Daily finance carousel"
         type: choice
-        options: ['', 'morning', 'midday', 'evening']
-        default: ''
+        options: ['evening']
+        default: 'evening'
       publish:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
         type: boolean
@@ -248,7 +222,7 @@ jobs:
         # not fine now that a second scheduler can press it too: two triggers
         # for one slot would post the carousel twice. `force` is the way out,
         # and it has to be asked for.
-        if: ${{ (steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true' }}
+        if: ${{ steps.slot.outputs.slot == 'evening' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
