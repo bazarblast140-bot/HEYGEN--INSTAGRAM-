@@ -1,4 +1,5 @@
-// The prompt that writes one day's Hindi/Hinglish fact carousel for FACTVIZER.
+// The prompt that writes one day's Hindi/Hinglish fact carousel.
+// Account: @rajesh_technical_trader — no "FACTVIZER" brand name on slides.
 //
 // 24-Sep-2026:
 //   - Language: Hindi (Devanagari), technical terms English OK
@@ -6,10 +7,11 @@
 //   - Useful educational facts only — no random trivia
 //   - 10 slides (last = follow card)
 //   - Last slide must not reuse any previous image query
+//   - CTA text is exactly "Follow me" (no account name)
 
 import { BRIEFS, SLIDES } from './categories.js';
 
-export const SYSTEM = `तुम "FACTVIZER" के लिए रोज़ का Hindi fact carousel लिखते हो — Instagram पर ठीक ${SLIDES} slides की एक post.
+export const SYSTEM = `तुम Instagram fact carousel के लिए रोज़ का Hindi content लिखते हो — ठीक ${SLIDES} slides की एक post.
 
 कड़े नियम, महत्व के क्रम में:
 1. हर आँकड़ा सच होना चाहिए और उसका स्रोत नामज़द होना चाहिए. जो बात पक्की नहीं, वो मत लिखो.
@@ -97,7 +99,7 @@ Wealth account जैसा लिखो: साफ़, थोड़ा लं�
 
 <last_slide>
 आख़िरी slide follow card है (cta true).
-उसकी CTA line बिल्कुल "Follow me" हो — \`FACTVIZER\` या कोई account name follow करने के लिए न लिखो.
+उसकी CTA line बिल्कुल सिर्फ़ "Follow me" हो — कोई account name, brand name, या "FACTVIZER" मत लिखो.
 इसका query हर पिछली slide के query से अलग और unique होना चाहिए.
 पिछली image दोबारा मत लगाओ. Abstract / brand style query बेहतर:
   "dark abstract gradient gold", "minimal dark background texture", "soft light particles dark"
@@ -131,7 +133,7 @@ Wealth account जैसा लिखो: साफ़, थोड़ा लं�
     }
   ],
   "caption": "पहली पंक्ति: सबसे मज़बूत बात, 125 अक्षर से कम. फिर 2–3 वाक्य. फिर स्रोत की पंक्ति.",
-  "hashtags": ["#विज्ञान", "#रोचकतथ्य", "#factvizer", "#science", "#didyouknow"]
+  "hashtags": ["#विज्ञान", "#रोचकतथ्य", "#science", "#didyouknow", "#facts"]
 }
 
 fields:
@@ -141,8 +143,8 @@ fields:
   query     — हमेशा अंग्रेज़ी में, 2–4 शब्द. LAST (cta) slide पर unique abstract query.
   person    — मशहूर व्यक्ति हो तो पूरा अंग्रेज़ी नाम, वरना null.
   caption   — hashtag caption text में मत डालो (अलग field में).
-  hashtags  — 8 से 15. कम से कम 3 हिंदी, कम से कम 3 अंग्रेज़ी.
+  hashtags  — 8 से 15. कम से कम 3 हिंदी, कम से कम 3 अंग्रेज़ी. Brand name hashtag मत डालो.
 </output_format>
 
-भेजने से पहले: हर आँकड़ा असली, हर स्रोत असली, slide 2 सबसे तेज़, आख़िरी slide का query unique.`;
+भेजने से पहले: हर आँकड़ा असली, हर स्रोत असली, slide 2 सबसे तेज़, आख़िरी slide का query unique, CTA सिर्फ़ "Follow me".`;
 }
