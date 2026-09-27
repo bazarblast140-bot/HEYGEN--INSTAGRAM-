@@ -34,8 +34,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  * The look is the account's, not the day's. A generated spec carries the words
  * and nothing else, so the model cannot quietly restyle the brand by returning
  * a different colour.
+ *
+ * Brand mark is empty on purpose: the Instagram account is @rajesh_technical_trader.
+ * Showing "FACTVIZER" mismatched the handle. Last-slide CTA is just "Follow me".
  */
-const BRAND = { brand: 'FACTVIZER', ink: '#FFD200', brandInk: '#F2F2F2', tag: '#factvizer' };
+const BRAND = { brand: '', ink: '#FFD200', brandInk: '#F2F2F2', tag: '' };
 
 function parseArgs(argv) {
   const args = {};
@@ -106,7 +109,7 @@ export function composeCaption(spec, brandTag) {
   const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
 
   const seen = new Map();
-  for (const tag of [...inline, ...(spec.hashtags || []), brandTag]) {
+  for (const tag of [...inline, ...(spec.hashtags || []), brandTag].filter(Boolean)) {
     const key = String(tag).toLowerCase();
     if (!seen.has(key)) seen.set(key, tag);
   }
