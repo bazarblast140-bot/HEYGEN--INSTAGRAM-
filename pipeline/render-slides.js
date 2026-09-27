@@ -38,7 +38,7 @@ export const FORMAT = 'jpeg';
 export const QUALITY = 92;
 
 const DEMO = {
-  brand: 'FACTVIZER',
+  brand: '',
   slides: [
     { band: 'center', headline: 'दुनिया की सबसे बड़ी कंपनियाँ\n1 करोड़ रुपये कितनी देर में कमाती हैं' },
     { headline: 'एप्पल', subline: '1 करोड़ रुपये\n52 सेकंड में' },
