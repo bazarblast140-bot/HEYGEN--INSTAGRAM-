@@ -1,7 +1,7 @@
 // Finance-first prompt for @rajesh_technical_trader.
 // Uses the supplied Wealth-style editorial energy as inspiration, not copied wording/images/design.
 
-import { BRIEFS, SLIDES } from './categories.js';
+import { BRIEFS, SLIDES, TOPIC_SEEDS } from './categories.js';
 
 export const SYSTEM = `तुम @rajesh_technical_trader के लिए रोज़ एक premium Hindi/Hinglish finance carousel लिखते हो — ठीक ${SLIDES} slides.
 
@@ -35,9 +35,9 @@ export function buildUserPrompt({ category, date, recentTopics = [] }) {
     ? `\n\n<already_covered>\nइन recent posts को दोहराना सख़्त मना है. Same company + same metric + same angle भी repeat मत करो.\n\n${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}\n</already_covered>`
     : '';
 
-  return `<task>
+  const seedList = (TOPIC_SEEDS[category] || []).join(' | ');\n\n  return `<task>
 आज (${date}) category **${category}** के अंदर एक नया finance topic चुनो.
-Topic में एक concrete object होना चाहिए: metric, setup, strategy, stock/company, historical event, calculation या mistake.
+Topic में एक concrete object होना चाहिए: metric, setup, strategy, stock/company, historical event, calculation या mistake.\nआज के original idea seeds: ${seedList}\nइनमें से एक को inspiration बनाओ, exact wording copy मत करो.
 </task>${alreadyCovered}
 
 <topic_selection>
