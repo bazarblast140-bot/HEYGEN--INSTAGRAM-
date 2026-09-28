@@ -26,8 +26,6 @@ LANGUAGE & STYLE
 - Fact slides: headline छोटा और बड़ा; subline 2–3 short lines. एक slide में एक मुख्य idea.
 - Yellow केवल headline/highlight के लिए. Explanation readable white/off-white रखो.
 - Repeated emojis, clickbait और ALL-CAPS English नहीं.
-
-Category: ${BRIEFS[category] || category}
 `;
 
 export function buildUserPrompt({ category, date, recentTopics = [] }) {
@@ -35,9 +33,13 @@ export function buildUserPrompt({ category, date, recentTopics = [] }) {
     ? `\n\n<already_covered>\nइन recent posts को दोहराना सख़्त मना है. Same company + same metric + same angle भी repeat मत करो.\n\n${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}\n</already_covered>`
     : '';
 
-  const seedList = (TOPIC_SEEDS[category] || []).join(' | ');\n\n  return `<task>
+  const seedList = (TOPIC_SEEDS[category] || []).join(' | ');
+
+  return `<task>
 आज (${date}) category **${category}** के अंदर एक नया finance topic चुनो.
-Topic में एक concrete object होना चाहिए: metric, setup, strategy, stock/company, historical event, calculation या mistake.\nआज के original idea seeds: ${seedList}\nइनमें से एक को inspiration बनाओ, exact wording copy मत करो.
+Topic में एक concrete object होना चाहिए: metric, setup, strategy, stock/company, historical event, calculation या mistake.
+आज के original idea seeds: ${seedList}
+इनमें से एक को inspiration बनाओ, exact wording copy मत करो.
 </task>${alreadyCovered}
 
 <topic_selection>
@@ -89,4 +91,4 @@ Last slide query हमेशा abstract dark finance texture हो.
 
 भेजने से पहले: topic नया है, facts sourceable हैं, slide 2 strongest है, visual queries unique हैं और आख़िरी CTA सिर्फ़ Follow me है.
 `;
-};
+}
