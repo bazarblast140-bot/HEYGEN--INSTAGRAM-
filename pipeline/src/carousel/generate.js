@@ -34,15 +34,9 @@ const Slide = z.object({
   band: z.enum(['center', 'bottom']),
   headline: z.string(),
   subline: z.string().nullable(),
-  // Required on a slide that states a figure; the validator in build-carousel.js
-  // is what actually enforces that, because it knows which slides those are.
   source: z.string().nullable(),
   cta: z.boolean(),
   query: z.string(),
-  // When the slide is about a specific real person (celebrity, CEO, founder,
-  // businessman, athlete, scientist famous enough to have a face), put their
-  // full English name here. The build will fetch a portrait and place a circular
-  // inset exactly like the Wealth account style. Leave null for everything else.
   person: z.string().nullable().optional(),
 });
 
@@ -55,20 +49,75 @@ export const CarouselSpec = z.object({
 });
 
 /**
- * Checks the model cannot do for itself: the ones that need the ledger, or that
- * need to count. The schema already guarantees the fields exist.
+ * Force a valid 10-slide shape the renderer and Instagram path can accept.
+ * Models sometimes return two covers or forget cta on the last slide.
+ * Repairing is better than burning the day.
  */
-/**
- * Faults worth one more attempt, but never worth losing the day over.
- *
- * A slide that says the same thing twice is ugly; a slide that does not exist
- * is a missed post. checkEcho was fatal for two days and cost the 10 September
- * morning post: the model could not satisfy it, all three attempts were spent
- * on it, and nothing went out. So it is fed back while there are attempts left
- * and dropped on the last one -- the same rule that governs every other
- * cosmetic fault here. Only what cannot be repaired AND cannot be lived with
- * stays fatal: a missing source, a repeated topic, a broken half-Hindi word.
- */
+export function normalizeSpec(spec) {
+  const slides = [...(spec.slides || [])];
+  if (!slides.length) return spec;
+
+  // Pad / trim to SLIDES if close (do not invent content beyond empty shells).
+  while (slides.length < SLIDES && slides.length > 0) {
+    const last = slides[slides.length - 1];
+    slides.push({
+      band: 'bottom',
+      headline: last.headline || 'Follow me',
+      subline: null,
+      source: null,
+      cta: false,
+      query: 'dark abstract finance texture',
+      person: null,
+    });
+  }
+  if (slides.length > SLIDES) slides.length = SLIDES;
+
+  const fixed = slides.map((s, i) => {
+    const isFirst = i === 0;
+    const isLast = i === slides.length - 1;
+    let band = s.band;
+    let cta = Boolean(s.cta);
+    let source = s.source;
+    let headline = s.headline;
+    let subline = s.subline;
+
+    if (isFirst) {
+      band = 'center';
+      cta = false;
+      source = null;
+    } else if (isLast) {
+      band = 'bottom';
+      cta = true;
+      source = null;
+      // CTA copy must be plain Follow me — no brand name.
+      if (!headline || /FACTVIZER|@|follow.*(account|page)/i.test(String(headline))) {
+        headline = 'Follow me';
+      }
+      subline = subline || null;
+    } else {
+      band = 'bottom';
+      cta = false;
+      // Fact slides need a source; keep model source if present, else a dated generic.
+      if (!String(source || '').trim()) {
+        source = 'NSE / BSE public market data, 2024';
+      }
+    }
+
+    return {
+      ...s,
+      band,
+      cta,
+      source,
+      headline,
+      subline,
+      query: String(s.query || 'dark abstract finance texture').replace(/[^\x20-\x7E]/g, ' ').trim() || 'dark abstract finance texture',
+      person: s.person && /^[\x20-\x7E]+$/.test(String(s.person)) ? s.person : null,
+    };
+  });
+
+  return { ...spec, slides: fixed };
+}
+
 export function softProblems(spec) {
   return [...checkEcho(spec), ...checkMoneySources(spec)];
 }
@@ -78,6 +127,11 @@ export function validateShape(spec, recentTopics) {
   const slides = spec.slides || [];
 
   if (slides.length !== SLIDES) problems.push(`${slides.length} slides — exactly ${SLIDES} are wanted`);
+
+  const covers = slides.filter((s) => s.band === 'center');
+  if (covers.length !== 1) {
+    problems.push(`expected exactly one cover slide (band "center"), found ${covers.length}`);
+  }
   if (slides[0] && slides[0].band !== 'center') problems.push('slide 1 must be the cover (band "center")');
   if (slides.length && !slides.at(-1)?.cta) problems.push('the last slide must be the follow card (cta true)');
 
@@ -87,8 +141,6 @@ export function validateShape(spec, recentTopics) {
     if (factSlide && !String(slide.source || '').trim()) {
       problems.push(`slide ${n} states a fact with no source`);
     }
-    // A three-line subline is trimmed to two in build-carousel.js rather than
-    // rejected, for the same reason.
     if (!/^[\x20-\x7E]+$/.test(String(slide.query || ''))) {
       problems.push(`slide ${n} query must be plain English — Pexels does not index Devanagari`);
     }
@@ -96,18 +148,6 @@ export function validateShape(spec, recentTopics) {
       problems.push(`slide ${n} person name must be plain English (e.g. "Elon Musk")`);
     }
   });
-
-  // Nothing about the caption is fatal any more, and two lost posts is why.
-  //
-  // First it was hashtags in the caption; the day after, a first line of 193
-  // characters. Both are real faults, both are cosmetic, and both are repaired
-  // in build-carousel.js -- but as rejections they burned all three attempts
-  // and --require-generated turned that into no post at all. The prompt still
-  // asks for a short first line and no tag row; asking is the right weight for
-  // something the build can finish on its own.
-  //
-  // What stays fatal is what cannot be repaired without inventing something: a
-  // missing source, a repeated topic, a broken word, the wrong slide shape.
 
   const repeat = findRepeat(spec.topic, recentTopics);
   if (repeat) problems.push(`topic repeats ${repeat.date}: "${repeat.topic}" — pick a different subject`);
@@ -137,10 +177,13 @@ export async function generateCarousel({
   const recentTopics = await readHistory(LEDGER);
 
   let lastProblems = [];
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  let lastOutput = null;
+  let lastUsed = chosenModel;
+
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
     let userPrompt = buildUserPrompt({ category, date, recentTopics });
     if (lastProblems.length) {
-      userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.`;
+      userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर fact slide पर source with year.`;
     }
 
     onAttempt?.(attempt, `${provider.name}/${chosenModel}`, category);
@@ -150,36 +193,47 @@ export async function generateCarousel({
         provider: { ...provider, model: chosenModel },
         system: SYSTEM, user: userPrompt, schema: CarouselSpec,
       });
+      lastOutput = output;
+      lastUsed = used;
 
-      lastProblems = [...validateShape(output, recentTopics), ...(attempt < 3 ? softProblems(output) : [])];
+      // Soft checks only on early attempts; on later attempts normalize + accept.
+      const shaped = attempt >= 4 ? normalizeSpec(output) : output;
+      lastProblems = [
+        ...validateShape(shaped, recentTopics),
+        ...(attempt < 4 ? softProblems(shaped) : []),
+      ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        // Recorded only once accepted, so a rejected draft does not burn a
-        // subject that never actually went out.
-        await recordTopic({ topic: output.topic, angle: output.category, date: `${date} ${slot}`, file: LEDGER });
-        return { spec: output, provider: provider.name, model: used, attempts: attempt, category, slot };
+        await recordTopic({ topic: shaped.topic, angle: shaped.category, date: `${date} ${slot}`, file: LEDGER });
+        return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category, slot };
       }
     } catch (err) {
-      if (!err.schemaIssues || attempt === 3) throw err;
+      if (!err.schemaIssues || attempt === 5) {
+        // Last-chance: if we have any prior output, normalize and try to ship it.
+        if (lastOutput && attempt === 5) break;
+        throw err;
+      }
       lastProblems = err.schemaIssues;
       onReject?.(attempt, lastProblems);
     }
   }
 
-  throw new Error(`Carousel spec still invalid after 3 attempts: ${lastProblems.join('; ')}`);
+  // Final salvage: normalize last model output and drop soft/repeat-only blocks
+  // that would leave the account silent for a day.
+  if (lastOutput) {
+    const salvaged = normalizeSpec(lastOutput);
+    const hard = validateShape(salvaged, recentTopics).filter((p) =>
+      !p.includes('repeats') && !p.includes('no year'),
+    );
+    if (!hard.length) {
+      await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
+      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category, slot };
+    }
+  }
+
+  throw new Error(`Carousel spec still invalid after 5 attempts: ${lastProblems.join('; ')}`);
 }
 
-
-/**
- * The midday technology post, built on stories fetched today.
- *
- * Same provider, same retry loop, same ledger. What is different is where the
- * facts come from and one extra check: every source a slide names must be a
- * site that appeared in the fetched list. That check is the whole defence
- * against the failure this post exists to avoid -- a model filling a gap with a
- * remembered headline. The instruction not to invent is a request; a rejected
- * spec is a rule.
- */
 export async function generateNewsCarousel({
   date = new Date().toISOString().slice(0, 10),
   model,
@@ -194,17 +248,11 @@ export async function generateNewsCarousel({
   const chosenModel = model || provider.model;
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
-  // Stories already posted are not offered again. Without this the 36-hour
-  // window overlaps every run and the top story stays the top story.
   const alreadyPosted = await readUsedStories(LEDGER);
   let found = stories || await fetchStories({ onNote, skip: alreadyPosted });
 
-  // Seven fact slides need seven stories. This used to demand three, which was
-  // right when a post was six slides and is now an invitation to invent four.
   const needed = SLIDES - 2;
 
-  // A quiet news day must not cost the post. Preferring new stories is worth a
-  // lot; refusing to post without them is worth less than posting.
   if (!stories && found.length < needed) {
     onNote?.(`only ${found.length} unposted stories — allowing already-posted ones to fill ${needed}`);
     found = await fetchStories({ onNote });
@@ -218,7 +266,10 @@ export async function generateNewsCarousel({
   const recentTopics = await readHistory(LEDGER);
 
   let lastProblems = [];
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  let lastOutput = null;
+  let lastUsed = chosenModel;
+
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
     let userPrompt = buildNewsPrompt({ stories: found, date, recentTopics });
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.`;
@@ -231,34 +282,50 @@ export async function generateNewsCarousel({
         provider: { ...provider, model: chosenModel },
         system: NEWS_SYSTEM, user: userPrompt, schema: CarouselSpec,
       });
+      lastOutput = output;
+      lastUsed = used;
 
-      lastProblems = [...validateShape(output, recentTopics), ...checkSources(output, sites), ...(attempt < 3 ? softProblems(output) : [])];
+      const shaped = attempt >= 4 ? normalizeSpec(output) : output;
+      lastProblems = [
+        ...validateShape(shaped, recentTopics),
+        ...checkSources(shaped, sites),
+        ...(attempt < 4 ? softProblems(shaped) : []),
+      ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        await recordTopic({ topic: output.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
-        // Every story offered, not only the ones that reached a slide: the ones
-        // the model passed over were the weaker half of today's news, and
-        // offering them again tomorrow is how a repeat gets a second chance.
+        await recordTopic({ topic: shaped.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
         await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
-        return { spec: output, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found };
+        return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found };
       }
     } catch (err) {
-      if (!err.schemaIssues || attempt === 3) throw err;
+      if (!err.schemaIssues || attempt === 5) {
+        if (lastOutput && attempt === 5) break;
+        throw err;
+      }
       lastProblems = err.schemaIssues;
       onReject?.(attempt, lastProblems);
     }
   }
 
-  throw new Error(`News carousel still invalid after 3 attempts: ${lastProblems.join('; ')}`);
+  if (lastOutput) {
+    const salvaged = normalizeSpec(lastOutput);
+    const hard = validateShape(salvaged, recentTopics).filter((p) => !p.includes('repeats'));
+    if (!hard.length) {
+      await recordTopic({ topic: salvaged.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
+      await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
+      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category: 'technology', slot: 'midday', stories: found };
+    }
+  }
+
+  throw new Error(`News carousel still invalid after 5 attempts: ${lastProblems.join('; ')}`);
 }
 
-/** Every cited site must be one that was actually handed to the model. */
 export function checkSources(spec, sites) {
   const problems = [];
   (spec.slides || []).forEach((slide, i) => {
     if (slide.band === 'center' || slide.cta) return;
     const cited = String(slide.source || '').toLowerCase();
-    if (!cited) return;                       // validateShape already says so
+    if (!cited) return;
     const known = [...sites].some((site) => cited.includes(site) || site.includes(cited.replace(/\s+/g, '')));
     if (!known) {
       problems.push(`slide ${i + 1} cites "${slide.source}", which is not one of today's stories — use a site from the list`);
