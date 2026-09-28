@@ -1,6 +1,9 @@
-// Finance-first Instagram carousel categories for @rajesh_technical_trader.
-// Every scheduled carousel teaches one useful money/market concept with a concrete, sourceable angle.
-// 4 slots/day → 4 different topics (morning, midday, afternoon, evening).
+// Instagram carousel categories for @rajesh_technical_trader.
+// 4 slots/day → 4 different topics:
+//   morning   → finance education (rotating)
+//   midday    → latest AI topics / tech AI news
+//   afternoon → latest news (markets + tech + India)
+//   evening   → finance education (rotating)
 
 export const POOL = [
   'fundamentals', 'options', 'intraday', 'stocks',
@@ -102,6 +105,28 @@ export const TOPIC_SEEDS = {
     'Revenge trading के बाद position size बढ़ाना क्यों dangerous है',
     'Trading journal में कौन से numbers track करने चाहिए',
   ],
+  // Latest AI — model must pick CURRENT / recent AI headlines (last few days).
+  'ai-news': [
+    'आज की सबसे बड़ी AI खबर: OpenAI / Google / Meta / Anthropic में से जो सबसे नया हो',
+    'नया AI model या API launch — capability, pricing, India impact',
+    'AI safety / regulation / copyright की ताज़ा खबर',
+    'India में AI policy, startup funding या product launch',
+    'AI tools जो traders / creators / students के काम आएँ — fresh release',
+    'Chip / GPU / data-center AI infrastructure की latest development',
+    'AI agent / automation की नई capability — practical example',
+    'Big Tech AI product update: ChatGPT, Gemini, Claude, Grok, Copilot',
+  ],
+  // Latest news digest — current events, not evergreen education.
+  'latest-news': [
+    'आज की top 3 tech / market खबरें — short Hindi explain',
+    'Indian markets / RBI / SEBI / policy की ताज़ा development',
+    'Global market move जो Indian investors को affect करे',
+    'IPO / listing / corporate action की fresh news',
+    'Cybersecurity / data breach / platform policy change',
+    'Phone / gadget / EV launch जो India relevant हो',
+    'Startup funding / shutdown / big deal की latest story',
+    'Economy indicator: inflation, jobs, GDP, crude — अगर आज relevant हो',
+  ],
 };
 
 export const BRIEFS = {
@@ -113,6 +138,8 @@ export const BRIEFS = {
   'personal-finance': 'Compounding, emergency fund, inflation, loans, credit score, taxes, asset allocation और money mistakes — practical calculations के साथ.',
   business: 'Companies और business models: revenue कैसे बनता है, unit economics, margins, moats, failures, IPO/business history और famous Indian corporate case studies.',
   'risk-management': 'Capital protection: position sizing, drawdown math, risk-reward, leverage, stop-loss mechanics, diversification और trading psychology. कोई guaranteed outcome नहीं.',
+  'ai-news': 'LATEST AI news only (last 1–7 days). OpenAI, Google, Meta, Anthropic, Microsoft, Apple, Indian AI startups, models, agents, regulation, chips. हर slide पर concrete fact + source-worthy detail. Evergreen theory मत लिखो — आज/इस हफ्ते की खबर. Hindi, clear, no hype promises.',
+  'latest-news': 'LATEST news digest (last 1–3 days): Indian markets, tech, policy, startups, gadgets, global events that matter to Indian audience. 3–5 short facts with context. Stale or undated claims avoid करो. Hindi, neutral, educational tone.',
 };
 
 export function dayNumber(date = new Date()) {
@@ -121,10 +148,6 @@ export function dayNumber(date = new Date()) {
 };
 
 // Main fire + one catch-up per slot (IST).
-// morning   ~08:07 / 08:52 IST
-// midday    ~12:07 / 12:52 IST
-// afternoon ~15:07 / 15:52 IST
-// evening   ~17:07 / 17:52 IST
 export const CRON_SLOTS = {
   '37 2 * * *': 'morning', '22 3 * * *': 'morning',
   '37 6 * * *': 'midday', '22 7 * * *': 'midday',
@@ -145,9 +168,13 @@ export function slotFor(date = new Date()) {
   return 'evening';
 };
 
-// Each slot gets a different category index so 4 posts/day = 4 different topics.
+// Fixed mapping so 4 slots always feel different:
+// midday = AI, afternoon = news, morning/evening = finance rotation.
 export function categoryFor(date = new Date(), slot = 'evening') {
+  if (slot === 'midday') return 'ai-news';
+  if (slot === 'afternoon') return 'latest-news';
   const index = SLOTS.indexOf(slot);
   if (index === -1) throw new Error('Unknown slot ' + slot + ' — ' + SLOTS.join(' or ') + '.');
+  // morning=0, evening=3 → different finance categories
   return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
 };
