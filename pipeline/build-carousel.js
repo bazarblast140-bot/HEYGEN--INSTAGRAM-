@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } from './render-slides.js';
 import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
-import { generateCarousel, generateNewsCarousel } from './src/carousel/generate.js';
+import { generateCarousel, generateNewsCarousel, normalizeSpec } from './src/carousel/generate.js';
 import { slotFor } from './src/carousel/categories.js';
 import { storyFrames } from './src/carousel/story.js';
 import { referralCaptionBlock } from './src/carousel/referrals.js';
@@ -55,14 +55,6 @@ function parseArgs(argv) {
 const notes = [];
 const note = (msg) => { notes.push(msg); console.log(`  · ${msg}`); };
 
-/**
- * Turn a literal backslash-n into a real newline.
- *
- * Specs written by hand sometimes store "line1\\nline2" (two characters) instead
- * of an actual line break. The slide scene uses white-space:pre-line, so those
- * two characters print as "\\n" on Instagram — which is exactly what the
- * 2026-09-20 celebrity-homes post did. Expand once, here, so every path is safe.
- */
 function expandNewlines(text) {
   if (text == null) return text;
   return String(text).replace(/\\n/g, '\n');
@@ -196,6 +188,12 @@ async function main() {
       footnote: expandNewlines(s.footnote),
     })),
   };
+
+  // Always normalize bands/cta/sources before the hard gate. Models occasionally
+  // return two covers; that used to reject the whole day after generation spent
+  // three attempts. Repair is cheaper than silence.
+  spec = normalizeSpec(spec);
+  note('shape normalized (exactly one cover, last slide Follow me)');
 
   const problems = validateSpec(spec);
   if (problems.length) {
