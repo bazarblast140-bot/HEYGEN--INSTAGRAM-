@@ -1,0 +1,151 @@
+name: Auto-fix agent
+
+# Fail hone par khud detect → diagnose → transient pe auto-retry (max 2).
+# Permanent/unknown pe Telegram alert. User ko bar-bar batane ki zarurat nahi.
+
+on:
+  workflow_run:
+    workflows: ["Build carousel", "Build reel"]
+    types: [completed]
+  schedule:
+    # Health check har 4 ghante (IST me roughly 00, 04, 08, 12, 16, 20)
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      force_health:
+        description: "Sirf health check + report (retry nahi)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: auto-fix-agent
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+  checks: read
+
+jobs:
+  heal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Skip if this agent itself somehow looped, or success runs
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'failure'
+
+    steps:
+      - name: Diagnose + act
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT: ${{ github.event_name }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          FAILED_NAME: ${{ github.event.workflow_run.name }}
+          FAILED_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          FAILED_URL: ${{ github.event.workflow_run.html_url }}
+          FAILED_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          MAX_AUTO_RETRY: "2"
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+
+          notify() {
+            local msg="$1"
+            echo "$msg"
+            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+              curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -d chat_id="$TELEGRAM_CHAT_ID" \
+                --data-urlencode text="$msg" >/dev/null || true
+            fi
+          }
+
+          # --- Health check path (schedule / manual) ---
+          if [ "$EVENT" != "workflow_run" ]; then
+            echo "## Health check" >> "$GITHUB_STEP_SUMMARY"
+            # Recent carousel runs
+            echo "### Recent Build carousel" >> "$GITHUB_STEP_SUMMARY"
+            gh run list --repo "$REPO" --workflow "Build carousel" --limit 5 \
+              --json databaseId,conclusion,status,displayTitle,createdAt,url \
+              --jq '.[] | "- \(.conclusion // .status) #\(.databaseId) \(.createdAt) \(.url)"' \
+              | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+            FAIL_COUNT=$(gh run list --repo "$REPO" --workflow "Build carousel" --limit 8 \
+              --json conclusion --jq '[.[] | select(.conclusion=="failure")] | length' || echo 0)
+            if [ "${FAIL_COUNT:-0}" -ge 3 ]; then
+              notify "⚠️ HEYGEN auto-fix: last 8 carousel runs me $FAIL_COUNT failures. Manual check karo."
+            else
+              echo "Carousel recent failures: $FAIL_COUNT (OK)" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
+
+          # --- Failure path ---
+          echo "## Failed run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Workflow: $FAILED_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Run: $FAILED_RUN_ID attempt $FAILED_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: $FAILED_URL" >> "$GITHUB_STEP_SUMMARY"
+
+          # Pull logs (best-effort)
+          LOG=$(mktemp)
+          gh run view "$FAILED_RUN_ID" --repo "$REPO" --log-failed 2>/dev/null | tail -n 200 > "$LOG" || true
+          # Also try job logs via api if empty
+          if [ ! -s "$LOG" ]; then
+            gh api "repos/$REPO/actions/runs/$FAILED_RUN_ID/logs" -H "Accept: application/vnd.github+json" \
+              > /tmp/logs.zip 2>/dev/null && unzip -p /tmp/logs.zip 2>/dev/null | tail -n 200 > "$LOG" || true
+          fi
+
+          SNIP=$(tail -n 40 "$LOG" | sed 's/\x1b\[[0-9;]*m//g' | head -c 1500)
+          echo '### Log tail' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$SNIP" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # Classify
+          KIND="unknown"
+          if grep -qiE '9007|Media ID not available|code.?9007|wait.*FINISHED' "$LOG"; then
+            KIND="transient_ig_9007"
+          elif grep -qiE 'ECONNRESET|ETIMEDOUT|socket hang up|rate limit|429|503|502|fetch failed|network' "$LOG"; then
+            KIND="transient_network"
+          elif grep -qiE 'Only photo or video can be accepted|media type' "$LOG"; then
+            KIND="transient_media_url"
+          elif grep -qiE 'SyntaxError|Unexpected token|is not valid JSON|Cannot find module' "$LOG"; then
+            KIND="code_syntax"
+          elif grep -qiE 'normalizeSpec|validate.*fail|shape|2-cover|REFUSED' "$LOG"; then
+            KIND="spec_validation"
+          elif grep -qiE 'token.*(expir|invalid)|OAuth|IG_ACCESS|instagram-doctor' "$LOG"; then
+            KIND="auth_token"
+          fi
+
+          echo "### Classification: \\`$KIND\\`" >> "$GITHUB_STEP_SUMMARY"
+
+          case "$KIND" in
+            transient_ig_9007|transient_network|transient_media_url)
+              if [ "${FAILED_ATTEMPT:-1}" -lt "$MAX_AUTO_RETRY" ]; then
+                echo "Auto-retry (attempt $FAILED_ATTEMPT < $MAX_AUTO_RETRY)..."
+                sleep 45
+                gh run rerun "$FAILED_RUN_ID" --repo "$REPO" --failed
+                notify "🔄 HEYGEN auto-fix: $FAILED_NAME failed ($KIND). Auto-retry #$((FAILED_ATTEMPT+1)). $FAILED_URL"
+              else
+                notify "❌ HEYGEN auto-fix: $FAILED_NAME still failing after $FAILED_ATTEMPT attempts ($KIND). Manual needed. $FAILED_URL"
+              fi
+              ;;
+            code_syntax|spec_validation)
+              notify "🛠️ HEYGEN auto-fix: $FAILED_NAME code/spec issue ($KIND). Retry alone se nahi hoga — code check chahiye. $FAILED_URL"
+              ;;
+            auth_token)
+              notify "🔑 HEYGEN auto-fix: Instagram/HeyGen token issue. Secrets/vars refresh karo. $FAILED_URL"
+              ;;
+            *)
+              if [ "${FAILED_ATTEMPT:-1}" -eq 1 ]; then
+                sleep 30
+                gh run rerun "$FAILED_RUN_ID" --repo "$REPO" --failed || true
+                notify "🔄 HEYGEN auto-fix: $FAILED_NAME unknown fail — 1 retry try. $FAILED_URL"
+              else
+                notify "❓ HEYGEN auto-fix: $FAILED_NAME unknown after retries. $FAILED_URL\n\n$SNIP"
+              fi
+              ;;
+          esac
