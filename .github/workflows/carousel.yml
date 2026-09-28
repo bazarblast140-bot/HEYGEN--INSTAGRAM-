@@ -1,36 +1,30 @@
 name: Build carousel
 
-# Separate from build-reel.yml on purpose. The reel job is working and this is a
-# new feature; sharing a workflow would mean a change here can break the post
-# that already goes out.
+# 4 finance carousels a day — morning / midday / afternoon / evening — each a
+# different topic. Catch-up crons exist because GitHub schedule is best-effort;
+# the ledger (YYYY-MM-DD <slot>) prevents duplicates.
 #
-# One finance carousel a day at 17:07 IST. Actions cron is UTC, IST is UTC+5:30.
-# The later entries are catch-ups for the same post; the ledger prevents duplicates.
-#
-# A scheduled run PUBLISHES. That is the point of it, and it is also the reason
-# every guard in this pipeline exists: an unsourced slide is rejected, a repeated
-# topic is rejected, a non-JPEG build is refused. Nobody is watching at 06:00.
-#
-# Each post has catch-up attempts because GitHub cron is best-effort. All
-# attempts target the same evening slot, and the ledger prevents duplicates.
-#
-# The second firing is a catch-up, and the ledger is what stops it posting twice:
-# a slot with an entry for today is already done, so the run ends in seconds. See
-# pipeline/slot-status.js.
+# A scheduled run PUBLISHES. Guards reject unsourced slides, repeated topics,
+# and non-JPEG builds.
 
 on:
-  # An outside scheduler fires this, and that is the punctual path: a dispatched
-  # run starts within seconds, while GitHub's own cron has been arriving six to
-  # eight hours late. The caller says which post it wants; nothing is inferred.
-  # See scheduler/README.md.
   repository_dispatch:
     types: [carousel]
 
-# GitHub schedule is a backstop for the one daily finance post.
   schedule:
-    - cron: '37 11 * * *'    # 17:07 IST -- daily finance carousel
-    - cron: '22 12 * * *'    # 17:52 IST -- catch-up
-    - cron: '48 13 * * *'    # 19:18 IST -- final catch-up
+    # morning   ~08:07 IST + catch-up ~08:52
+    - cron: '37 2 * * *'
+    - cron: '22 3 * * *'
+    # midday    ~12:07 IST + catch-up ~12:52
+    - cron: '37 6 * * *'
+    - cron: '22 7 * * *'
+    # afternoon ~15:07 IST + catch-up ~15:52
+    - cron: '37 9 * * *'
+    - cron: '22 10 * * *'
+    # evening   ~17:07 IST + catch-up ~17:52
+    - cron: '37 11 * * *'
+    - cron: '22 12 * * *'
+
   workflow_dispatch:
     inputs:
       force:
@@ -49,17 +43,15 @@ on:
         type: boolean
         default: true
       slot:
-        description: "Daily finance carousel"
+        description: Which of the 4 daily slots
         type: choice
-        options: ['evening']
+        options: ['morning', 'midday', 'afternoon', 'evening']
         default: 'evening'
       publish:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
         type: boolean
         default: false
 
-# One at a time. Both runs commit the topic ledger back to the branch, and two
-# runs racing that push is how a day ends up with the same fact twice.
 concurrency:
   group: carousel
   cancel-in-progress: false
@@ -70,14 +62,8 @@ jobs:
     timeout-minutes: 20
 
     env:
-      # Schedule and repository_dispatch are the same thing from here on: an
-      # unattended run that publishes. Written once, because six separate
-      # `event_name == 'schedule'` tests is six chances to add the new event to
-      # five of them.
       AUTOMATED: ${{ github.event_name == 'schedule' || github.event_name == 'repository_dispatch' }}
 
-    # contents: write is for the release the slides are hosted on -- Instagram
-    # fetches each image from a public URL and never accepts an upload.
     permissions:
       contents: write
 
@@ -91,31 +77,13 @@ jobs:
 
       - run: npm ci
 
-      # A scheduled run is one of two firings for the same slot. If the earlier
-      # one already posted, this ends here rather than posting the day twice.
-      # A hand-started run is never skipped -- asking for a post is asking for
-      # a post.
       - name: Is this slot still pending?
         id: slot
         env:
-          # Which post this run is FOR. GitHub has been firing these entries six
-          # to eight hours late, and the slot used to be read off the clock at
-          # run time -- so the 00:37 morning entry arrived at 07:05 and became a
-          # midday run. The cron string says what was scheduled; the clock does
-          # not. See slotForCron in src/carousel/categories.js.
           SCHEDULED_CRON: ${{ github.event.schedule }}
-          # A dispatch names its slot outright, which beats deriving it. Both
-          # kinds count: repository_dispatch carries it in client_payload, and
-          # a hand-run names it in inputs. The build step already honours the
-          # input, so without this line a manual "post the morning one" would
-          # build a morning carousel and record it under whatever slot the
-          # clock happened to be in -- leaving the real morning slot pending.
           DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Answers "is the script key live?" without spending a token. It is here
-      # rather than in the reel job because that job's failure mode is a whole
-      # silent reel; this one just prints the vendor's own verdict.
       - name: Check the script-writing keys
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -133,10 +101,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Read-only. It resolves the configured IG_USER_ID against the token and
-      # prints whose account it is -- publishing nothing. "The token is set" and
-      # "the token still works" are different facts, and a Facebook-surface token
-      # expires; finding that out at post time means a missed day.
       - name: Check the Instagram token
         continue-on-error: true
         env:
@@ -156,10 +120,6 @@ jobs:
         if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
         run: npx playwright install --with-deps chromium
 
-      # The bundled Devanagari face is a hard requirement, not a nicety. The
-      # renderer now forces every declared @font-face to load before it measures
-      # anything, so a missing or corrupt font fails this step loudly instead of
-      # shipping tofu that is only visible once the image is on Instagram.
       - name: Build the carousel
         id: build
         if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
@@ -190,10 +150,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # publish off: show what would go out -- which account, which files, the
-      # caption in full -- and post nothing. Cheap, and it catches a caption that
-      # got mangled or a token that resolves to the wrong account, at the point
-      # where that is still free to fix.
       - name: What would be posted
         if: env.AUTOMATED != 'true' && github.event.inputs.publish != 'true'
         continue-on-error: true
@@ -210,31 +166,16 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The only step in this workflow that is visible to anyone but us, and the
-      # only one that cannot be undone from here -- a wrong post is deleted by
-      # hand, from the phone, after people have seen it. So it runs when it is
-      # asked for and never by default.
+      # Any of the 4 slots may publish (not evening-only).
       - name: Publish to Instagram
         id: publish
-        # The ledger governs every publish, not only the unattended ones. It
-        # used to be bypassed whenever publish=true was passed by hand, which
-        # was fine while a person was the only one pressing the button and is
-        # not fine now that a second scheduler can press it too: two triggers
-        # for one slot would post the carousel twice. `force` is the way out,
-        # and it has to be asked for.
-        if: ${{ steps.slot.outputs.slot == 'evening' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true') }}
+        if: ${{ (steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true' }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_SURFACE: ${{ vars.IG_SURFACE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Without this, `node ... | tee` reports tee's exit status -- always 0.
-          # On 2026-09-10 the morning publish failed on slide 3 and the step went
-          # green, so "Remember this post's topic" ran, committed the ledger, and
-          # marked the morning slot posted. Every later trigger then skipped it,
-          # by design, and the day was gone. A publish that did not publish must
-          # never be able to say it did.
           set -o pipefail
           node pipeline/publish-carousel.js --report pipeline/out/carousel-report.json --yes 2>&1 | tee publish.log
           {
@@ -244,13 +185,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The ledger is what stops the same fact going out twice, and it only works
-      # if it outlives the runner -- so it is committed back to the branch.
-      #
-      # After publishing, and only when publishing succeeded. A topic that was
-      # written but never posted is not spent: recording it would retire a fact
-      # nobody has seen, and a build that failed at the last step would quietly
-      # cost the account its subject.
       - name: Remember this post's topic
         if: steps.publish.outcome == 'success'
         run: |
@@ -259,8 +193,6 @@ jobs:
           git add pipeline/carousel-history.json
           git diff --cached --quiet && { echo "No new topic to record."; exit 0; }
           git commit -m "Record $(date -u +'%Y-%m-%d %H:%M') carousel topic"
-          # The other slot may have recorded its own topic first; take theirs and
-          # replay ours on top rather than clobbering the ledger.
           for attempt in 1 2 3; do
             git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
             sleep $((attempt * 3))
@@ -280,11 +212,6 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-      # What the account is actually doing. Likes and comments come off the
-      # media node; reach and saves are not permitted -- the insights edge
-      # answers "(#10) Application does not have permission" -- so this is the
-      # whole of the evidence, and it runs on every post so the record builds
-      # itself rather than waiting for someone to ask.
       - name: How the account is doing
         if: always()
         continue-on-error: true
@@ -301,70 +228,18 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: What the token may read
-        if: ${{ always() && env.AUTOMATED != 'true' }}
-        continue-on-error: true
-        env:
-          IG_USER_ID: ${{ vars.IG_USER_ID }}
-          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
-          IG_SURFACE: ${{ vars.IG_SURFACE }}
-        run: |
-          node pipeline/insights-doctor.js 2>&1 | tee insights.log || true
-          {
-            echo '## Account'
-            echo '```'
-            sed -e 's/\x1b\[[0-9;]*m//g' insights.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Last, deliberately. Its whole output is four lines, and anywhere earlier
-      # they are buried under the Chromium download; at the end of the job they
-      # are the end of the log.
-      - name: Check what ElevenLabs allows
-        if: ${{ always() && env.AUTOMATED != 'true' }}
-        continue-on-error: true
-        env:
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-        run: |
-          node pipeline/elevenlabs-doctor.js 2>&1 | tee eleven.log || true
-          {
-            echo '## ElevenLabs'
-            echo '```'
-            sed -e 's/\x1b\[[0-9;]*m//g' eleven.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # The build's reason, last, for the same reason as the publish's.
-      #
-      # A failed build prints its error, then sixty lines of artifact upload,
-      # audit and three doctors run after it. Reading why a post did not exist
-      # meant paging back through all of that, four times in one day.
       - name: Why the build failed
         if: ${{ failure() && steps.build.outcome == 'failure' }}
         run: |
           echo '--- build failed, last lines ---'
           sed -e 's/\x1b\[[0-9;]*m//g' carousel.log | tail -n 25
 
-      # The reason, last, where a log reader lands.
-      #
-      # A failed publish prints its error in the middle of the job, and
-      # everything after it -- artifact upload, audit, three doctors, cleanup --
-      # is another sixty lines. Reading why a post did not go out meant paging
-      # back through all of it. This repeats the last few lines at the end.
       - name: Why the publish failed
         if: ${{ failure() && steps.publish.outcome == 'failure' }}
         run: |
           echo '--- publish failed, last lines ---'
           sed -e 's/\x1b\[[0-9;]*m//g' publish.log | tail -n 20
 
-      # Did the story go up?
-      #
-      # The carousel of 2026-09-10 published and the story did not, and finding
-      # out why meant reaching into the middle of a 760-line log -- the story
-      # block sits inside a step that SUCCEEDED, so the failure summary above
-      # does not fire for it. The story is deliberately allowed to fail without
-      # taking the post down; that is exactly why its outcome has to be said out
-      # loud somewhere a reader lands.
       - name: Did the story go up?
         if: ${{ always() && steps.publish.outcome != 'skipped' }}
         run: |

@@ -1,5 +1,6 @@
 // Finance-first Instagram carousel categories for @rajesh_technical_trader.
 // Every scheduled carousel teaches one useful money/market concept with a concrete, sourceable angle.
+// 4 slots/day → 4 different topics (morning, midday, afternoon, evening).
 
 export const POOL = [
   'fundamentals', 'options', 'intraday', 'stocks',
@@ -9,7 +10,7 @@ export const POOL = [
 export const STRIDE = 5;
 export const SLIDES = 10;
 export const SLOT_OFFSET = 8;
-export const SLOTS = ['evening'];
+export const SLOTS = ['morning', 'midday', 'afternoon', 'evening'];
 export const FINANCE = POOL;
 
 export const TOPIC_SEEDS = {
@@ -119,10 +120,16 @@ export function dayNumber(date = new Date()) {
   return Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000);
 };
 
+// Main fire + one catch-up per slot (IST).
+// morning   ~08:07 / 08:52 IST
+// midday    ~12:07 / 12:52 IST
+// afternoon ~15:07 / 15:52 IST
+// evening   ~17:07 / 17:52 IST
 export const CRON_SLOTS = {
-  '37 0 * * *': 'morning', '22 1 * * *': 'morning', '48 2 * * *': 'morning',
-  '37 7 * * *': 'midday', '22 8 * * *': 'midday', '48 9 * * *': 'midday',
-  '37 11 * * *': 'evening', '22 12 * * *': 'evening', '48 13 * * *': 'evening',
+  '37 2 * * *': 'morning', '22 3 * * *': 'morning',
+  '37 6 * * *': 'midday', '22 7 * * *': 'midday',
+  '37 9 * * *': 'afternoon', '22 10 * * *': 'afternoon',
+  '37 11 * * *': 'evening', '22 12 * * *': 'evening',
 };
 
 export function slotForCron(cron) {
@@ -132,13 +139,14 @@ export function slotForCron(cron) {
 
 export function slotFor(date = new Date()) {
   const hour = typeof date === 'string' ? 0 : date.getUTCHours();
-  if (hour < 6) return 'morning';
-  if (hour < 11) return 'midday';
+  if (hour < 5) return 'morning';
+  if (hour < 8) return 'midday';
+  if (hour < 11) return 'afternoon';
   return 'evening';
 };
 
+// Each slot gets a different category index so 4 posts/day = 4 different topics.
 export function categoryFor(date = new Date(), slot = 'evening') {
-  if (slot === 'evening') return FINANCE[dayNumber(date) % FINANCE.length];
   const index = SLOTS.indexOf(slot);
   if (index === -1) throw new Error('Unknown slot ' + slot + ' — ' + SLOTS.join(' or ') + '.');
   return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
