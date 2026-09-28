@@ -25,6 +25,8 @@ export const MIN_ITEMS = 2;
 export const MAX_ITEMS = 10;
 export const MAX_CAPTION = 2200;
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /**
  * Reasons to stop before the first API call.
  *
@@ -78,7 +80,7 @@ export async function createItemContainer({ igUserId, imageUrl, token, surface, 
       last = err;
       if (attempt === attempts) break;
       onRetry?.(attempt, err.message);
-      await new Promise((r) => setTimeout(r, waitMs * attempt));
+      await sleep(waitMs * attempt);
     }
   }
   throw last;
@@ -95,6 +97,41 @@ export async function createCarouselContainer({ igUserId, children, caption, tok
     },
   });
   return id;
+}
+
+/**
+ * Publish with retries for code 9007 ("Media ID is not available").
+ * Instagram often reports FINISHED a few seconds before the media_id is
+ * actually usable for media_publish. Waiting + retrying is the documented
+ * practical fix used by many publishers.
+ */
+async function publishWithRetry({ igUserId, containerId, token, surface, attempts = 6, onStatus }) {
+  let last;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const { id } = await call(`${igUserId}/media_publish`, {
+        method: 'POST', token, surface, params: { creation_id: containerId },
+      });
+      return id;
+    } catch (err) {
+      last = err;
+      const msg = String(err.message || '');
+      const is9007 = msg.includes('(code 9007)') || /Media ID is not available/i.test(msg);
+      if (!is9007 || attempt === attempts) break;
+      onStatus?.('publish-retry', `attempt ${attempt}: ${msg.slice(0, 120)}`);
+      // Re-check container status, then back off.
+      try {
+        await waitForContainer({
+          containerId, token, surface, pollMs: 2000, maxPolls: 10,
+          onStatus: (code) => onStatus?.('processing', code),
+        });
+      } catch {
+        // ignore — still try publish again
+      }
+      await sleep(4000 * attempt);
+    }
+  }
+  throw last;
 }
 
 export async function publishCarousel({
@@ -121,6 +158,19 @@ export async function publishCarousel({
     onStatus?.('item', `${i + 1}/${imageUrls.length} ${children.at(-1)}`);
   }
 
+  // Let child containers settle before the parent is created. Publishing a
+  // parent whose children are still IN_PROGRESS is a common source of 9007.
+  for (const childId of children) {
+    try {
+      await waitForContainer({
+        containerId: childId, token, surface, pollMs: 2000, maxPolls: 15,
+        onStatus: (code) => onStatus?.('child', `${childId} ${code}`),
+      });
+    } catch (err) {
+      onStatus?.('child-warn', `${childId}: ${String(err.message).slice(0, 100)}`);
+    }
+  }
+
   const containerId = await createCarouselContainer({ igUserId, children, caption, token, surface });
   onStatus?.('container', containerId);
 
@@ -128,12 +178,15 @@ export async function publishCarousel({
   // Instagram still downloads each file, and publishing a container that is not
   // FINISHED fails. Polling costs a few seconds and removes the race.
   await waitForContainer({
-    containerId, token, surface, pollMs: 3000, maxPolls: 20,
+    containerId, token, surface, pollMs: 3000, maxPolls: 30,
     onStatus: (code) => onStatus?.('processing', code),
   });
 
-  const { id: mediaId } = await call(`${igUserId}/media_publish`, {
-    method: 'POST', token, surface, params: { creation_id: containerId },
+  // Extra settle: FINISHED can precede a usable media_id by a few seconds.
+  await sleep(5000);
+
+  const mediaId = await publishWithRetry({
+    igUserId, containerId, token, surface, onStatus,
   });
   onStatus?.('published', mediaId);
 
