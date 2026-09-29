@@ -364,6 +364,11 @@
       "date": "2026-09-29 evening",
       "topic": "Protective Put: Stock के साथ Option Insurance",
       "angle": "options"
+    },
+    {
+      "date": "2026-09-29 morning",
+      "topic": "Theta decay: expiry के आख़िरी दिनों में समय का असर",
+      "angle": "options"
     }
   ],
   "stories": [
