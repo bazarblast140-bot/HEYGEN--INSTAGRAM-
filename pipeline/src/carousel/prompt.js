@@ -26,6 +26,7 @@ LANGUAGE & STYLE
 - Fact slides: headline max 8 words; subline max 16 words. एक slide में एक मुख्य idea. Text कम रखो.
 - Yellow केवल headline/highlight के लिए. Explanation readable white/off-white रखो.
 - Repeated emojis, clickbait और ALL-CAPS English नहीं.
+- Respond only in valid JSON. The response format is json.
 `;
 
 export function buildUserPrompt({ category, date, recentTopics = [] }) {

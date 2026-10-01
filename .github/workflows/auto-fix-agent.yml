@@ -36,6 +36,8 @@ jobs:
       github.event.workflow_run.conclusion == 'failure'
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Diagnose + act
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,7 +93,7 @@ jobs:
 
           # Pull logs (best-effort)
           LOG=$(mktemp)
-          gh run view "$FAILED_RUN_ID" --repo "$REPO" --log-failed 2>/dev/null | tail -n 200 > "$LOG" || true
+          gh run view "$FAILED_RUN_ID" --repo "$REPO" --log-failed 2>/dev/null > "$LOG" || true
           # Also try job logs via api if empty
           if [ ! -s "$LOG" ]; then
             gh api "repos/$REPO/actions/runs/$FAILED_RUN_ID/logs" -H "Accept: application/vnd.github+json" \
@@ -104,27 +106,44 @@ jobs:
           echo "$SNIP" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-          # Classify
-          KIND="unknown"
-          if grep -qiE '9007|Media ID not available|code.?9007|wait.*FINISHED' "$LOG"; then
-            KIND="transient_ig_9007"
-          elif grep -qiE 'ECONNRESET|ETIMEDOUT|socket hang up|rate limit|429|503|502|fetch failed|network' "$LOG"; then
-            KIND="transient_network"
-          elif grep -qiE 'Only photo or video can be accepted|media type' "$LOG"; then
-            KIND="transient_media_url"
-          elif grep -qiE 'SyntaxError|Unexpected token|is not valid JSON|Cannot find module' "$LOG"; then
-            KIND="code_syntax"
-          elif grep -qiE 'normalizeSpec|validate.*fail|shape|2-cover|REFUSED' "$LOG"; then
-            KIND="spec_validation"
-          elif grep -qiE 'token.*(expir|invalid)|OAuth|IG_ACCESS|instagram-doctor' "$LOG"; then
-            KIND="auth_token"
+          # Inputs are not always on the run object. workflow_dispatch prints them
+          # at the top of the job log (`preview: true`). Fetch that header too.
+          RUN_META=$(gh api "repos/$REPO/actions/runs/$FAILED_RUN_ID" || echo '{}')
+          RUN_EVENT=$(printf '%s' "$RUN_META" | jq -r '.event // empty')
+          RUN_TITLE=$(printf '%s' "$RUN_META" | jq -r '.display_title // .name // empty')
+          RUN_INPUTS=$(printf '%s' "$RUN_META" | jq -c '.inputs // empty')
+          HEAD=$(mktemp)
+          gh run view "$FAILED_RUN_ID" --repo "$REPO" --log 2>/dev/null | head -n 160 > "$HEAD" || true
+
+          DECISION=$(node pipeline/classify-failure.js \
+            --log "$LOG" \
+            --head-file "$HEAD" \
+            --event "$RUN_EVENT" \
+            --title "$RUN_TITLE" \
+            --inputs "$RUN_INPUTS" \
+            --attempt "${FAILED_ATTEMPT:-1}" \
+            --max "$MAX_AUTO_RETRY")
+          KIND=$(printf '%s' "$DECISION" | jq -r '.kind')
+          PREVIEW=$(printf '%s' "$DECISION" | jq -r '.preview')
+          RERUN=$(printf '%s' "$DECISION" | jq -r '.rerun')
+          WHY=$(printf '%s' "$DECISION" | jq -r '.reason')
+
+          printf '### Classification: `%s`\n' "$KIND" >> "$GITHUB_STEP_SUMMARY"
+          echo "preview=$PREVIEW rerun=$RERUN reason=$WHY" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$PREVIEW" = "true" ]; then
+            echo "Preview run — not rerunning." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
-          echo "### Classification: \\`$KIND\\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$WHY" = "already-published" ]; then
+            echo "This run already published. Not rerunning, so it cannot double-post." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           case "$KIND" in
             transient_ig_9007|transient_network|transient_media_url)
-              if [ "${FAILED_ATTEMPT:-1}" -lt "$MAX_AUTO_RETRY" ]; then
+              if [ "$RERUN" = "true" ]; then
                 echo "Auto-retry (attempt $FAILED_ATTEMPT < $MAX_AUTO_RETRY)..."
                 sleep 45
                 gh run rerun "$FAILED_RUN_ID" --repo "$REPO" --failed
@@ -133,14 +152,14 @@ jobs:
                 notify "❌ HEYGEN auto-fix: $FAILED_NAME still failing after $FAILED_ATTEMPT attempts ($KIND). Manual needed. $FAILED_URL"
               fi
               ;;
-            code_syntax|spec_validation)
-              notify "🛠️ HEYGEN auto-fix: $FAILED_NAME code/spec issue ($KIND). Retry alone se nahi hoga — code check chahiye. $FAILED_URL"
+            code_or_request|code_syntax|spec_validation)
+              notify "🛠️ HEYGEN auto-fix: $FAILED_NAME code/request issue ($KIND). Retry alone se nahi hoga — code check chahiye. $FAILED_URL"
               ;;
             auth_token)
               notify "🔑 HEYGEN auto-fix: Instagram/HeyGen token issue. Secrets/vars refresh karo. $FAILED_URL"
               ;;
             *)
-              if [ "${FAILED_ATTEMPT:-1}" -eq 1 ]; then
+              if [ "$RERUN" = "true" ]; then
                 sleep 30
                 gh run rerun "$FAILED_RUN_ID" --repo "$REPO" --failed || true
                 notify "🔄 HEYGEN auto-fix: $FAILED_NAME unknown fail — 1 retry try. $FAILED_URL"

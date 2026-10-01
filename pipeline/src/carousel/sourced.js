@@ -4,7 +4,7 @@
 // inside 48 hours, the slot is skipped — a generic carousel is not a fallback.
 
 import { parseRss } from './news.js';
-import { resolveProvider, callOpenAICompatible } from '../script/providers.js';
+import { resolveProvider, callOpenAICompatible, shouldRetryProviderError } from '../script/providers.js';
 import { readHistory, recordTopic } from '../script/topics.js';
 import {
   LEDGER, CarouselSpec, normalizeSpec, validateShape, softProblems, checkSources,
@@ -179,6 +179,7 @@ export async function generateSourcedCarousel({
         };
       }
     } catch (err) {
+      if (!shouldRetryProviderError(err)) throw err;
       if (!err.schemaIssues || attempt === 5) {
         if (lastOutput && attempt === 5) break;
         throw err;

@@ -9,6 +9,7 @@
 // and SCRIPT_MODEL. Nothing needs to change in this file.
 
 import { env } from '../../../src/config.js';
+import { JSON_RESPONSE_LINE } from './json-mode.js';
 
 /**
  * Known OpenAI-compatible vendors. Each entry only saves the operator from
@@ -128,6 +129,22 @@ export function describeProviderFailure({ name, status, detail }) {
   };
 }
 
+/**
+ * Whether a generator should try again.
+ * A 400 request problem (and any other 4xx except a caller that already marked
+ * it retryable for 429) stops the loop. Parse failures and 5xx may continue.
+ */
+export function shouldRetryProviderError(err) {
+  if (!err || err.retryable === false) return false;
+  const status = Number(err.httpStatus || 0);
+  if (status >= 400 && status < 500) return false;
+  const message = String(err.message || '');
+  if (/\brequest problem\b/i.test(message) && /\bHTTP 4\d\d\b/.test(message) && !/\bHTTP 429\b/.test(message)) {
+    return false;
+  }
+  return err.retryable === true;
+}
+
 function isDeepSeek(provider) {
   const model = String(provider.model || '').toLowerCase();
   const base = String(provider.baseUrl || '').toLowerCase();
@@ -145,25 +162,26 @@ function isDeepSeek(provider) {
  * answer sits in reasoning_content (or never lands). Disable thinking for script
  * generation so JSON mode actually returns JSON in content.
  */
-export async function callOpenAICompatible({ provider, system, user, schema }) {
-  const baseUrl = provider.baseUrl.replace(/\/$/, '');
-  const deepseek = isDeepSeek(provider);
-
+/** Body for every OpenAI-compatible script call. JSON mode always mentions json. */
+export function openAiChatBody({ provider, system, user }) {
+  const userContent = `${String(user || '').replace(/\s+$/, '')}\n\n${JSON_RESPONSE_LINE}`;
   const body = {
     model: provider.model,
     max_tokens: 8000,
     temperature: 0.6,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
+      { role: 'system', content: String(system || '') },
+      { role: 'user', content: userContent },
     ],
   };
+  if (isDeepSeek(provider)) body.thinking = { type: 'disabled' };
+  return body;
+}
 
-  // V4 Flash / Pro: thinking on by default → empty content with --require-generated.
-  if (deepseek) {
-    body.thinking = { type: 'disabled' };
-  }
+export async function callOpenAICompatible({ provider, system, user, schema }) {
+  const baseUrl = provider.baseUrl.replace(/\/$/, '');
+  const body = openAiChatBody({ provider, system, user });
 
   let res;
   try {

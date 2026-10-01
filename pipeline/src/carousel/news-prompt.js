@@ -12,7 +12,8 @@ export const SYSTEM = `तुम "Rajesh Technical Traders" के लिए र
 4. शुद्ध हिंदी (देवनागरी). तकनीकी नाम अंग्रेज़ी में रहने दो — GPT, Linux, GPU, Nvidia.
 5. थोड़ा context दो — सिर्फ़ नंबर नहीं, 2–4 पंक्तियों में समझाओ.
 
-लहजा: सीधा और साफ़. Hype नहीं, "क्रांति" नहीं — क्या हुआ और इससे क्या फ़र्क़ पड़ता है.`;
+लहजा: सीधा और साफ़. Hype नहीं, "क्रांति" नहीं — क्या हुआ और इससे क्या फ़र्क़ पड़ता है.
+Respond only in valid JSON. The response format is json.`;
 
 export function buildUserPrompt({ stories, date, recentTopics = [] }) {
   const list = stories

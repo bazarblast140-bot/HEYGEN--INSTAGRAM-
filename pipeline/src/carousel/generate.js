@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
-import { resolveProvider, callOpenAICompatible, VENDORS } from '../script/providers.js';
+import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from '../script/providers.js';
 import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } from '../script/topics.js';
 import { categoryFor, slotFor, SLIDES } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
@@ -249,7 +249,7 @@ export async function generateCarousel({
       }
     } catch (err) {
       console.log(`  attempt ${attempt} failed: ${err.message}`);
-      if (err.retryable === false) throw err;
+      if (!shouldRetryProviderError(err)) throw err;
       if (!err.schemaIssues || attempt === 5) {
         // Last-chance: if we have any prior output, normalize and try to ship it.
         if (lastOutput && attempt === 5) break;
@@ -340,6 +340,7 @@ export async function generateNewsCarousel({
         return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found };
       }
     } catch (err) {
+      if (!shouldRetryProviderError(err)) throw err;
       if (!err.schemaIssues || attempt === 5) {
         if (lastOutput && attempt === 5) break;
         throw err;
