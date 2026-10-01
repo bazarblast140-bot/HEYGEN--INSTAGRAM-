@@ -1,4 +1,5 @@
 import { familyMenu } from './families.js';
+import { SPOKEN_MAX_WORDS, SPOKEN_MIN_WORDS, SPOKEN_TARGET_WORDS, WORD_BUDGET } from './length.js';
 // The prompt that turns a day's market data into a reel spec.
 //
 // Written for Claude Fable 5. Three things shape it:
@@ -124,8 +125,14 @@ The top-level object must use these keys. Do not rename "segments" to "beats", a
 }
 
 Per beat, inside "segments":
-  say      — what is spoken over this beat. 6 to 22 words. Read consecutively,
+  say      — what is spoken over this beat. Read consecutively,
              every beat's "say" must join into one natural paragraph.
+             Hard budget, which wins over any per-beat range:
+               hook: ${WORD_BUDGET.hook} words
+               body: ${WORD_BUDGET.body} words (chart, stock, middle cards, and the cut-in, together)
+               CTA: ${WORD_BUDGET.cta} words (the final card only)
+             ${WORD_BUDGET.hook} + ${WORD_BUDGET.body} + ${WORD_BUDGET.cta} = ${SPOKEN_TARGET_WORDS}.
+             Aim for ${SPOKEN_TARGET_WORDS} spoken words. Stay inside ${SPOKEN_MIN_WORDS} to ${SPOKEN_MAX_WORDS}.
              TTS-safe: acronyms spaced ("F I I", "R B I"), symbols spelled
              ("pachees percent", not "25%"), no emoji, no brackets.
   caption  — the burned-in line. Max 9 words, drawn from that beat's "say".
@@ -165,8 +172,8 @@ Per beat, inside "segments":
              Give the beat a "card" as well — it is what renders if the search
              comes back empty.
 
-Total spoken length across all beats: 56 to 72 words. That lands the reel
-between 20 and 26 seconds when read aloud. Do not exceed 72 words.
+Total spoken length across all beats: ${SPOKEN_MIN_WORDS} to ${SPOKEN_MAX_WORDS} words. That lands the reel
+between 20 and 28 seconds when read aloud, inside the 20 to 30 second reel. Do not exceed ${SPOKEN_MAX_WORDS} words. Do not pad a short script.
 
 Also produce:
   family     — which kind of subject this is. It sets the reel's whole look, so
