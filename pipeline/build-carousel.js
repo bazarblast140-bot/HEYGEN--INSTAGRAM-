@@ -24,7 +24,8 @@ import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } f
 import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
-import { SLOTS, slotFor } from './src/carousel/categories.js';
+import { SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
+import { ACCOUNT_BRAND } from './src/publish/allow.js';
 import { framesToPost } from './src/carousel/story.js';
 import { shapeCaption } from './src/publish/caption.js';
 
@@ -36,9 +37,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  * a different colour.
  *
  * Brand mark is empty on purpose: the Instagram account is @rajesh_technical_trader.
- * Showing "FACTVIZER" mismatched the handle. The last slide asks to save and follow.
+ * The last slide asks to save and follow.
  */
-const BRAND = { brand: '', ink: '#FFD200', brandInk: '#F2F2F2', tag: '' };
+const BRAND = { brand: ACCOUNT_BRAND, ink: '#FFD200', brandInk: '#F2F2F2', tag: '' };
 
 function parseArgs(argv) {
   const args = {};
@@ -129,25 +130,34 @@ async function main() {
   const outDir = path.resolve(args.out || path.join(HERE, 'out', 'slides'));
 
   let slotUsed = args.slot || slotFor(new Date()) || '';
+  let generated = false;
 
   let spec;
-  if (args.generate) {
-    console.log('Writing today\'s carousel');
-    const slot = args.slot || slotFor(new Date());
+  if (args.generate || args.preview) {
+    console.log(args.preview ? 'Preview — writing a finance carousel without posting' : 'Writing today\'s carousel');
+    const requested = args.preview
+      ? ((!args.slot || args.slot === 'auto') ? 'evening' : args.slot)
+      : (args.slot || slotFor(new Date()));
+    const slot = requested;
     slotUsed = slot || '';
     if (!slot || !SLOTS.includes(slot)) {
-      if (args['require-generated']) {
-        console.error('\nNo finance slot for this run, and --require-generated is set, so nothing was built.');
+      if (args['require-generated'] || args.preview) {
+        console.error('\nNo finance slot for this run, so nothing was built and nothing will be published.');
         process.exit(1);
       }
-      note('outside the posting windows — using the checked-in spec');
+      note('outside the posting windows — checked-in spec is not publishable');
     } else try {
       const written = await generateCarousel({
         slot,
+        record: !args.preview,
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
         onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
       });
-      spec = { brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk, ...written.spec };
+      spec = {
+        brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk,
+        ...written.spec, category: written.category, fallback: false, reviewed: false,
+      };
+      generated = true;
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
       if (written.stories) {
         const by = written.stories.reduce((acc, st) => ({ ...acc, [st.from]: (acc[st.from] || 0) + 1 }), {});
@@ -156,19 +166,22 @@ async function main() {
       await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
     } catch (err) {
-      if (args['require-generated']) {
-        console.error(`\nGeneration failed and --require-generated is set, so nothing was built.`);
-        console.error(`  ${err.message.slice(0, 300)}`);
+      console.log(`generation failed: ${err.message}`);
+      if (args['require-generated'] || args.preview) {
+        console.error('\nGeneration failed. This run will not build or publish checked-in content.');
         process.exit(1);
       }
-      note(`generation failed (${err.message.slice(0, 160)}) — using the checked-in spec`);
+      note('generation failed — checked-in spec is not publishable');
     }
   }
 
   if (!spec) {
     spec = JSON.parse(await fs.readFile(specPath, 'utf8'));
     console.log(`Spec  ${path.relative(process.cwd(), specPath)}  (${(spec.slides || []).length} slides)`);
+    if (!generated) note('this is checked-in content — it will not be published unless it is reviewed finance and the review flag is set');
   }
+
+  spec = { ...spec, brand: BRAND.brand, ink: spec.ink || BRAND.ink, brandInk: spec.brandInk || BRAND.brandInk };
 
   // Defensive: expand any leftover literal \\n from hand-written or model specs.
   spec = {
@@ -271,6 +284,12 @@ async function main() {
     photos: ready.slides.filter((s) => s.background).length,
     insets: ready.slides.filter((s) => s.insets?.length).length,
     topic: spec.topic || null,
+    category: spec.category || null,
+    brand: spec.brand || BRAND.brand,
+    generated,
+    fallback: !generated,
+    reviewed: !generated && spec.reviewed === true && FINANCE.includes(spec.category),
+    publishable: generated && FINANCE.includes(spec.category),
     stories,
     lines: (ready.slides || []).map((s, i) => ({
       n: i + 1,

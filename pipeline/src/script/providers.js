@@ -66,6 +66,48 @@ export function resolveProvider() {
   return null;
 }
 
+/** Pull one JSON object out of a model reply, including a fenced block. */
+export function extractJsonObject(text) {
+  const trimmed = String(text || '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+  if (!trimmed) return null;
+  try { return JSON.parse(trimmed); } catch { /* the model wrapped the object in prose */ }
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(trimmed.slice(start, end + 1)); } catch { return null; }
+  }
+  return null;
+}
+
+/**
+ * A line the owner can read in the Actions log.
+ * Auth and balance failures are not retried. A missing `segments` array is.
+ * The detail is trimmed and any key-shaped token is redacted.
+ */
+export function describeProviderFailure({ name, status, detail }) {
+  const clean = String(detail || 'no detail')
+    .replace(/sk-[A-Za-z0-9_-]{6,}/g, '[redacted]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+  let kind = 'request';
+  if (status === 401 || status === 403) kind = 'auth';
+  else if (status === 402 || status === 429) kind = 'balance';
+  else if (status === 200) kind = 'parse';
+  const label = {
+    auth: 'auth problem',
+    balance: 'balance or rate-limit problem',
+    parse: 'parsing problem',
+    request: 'request problem',
+  }[kind];
+  return {
+    kind,
+    retryable: kind === 'parse' || (kind === 'request' && (!status || status >= 500)),
+    message: `${name} HTTP ${status || 'n/a'}: ${label} — ${clean}`,
+  };
+}
+
 function isDeepSeek(provider) {
   const model = String(provider.model || '').toLowerCase();
   const base = String(provider.baseUrl || '').toLowerCase();
@@ -103,45 +145,63 @@ export async function callOpenAICompatible({ provider, system, user, schema }) {
     body.thinking = { type: 'disabled' };
   }
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const failure = describeProviderFailure({
+      name: provider.name, status: null, detail: err.message,
+    });
+    throw Object.assign(new Error(failure.message), { retryable: true, httpStatus: null });
+  }
 
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = payload?.error?.message || `HTTP ${res.status}`;
-    if (res.status === 404 || /model/i.test(detail)) {
-      throw new Error(`${provider.name} rejected model "${provider.model}" (${detail}). Set the SCRIPT_MODEL variable to a model id your account has.`);
-    }
-    if (res.status === 401 || res.status === 403) {
-      throw new Error(`${provider.name} rejected the key (${detail}). Check the ${VENDORS[provider.name]?.key || 'SCRIPT_API_KEY'} secret.`);
-    }
-    throw new Error(`${provider.name} request failed: ${detail}`);
+    const detail = payload?.error?.message || payload?.message || 'no error body';
+    const failure = describeProviderFailure({ name: provider.name, status: res.status, detail });
+    throw Object.assign(new Error(failure.message), {
+      retryable: failure.retryable,
+      httpStatus: res.status,
+    });
   }
 
   const msg = payload?.choices?.[0]?.message || {};
-  let text = msg.content;
-  // Some thinking responses leave content empty; last resort is reasoning_content.
-  if (!text && typeof msg.reasoning_content === 'string') {
-    text = msg.reasoning_content;
+  let parsed = extractJsonObject(msg.content);
+  // Thinking models sometimes leave content empty, or return a stub object,
+  // and put the spec in reasoning_content.
+  if ((!parsed || parsed.segments == null) && typeof msg.reasoning_content === 'string') {
+    const fromReasoning = extractJsonObject(msg.reasoning_content);
+    if (fromReasoning && (fromReasoning.segments || fromReasoning.slides)) parsed = fromReasoning;
   }
-  if (!text) throw new Error(`${provider.name} returned no content`);
-
-  let parsed;
-  try {
-    // JSON mode should make fences impossible, but strip them rather than lose
-    // the run to a stray ```json.
-    parsed = JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, ''));
-  } catch {
-    throw new Error(`${provider.name} returned unparseable JSON: ${text.slice(0, 160)}`);
+  if (!parsed) {
+    const failure = describeProviderFailure({
+      name: provider.name, status: res.status, detail: 'empty body',
+    });
+    throw Object.assign(new Error(failure.message), {
+      retryable: true,
+      httpStatus: res.status,
+      schemaIssues: ['empty body'],
+    });
   }
 
   const result = schema.safeParse(parsed);
   if (!result.success) {
     const issues = result.error.issues.slice(0, 6).map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
-    throw Object.assign(new Error(`${provider.name} output did not match the schema — ${issues.join('; ')}`), { schemaIssues: issues });
+    const keys = Object.keys(parsed).slice(0, 8).join(', ') || 'none';
+    const failure = describeProviderFailure({
+      name: provider.name,
+      status: res.status,
+      detail: `${issues.join('; ')} (body keys: ${keys})`,
+    });
+    throw Object.assign(new Error(failure.message), {
+      retryable: true,
+      httpStatus: res.status,
+      schemaIssues: issues,
+    });
   }
 
   return { output: result.data, model: provider.model };

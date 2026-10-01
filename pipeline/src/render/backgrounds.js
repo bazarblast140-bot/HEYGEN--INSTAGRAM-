@@ -248,7 +248,7 @@ export async function wikiPortrait(person) {
   if (!title) return null;
 
   const res = await fetch(`${WIKI_SUMMARY}/${encodeURIComponent(title)}`, {
-    headers: { Accept: 'application/json', 'Api-User-Agent': 'FACTVIZER-carousel/1.0' },
+    headers: { Accept: 'application/json', 'Api-User-Agent': 'RajeshTechnicalTraders-carousel/1.0' },
   });
   if (!res.ok) return null;
 

@@ -48,9 +48,14 @@ on:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
         type: boolean
         default: false
+      preview:
+        description: Generate this slot now for review. Does not publish and does not use the posting queue.
+        type: boolean
+        default: false
 
 concurrency:
-  group: carousel
+  # Preview must not sit in the same queue as a scheduled publish.
+  group: ${{ github.event.inputs.preview == 'true' && 'carousel-preview' || 'carousel' }}
   cancel-in-progress: false
 
 jobs:
@@ -131,12 +136,29 @@ jobs:
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
         run: |
+          PREVIEW="${{ github.event.inputs.preview }}"
+          CHOSEN="${{ github.event.inputs.slot }}"
+          RESOLVED="${{ steps.slot.outputs.slot }}"
+          SLOT_ARG=""
+          if [ "$PREVIEW" = "true" ]; then
+            case "$CHOSEN" in
+              midday|evening) SLOT="$CHOSEN" ;;
+              *) SLOT="evening" ;;
+            esac
+            SLOT_ARG="--preview --require-generated --slot $SLOT"
+          elif [ -n "$RESOLVED" ]; then
+            SLOT_ARG="--slot $RESOLVED"
+          fi
+          REQUIRE=""
+          if [ "$PREVIEW" != "true" ] && { [ "$AUTOMATED" = "true" ] || [ "${{ github.event.inputs.publish }}" = "true" ]; }; then
+            REQUIRE="--require-generated"
+          fi
           node pipeline/build-carousel.js \
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
-            ${{ steps.slot.outputs.slot && format('--slot {0}', steps.slot.outputs.slot) || '' }} \
-            ${{ (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
+            $SLOT_ARG \
+            $REQUIRE \
             2>&1 | tee carousel.log
           {
             echo '## Carousel'
@@ -167,7 +189,7 @@ jobs:
       # Either finance slot may publish. A story is attached only to the evening post.
       - name: Publish to Instagram
         id: publish
-        if: ${{ (steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true' }}
+        if: ${{ github.event.inputs.preview != 'true' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}

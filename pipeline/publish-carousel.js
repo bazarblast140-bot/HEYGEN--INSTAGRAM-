@@ -18,6 +18,7 @@ import { publishCarousel, checkCarousel } from './src/publish/carousel.js';
 import { publishStory } from './src/publish/story.js';
 import { whoami } from './src/publish/instagram.js';
 import { env } from '../src/config.js';
+import { publishDecision } from './src/publish/allow.js';
 
 const ok = (s) => `\x1b[32m${s}\x1b[0m`;
 const bad = (s) => `\x1b[31m${s}\x1b[0m`;
@@ -51,6 +52,25 @@ async function main() {
 
   const captionPath = args['caption-file'] || path.join(path.dirname(reportPath), 'caption.txt');
   const caption = await fs.readFile(captionPath, 'utf8').catch(() => '');
+
+  const decision = publishDecision({
+    generated: report.generated === true,
+    reviewed: report.reviewed === true,
+    fallback: report.fallback !== false && report.generated !== true,
+    category: report.category || '',
+    allowReviewed: args['allow-reviewed-fallback'] === true,
+    spec: {
+      brand: report.brand,
+      topic: report.topic,
+      slides: (report.lines || []).map((line) => ({
+        headline: line.headline, subline: line.subline, source: line.source,
+      })),
+    },
+  });
+  if (!decision.ok) {
+    console.error(`Refusing to publish: ${decision.reasons.join('; ')}`);
+    if (args.yes) process.exit(1);
+  }
 
   console.log(`Carousel  ${files.length} slides  ${report.width}x${report.height}  ${dim(report.topic || '')}`);
 

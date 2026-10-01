@@ -153,8 +153,8 @@ Per beat:
              Give the beat a "card" as well — it is what renders if the search
              comes back empty.
 
-Total spoken length across all beats: 50 to 80 words. That lands the reel
-between 20 and 30 seconds when read aloud.
+Total spoken length across all beats: 56 to 72 words. That lands the reel
+between 20 and 26 seconds when read aloud. Do not exceed 72 words.
 
 Also produce:
   family     — which kind of subject this is. It sets the reel's whole look, so

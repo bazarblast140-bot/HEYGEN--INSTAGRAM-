@@ -29,6 +29,8 @@ import { renderNarration, cutPresenterWindow, alignBeats } from './src/presenter
 import { fetchStock } from './src/stock/index.js';
 import { generateSpec, durationNote } from './src/script/generate.js';
 import { shapeCaption } from './src/publish/caption.js';
+import { coverTimestamp } from './src/render/reveal.js';
+import { fitPlan, REEL_MIN_SECONDS, REEL_MAX_SECONDS } from './src/assemble/fit.js';
 import { run } from './src/assemble/encode.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -188,8 +190,10 @@ async function main() {
   // Without this the pipeline posts the same reel every morning: the checked-in
   // spec is a fixture, not a brief. Generating it from the day's numbers is the
   // difference between a scheduled job and a daily show.
-  if (args.generate) {
-    console.log('Writing today\'s script');
+  let freshScript = false;
+  if (args.generate || args.preview) {
+    freshScript = false;
+    console.log(args.preview ? 'Preview — writing today\'s script without posting' : 'Writing today\'s script');
     try {
       const written = await generateSpec({
         market: {
@@ -197,14 +201,21 @@ async function main() {
           summary, recent: series.candles.slice(-10),
         },
         news: spec.news,
+        record: !args.preview,
         onAttempt: (n, model) => console.log(`  ${model}, attempt ${n}`),
       });
       // Keep the parts of the checked-in spec that are staging, not content.
       spec = { ...spec, ...written.spec, disclaimer: spec.disclaimer, music: spec.music };
+      freshScript = true;
       note(`script written by ${written.model} in ${written.attempts} attempt(s)`);
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
     } catch (err) {
-      note(`script generation failed (${err.message.slice(0, 110)}) — using the checked-in spec`);
+      console.log(`script generation failed: ${err.message}`);
+      if (args['require-generated'] || args.preview) {
+        console.error('Generation failed. This run will not publish the checked-in spec.');
+        process.exit(1);
+      }
+      note('script generation failed — checked-in spec is not publishable');
     }
   }
 
@@ -291,7 +302,7 @@ async function main() {
       };
       file = await renderSceneClip({
         scene: 'card.html',
-        data: { ...dedupeCard(hookCard), theme: beatTheme, motif },
+        data: { ...dedupeCard(hookCard), theme: beatTheme, motif, instant: true },
         seconds: duration,
         layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
@@ -448,17 +459,43 @@ async function main() {
     note('no caption text in the spec — nothing burned in');
   }
 
+  const plan = fitPlan(info.duration);
+  if (plan.action === 'speed' || plan.action === 'slow') {
+    const fitted = out.replace(/\.mp4$/, '.fit.mp4');
+    try {
+      await run('ffmpeg', [
+        '-y', '-v', 'error', '-i', out,
+        '-filter_complex', `[0:v]setpts=PTS/${plan.factor}[v];[0:a]atempo=${plan.factor}[a]`,
+        '-map', '[v]', '-map', '[a]',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-movflags', '+faststart',
+        fitted,
+      ]);
+      await fs.rename(fitted, out);
+      info = await probe(out);
+      note(`length fitted to ${info.duration.toFixed(2)}s`);
+    } catch (err) {
+      note(`could not fit the reel into 20–30s (${String(err.message).slice(0, 80)})`);
+    }
+  }
+
   const coverPath = path.join(path.dirname(out), 'reel-cover.jpg');
   let cover = null;
   try {
-    await run('ffmpeg', ['-y', '-v', 'error', '-i', out, '-frames:v', '1', '-q:v', '2', coverPath]);
+    const seek = coverTimestamp({ instant: true });
+    await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(seek), '-i', out, '-frames:v', '1', '-q:v', '2', coverPath]);
     cover = coverPath;
   } catch (err) {
     note(`cover frame not extracted (${String(err.message).slice(0, 80)})`);
   }
 
+  const lengthOk = info.duration >= REEL_MIN_SECONDS && info.duration <= REEL_MAX_SECONDS;
   const lengthNote = durationNote(info.duration);
   if (lengthNote) note(lengthNote);
+  if (!lengthOk && (args['require-generated'] || args.preview)) {
+    console.error(`Reel is ${info.duration.toFixed(2)}s, outside 20–30s, so this run will not publish.`);
+    process.exit(1);
+  }
 
   const report = {
     out,
@@ -471,7 +508,8 @@ async function main() {
     narrated,
     voiceSource: narration?.source || null,
     synthetic: Boolean(series.synthetic),
-    publishable: narrated && !series.synthetic,
+    fresh: freshScript,
+    publishable: freshScript && narrated && !series.synthetic && lengthOk,
     notes,
   };
   await fs.writeFile(path.join(path.dirname(out), 'run-report.json'), JSON.stringify(report, null, 2));
@@ -499,6 +537,8 @@ async function main() {
   const blockers = [
     series.synthetic && 'sample market data',
     !narrated && 'no voiceover',
+    !freshScript && 'script was not freshly generated',
+    !lengthOk && 'outside 20–30 seconds',
   ].filter(Boolean);
 
   if (blockers.length) console.log(`checks passed — NOT PUBLISHABLE: ${blockers.join(', ')}`);

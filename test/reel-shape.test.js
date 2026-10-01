@@ -20,7 +20,7 @@ test('spoken length is aimed at 20 to 30 seconds', () => {
     topic: 'nifty volume',
     segments: [{ type: 'hook', say: 'ek do teen', caption: 'teen baatein' }],
   });
-  assert.ok(problems.some((p) => /50–80/.test(p)));
+  assert.ok(problems.some((p) => /56–72/.test(p)));
 });
 
 test('duration outside 20 to 30 seconds is a note', () => {
@@ -31,8 +31,8 @@ test('duration outside 20 to 30 seconds is a note', () => {
 
 test('the prompt asks for a text hook and five tags', () => {
   const text = buildUserPrompt({ market: { name: 'Nifty' }, news: [], date: '2026-10-01' });
-  assert.match(text, /20 to 30 seconds/);
-  assert.match(text, /50 to 80 words/);
+  assert.match(text, /20 and 26 seconds/);
+  assert.match(text, /56 to 72 words/);
   assert.match(text, /full-frame text card/);
   assert.match(text, /at most 5/);
   assert.match(text, /Do not open with "Namaste"/);

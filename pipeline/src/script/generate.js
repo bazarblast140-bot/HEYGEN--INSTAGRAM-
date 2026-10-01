@@ -86,7 +86,7 @@ function validateShape(spec, recentTopics = []) {
   // the words rather than on numbers the model guessed.
   const words = spec.segments.reduce((n, s) => n + String(s.say || '').trim().split(/\s+/).filter(Boolean).length, 0);
 
-  if (words < 50 || words > 80) problems.push(`${words} spoken words is outside 50–80 (about 20–30 seconds)`);
+  if (words < 56 || words > 72) problems.push(`${words} spoken words is outside 56–72 (about 20–26 seconds)`);
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
 
   const opener = spec.segments[0];
@@ -202,6 +202,7 @@ export async function generateSpec({
   model,
   effort = 'high',
   onAttempt,
+  record = true,
 }) {
   const provider = resolveProvider();
   if (!provider) {
@@ -217,10 +218,10 @@ export async function generateSpec({
   const recentTopics = await readHistory();
 
   let lastProblems = [];
-  // Three attempts rather than two: a rejected topic costs a pass on its own,
-  // and it would be a shame to spend the retry budget on that and have none
-  // left for a genuine schema slip.
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  // Schema slips from an empty body get more than one retry. An auth or
+  // balance error will not change on the next call, so those stop at once.
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildUserPrompt({ market, news, date, recentTopics });
 
     // A second pass is given the specific complaints rather than being asked
@@ -242,17 +243,19 @@ export async function generateSpec({
       lastProblems = validateShape(output, recentTopics);
       if (!lastProblems.length) {
         // Written down only once the spec is accepted, so a rejected draft does
-        // not burn a subject the reel never actually covered.
-        await recordTopic({ topic: output.topic, angle: output.verdict, date });
+        // not burn a subject the reel never actually covered. A preview does
+        // not record, or it would block the scheduled post.
+        if (record) await recordTopic({ topic: output.topic, angle: output.verdict, date });
         return { spec: output, provider: provider.name, model: used, attempts: attempt };
       }
     } catch (err) {
-      // A schema mismatch is worth one more pass with the field paths attached;
-      // an auth or model-name failure is not going to fix itself.
-      if (!err.schemaIssues || attempt === 3) throw err;
+      console.log(`  attempt ${attempt} failed: ${err.message}`);
+      // A schema mismatch is worth another pass with the field paths attached.
+      // An auth or balance failure is not going to fix itself.
+      if (err.retryable === false || !err.schemaIssues || attempt === maxAttempts) throw err;
       lastProblems = err.schemaIssues;
     }
   }
 
-  throw new Error(`Generated spec still invalid after 3 attempts: ${lastProblems.join('; ')}`);
+  throw new Error(`Generated spec still invalid after ${maxAttempts} attempts: ${lastProblems.join('; ')}`);
 }

@@ -67,7 +67,8 @@ test('the build uses the resolved slot, not the raw auto input', async () => {
   assert.match(text, /options: \['auto', 'midday', 'evening'\]/);
   assert.match(text, /default: 'auto'/);
   assert.equal(text.includes("format('--slot {0}', github.event.inputs.slot)"), false);
-  assert.match(text, /steps\.slot\.outputs\.slot && format\('--slot \{0\}', steps\.slot\.outputs\.slot\)/);
+  assert.match(text, /RESOLVED="\$\{\{ steps\.slot\.outputs\.slot \}\}"/);
+  assert.match(text, /SLOT_ARG="--slot \$RESOLVED"/);
 });
 
 const spec = {
