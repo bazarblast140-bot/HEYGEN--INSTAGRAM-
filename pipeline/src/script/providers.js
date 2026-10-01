@@ -25,42 +25,62 @@ export const VENDORS = {
   openrouter: { key: 'OPENROUTER_API_KEY', baseUrl: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat' },
 };
 
+function openAiVendor(name) {
+  const vendor = VENDORS[name];
+  return {
+    kind: 'openai-compatible',
+    name,
+    baseUrl: vendor.baseUrl,
+    apiKey: env(vendor.key),
+    model: env('SCRIPT_MODEL') || vendor.model,
+  };
+}
+
 /**
- * Resolve who writes the script, from whatever is configured.
- * Anthropic wins when present, because the schema is enforced server-side there
- * rather than validated after the fact.
+ * DeepSeek writes the brief when its key is present. Another vendor is used
+ * only when SCRIPT_PROVIDER names it, or when DeepSeek is not configured.
  */
 export function resolveProvider() {
   const forced = env('SCRIPT_PROVIDER');
 
-  if (env('ANTHROPIC_API_KEY') && (!forced || forced === 'anthropic')) {
+  if (forced === 'anthropic') {
+    if (!env('ANTHROPIC_API_KEY')) {
+      throw new Error('SCRIPT_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set.');
+    }
     return { kind: 'anthropic', name: 'anthropic', model: env('SCRIPT_MODEL') || 'claude-fable-5' };
   }
 
-  // A fully explicit endpoint beats every guess.
+  if (forced && !VENDORS[forced]) {
+    throw new Error(`SCRIPT_PROVIDER="${forced}" is unknown. Known: anthropic, ${Object.keys(VENDORS).join(', ')} — or set SCRIPT_BASE_URL + SCRIPT_API_KEY.`);
+  }
+
+  if (forced && VENDORS[forced]) {
+    if (!env(VENDORS[forced].key)) {
+      throw new Error(`SCRIPT_PROVIDER=${forced} but ${VENDORS[forced].key} is not set.`);
+    }
+    return openAiVendor(forced);
+  }
+
+  if (env('DEEPSEEK_API_KEY')) return openAiVendor('deepseek');
+
   if (env('SCRIPT_BASE_URL') && env('SCRIPT_API_KEY')) {
     return {
       kind: 'openai-compatible',
-      name: env('SCRIPT_PROVIDER') || 'custom',
+      name: 'custom',
       baseUrl: env('SCRIPT_BASE_URL'),
       apiKey: env('SCRIPT_API_KEY'),
       model: env('SCRIPT_MODEL') || '',
     };
   }
 
-  const candidates = forced ? [forced] : Object.keys(VENDORS);
-  for (const name of candidates) {
-    const vendor = VENDORS[name];
-    if (!vendor) throw new Error(`SCRIPT_PROVIDER="${name}" is unknown. Known: anthropic, ${Object.keys(VENDORS).join(', ')} — or set SCRIPT_BASE_URL + SCRIPT_API_KEY.`);
-    const apiKey = env(vendor.key);
-    if (!apiKey) continue;
-    return {
-      kind: 'openai-compatible',
-      name,
-      baseUrl: env('SCRIPT_BASE_URL') || vendor.baseUrl,
-      apiKey,
-      model: env('SCRIPT_MODEL') || vendor.model,
-    };
+  for (const name of Object.keys(VENDORS)) {
+    if (name === 'deepseek') continue;
+    if (!env(VENDORS[name].key)) continue;
+    return openAiVendor(name);
+  }
+
+  if (env('ANTHROPIC_API_KEY')) {
+    return { kind: 'anthropic', name: 'anthropic', model: env('SCRIPT_MODEL') || 'claude-fable-5' };
   }
 
   return null;

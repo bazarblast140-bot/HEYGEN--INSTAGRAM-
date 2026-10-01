@@ -207,8 +207,8 @@ export async function generateSpec({
   const provider = resolveProvider();
   if (!provider) {
     throw new Error(
-      'No script model configured. Set ANTHROPIC_API_KEY, or one of ' +
-      `${Object.values(VENDORS).map((v) => v.key).join(' / ')}, or SCRIPT_BASE_URL + SCRIPT_API_KEY.`,
+      'No script model configured. Set DEEPSEEK_API_KEY. Optional fallbacks: ' +
+      `ANTHROPIC_API_KEY, ${Object.values(VENDORS).map((v) => v.key).filter((k) => k !== 'DEEPSEEK_API_KEY').join(', ')}, or SCRIPT_BASE_URL + SCRIPT_API_KEY.`,
     );
   }
 

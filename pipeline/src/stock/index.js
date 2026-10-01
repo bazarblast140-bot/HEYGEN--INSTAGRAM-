@@ -1,5 +1,4 @@
-// Free stock footage for the b-roll beats, so HeyGen credits are spent only on
-// the few seconds where the avatar actually appears.
+// Free stock footage for the b-roll beats. The reel has no avatar.
 //
 // Two providers, both free and both usable commercially:
 //   Pexels  — https://www.pexels.com/api/  (free key, Pexels License)

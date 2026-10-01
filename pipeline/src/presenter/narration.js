@@ -1,32 +1,10 @@
-// The reel's voice, and — when the account can still afford it — the reel's face.
-//
-// These used to be one thing: a single avatar render supplied both the picture
-// and the sound. That was elegant while it worked, and it failed badly the day
-// it stopped. HeyGen meters avatar video, the monthly allowance ran out, and
-// because the voice was a by-product of the face, losing the face lost the
-// voice too. The reel went out silent.
-//
-// So they are two things now, with a deliberate order:
-//
-//   1. FACE FIRST. If an avatar render succeeds, its audio narrates the reel and
-//      its video supplies the presenter beats. Mouth and words come from the same
-//      render, so lip-sync matches by construction — there is no alignment step
-//      left to get wrong.
-//
-//   2. VOICE ALWAYS. If the render is refused — out of credit, monthly limit
-//      reached, plan restriction — speech synthesis carries the narration on its
-//      own. It is metered far more generously and it is the same cloned voice,
-//      so the reel keeps sounding like Rajesh. It loses the face, not the day.
-//
-// What it must never do again is fall through to silence.
+// The reel's voice is ElevenLabs speech. There is no avatar render on this path.
+// A failure here must surface to the build, which skips publishing.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { run, probe } from '../assemble/encode.js';
-import { isQuotaRefusal } from '../../../src/heygen.js';
 import { synthesise } from './voice-providers.js';
-import { config, env } from '../../../src/config.js';
-import { renderPresenter } from './segment.js';
 
 /** Normalise any source audio to the one shape the mixer expects. */
 async function toNarrationWav(input, out) {
@@ -45,9 +23,6 @@ async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote }) {
     text: script,
     voiceId,
     speed,
-    // Hinglish reads as Hindi to a synthesiser; saying so keeps English words
-    // from being pronounced as though they were Hindi spellings.
-    language: env('HEYGEN_TTS_LANGUAGE') || 'hi',
   });
 
   onNote?.(`voice by ${speech.provider}`);
@@ -72,63 +47,13 @@ async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote }) {
 }
 
 /**
- * Full avatar render: picture and sound from one pass.
- */
-async function recordWithFace({ script, workDir, onStatus, ...presenterOptions }) {
-  const video = path.join(workDir, 'narration.mp4');
-
-  // Portrait, because the clone is portrait. Asking a portrait source for a
-  // landscape frame is what produced a small figure marooned in a wide dark
-  // rectangle in an earlier cut.
-  await renderPresenter({
-    script,
-    out: video,
-    width: 720,
-    height: 1280,
-    onStatus,
-    ...presenterOptions,
-  });
-
-  const audio = path.join(workDir, 'narration.wav');
-  await toNarrationWav(video, audio);
-
-  const info = await probe(video);
-  return {
-    audio,
-    video,
-    duration: info.duration,
-    width: info.width,
-    height: info.height,
-    words: [],
-    source: 'avatar',
-  };
-}
-
-/**
  * @param {object}   opts
  * @param {string}   opts.script     every spoken word in the reel, in order
- * @param {boolean}  opts.wantFace   attempt the avatar render at all
- * @param {function} opts.onNote     called with a human sentence when the face is lost
+ * @param {function} opts.onNote     called with the provider name
  */
-export async function renderNarration({
-  script, workDir, onStatus, onNote, wantFace = true, speed = 1, ...presenterOptions
-}) {
+export async function renderNarration({ script, workDir, onNote, speed = 1, voiceId } = {}) {
   await fs.mkdir(workDir, { recursive: true });
-
-  if (wantFace) {
-    try {
-      return await recordWithFace({ script, workDir, onStatus, speed, ...presenterOptions });
-    } catch (err) {
-      const outOfAllowance = err.quota || isQuotaRefusal(err);
-      onNote?.(
-        outOfAllowance
-          ? `HeyGen has no avatar allowance left (${err.errorCode || 'quota'}) — keeping the voice, dropping the face`
-          : `avatar render failed (${err.message.slice(0, 90)}) — keeping the voice, dropping the face`,
-      );
-    }
-  }
-
-  return recordVoiceOnly({ script, workDir, speed, voiceId: presenterOptions.voiceId, onNote });
+  return recordVoiceOnly({ script, workDir, speed, voiceId, onNote });
 }
 
 /**

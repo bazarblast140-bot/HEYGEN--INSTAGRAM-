@@ -82,5 +82,36 @@ test('a caption drops referral links and keeps at most five tags', () => {
   assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
   assert.equal(caption.includes('http'), false);
   assert.equal(caption.includes('Zerodha'), false);
-  assert.equal((caption.match(/#/g) || []).length, 5);
+  assert.equal(caption.includes('#stocks'), false);
+  assert.equal(caption.includes('#investing'), false);
+  assert.equal(caption.includes('#trading'), false);
+  assert.match(caption, /#roce/);
+  assert.ok((caption.match(/#/g) || []).length <= 5);
+});
+
+test('a model save/follow line is not printed again, and broad tags are dropped', () => {
+  const caption = composeCaption({
+    caption: [
+      'Revenue बढ़ रहा है लेकिन margin गिर रहा है? यही सबसे बड़ा red flag हो सकता है।',
+      '',
+      'Operating Margin, ROCE और Operating Cash Flow को साथ पढ़ना सीखें — सिर्फ revenue growth देखना काफी नहीं है।',
+      '',
+      'सेव करें और ऐसे finance insights के लिए फॉलो करें।',
+    ].join('\n'),
+    hashtags: ['#stockmarket', '#nifty', '#investing', '#शेयरबाजार', '#finance'],
+  });
+
+  assert.equal(caption.includes('सेव करें'), false);
+  assert.equal(caption.includes('फॉलो करें'), false);
+  assert.equal((caption.match(/Save karo, share karo, comment mein apna sawal likho\./g) || []).length, 1);
+  assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
+  assert.equal(caption.includes('#stockmarket'), false);
+  assert.equal(caption.includes('#finance'), false);
+  assert.equal(caption.includes('#investing'), false);
+  assert.match(caption, /#nifty/);
+  assert.match(caption, /#शेयरबाजार/);
+  assert.match(caption, /#roce/);
+  assert.match(caption, /#cashflow/);
+  assert.ok((caption.match(/#/g) || []).length <= 5);
+  assert.match(caption, /^Revenue बढ़ रहा है/);
 });

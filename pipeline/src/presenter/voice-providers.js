@@ -1,47 +1,21 @@
-// Where the reel's voice comes from.
+// The reel's voice is ElevenLabs. HeyGen is not on this path.
 //
-// It was HeyGen, and only HeyGen, which turned out to be a single point of
-// failure with a price attached: /v1/tts.generate answers 403 to an API key on
-// the free plan, so the automation could not speak at all even though the same
-// account synthesises the same cloned voice perfectly well from the web app.
-//
-// One vendor holding the voice hostage is a design problem, not just a billing
-// one. So the voice is a provider now, chosen by which key is present, and the
-// pipeline does not care which one answered. The shape every provider returns:
-//
+// Every provider returns:
 //   { audio: Buffer, format: 'wav'|'mp3', duration: number|null, words: [{word,start,end}] }
 //
-// Word timings are the part that matters downstream — they are what put a beat
-// boundary in a pause instead of in the middle of a word.
+// Word timings put a beat boundary in a pause instead of in the middle of a word.
 
-import { createSpeech } from '../../../src/heygen.js';
 import { env, ELEVEN as ELEVEN_DEFAULTS } from '../../../src/config.js';
 
-async function fetchBuffer(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetching synthesised audio failed (${res.status})`);
-  return Buffer.from(await res.arrayBuffer());
+function publicError(detail) {
+  const clean = String(detail || 'no detail')
+    .replace(/sk-[A-Za-z0-9_-]{6,}/g, '[redacted]')
+    .replace(/xi-api-key['":\s]+[\w.-]+/gi, 'xi-api-key [redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+  return clean;
 }
-
-/** HeyGen: the cloned voice that already exists, when the plan allows the API. */
-const heygen = {
-  name: 'heygen',
-  configured: () => Boolean(env('HEYGEN_API_KEY')),
-  async synth({ text, speed, voiceId, language }) {
-    const speech = await createSpeech({
-      text,
-      voiceId: voiceId || env('HEYGEN_VOICE_ID'),
-      speed,
-      language: language || 'hi',
-    });
-    return {
-      audio: await fetchBuffer(speech.audioUrl),
-      format: 'wav',
-      duration: speech.duration ?? null,
-      words: speech.wordTimestamps || [],
-    };
-  },
-};
 
 /**
  * ElevenLabs returns alignment per CHARACTER, not per word. Rebuilding words
@@ -156,14 +130,20 @@ const elevenlabs = {
     );
 
     if (!res.ok) {
-      const detail = (await res.text()).slice(0, 300);
+      const detail = publicError(await res.text());
+      let kind = 'request';
+      if (res.status === 401 || res.status === 403) kind = 'auth';
+      else if (res.status === 402 || res.status === 429) kind = 'balance';
       if (/missing_permissions|permission/i.test(detail)) {
         throw Object.assign(new Error(
-          'The ElevenLabs key is valid but restricted: it lacks the "text_to_speech" permission. ' +
-          'Enable it on the key at elevenlabs.io > Settings > API Keys.',
-        ), { status: res.status, permissions: true });
+          `ElevenLabs HTTP ${res.status}: auth problem — the key lacks the "text_to_speech" permission.`,
+        ), { status: res.status, permissions: true, kind });
       }
-      throw Object.assign(new Error(`ElevenLabs returned ${res.status}: ${detail}`), { status: res.status });
+      const label = kind === 'auth' ? 'auth problem' : kind === 'balance' ? 'balance or rate-limit problem' : 'request problem';
+      throw Object.assign(
+        new Error(`ElevenLabs HTTP ${res.status}: ${label} — ${detail}`),
+        { status: res.status, kind },
+      );
     }
 
     const body = await res.json();
@@ -179,53 +159,29 @@ const elevenlabs = {
   },
 };
 
-export const VOICE_PROVIDERS = [heygen, elevenlabs];
+export const VOICE_PROVIDERS = [elevenlabs];
 
 /**
- * Pick a provider. An explicit VOICE_PROVIDER wins; otherwise the first one
- * that is configured. HeyGen leads because it already holds the cloned voice.
+ * ElevenLabs is the reel voice. HeyGen is not a provider here, even when its
+ * key is present.
  */
 export function resolveVoiceProvider(preferred = env('VOICE_PROVIDER')) {
-  if (preferred) {
-    const chosen = VOICE_PROVIDERS.find((p) => p.name === preferred);
-    if (!chosen) throw new Error(`Unknown VOICE_PROVIDER "${preferred}". Known: ${VOICE_PROVIDERS.map((p) => p.name).join(', ')}`);
-    return chosen;
-  }
-  return VOICE_PROVIDERS.find((p) => p.configured()) || null;
-}
-
-/**
- * Synthesise, and fall through to the next configured provider if one refuses
- * for a reason that another provider would not hit — an entitlement or quota
- * wall. A malformed request would fail everywhere, so that still throws.
- */
-export async function synthesise(options) {
-  const preferred = env('VOICE_PROVIDER');
-  const chain = preferred
-    ? [resolveVoiceProvider(preferred)]
-    : VOICE_PROVIDERS.filter((p) => p.configured());
-
-  if (!chain.length) {
+  if (preferred && preferred !== 'elevenlabs') {
     throw new Error(
-      'No voice provider configured. Set HEYGEN_API_KEY (needs a plan entitled to ' +
-      '/v1/tts.generate), or ELEVENLABS_API_KEY.',
+      `VOICE_PROVIDER "${preferred}" is not used for reels. Leave it unset or set ELEVENLABS. ` +
+      'The voice is ElevenLabs.',
     );
   }
-
-  const refusals = [];
-  for (const provider of chain) {
-    try {
-      const result = await provider.synth(options);
-      return { ...result, provider: provider.name };
-    } catch (err) {
-      const wall = err.entitlement || [401, 402, 403, 429].includes(err.status);
-      refusals.push(`${provider.name}: ${err.message.slice(0, 120)}`);
-      if (!wall || provider === chain[chain.length - 1]) {
-        if (chain.length === 1) throw err;
-        throw new Error(`Every voice provider refused — ${refusals.join(' | ')}`);
-      }
-    }
+  const chosen = VOICE_PROVIDERS.find((p) => p.configured());
+  if (!chosen) {
+    throw new Error('ELEVENLABS_API_KEY is not set. Reels do not use HeyGen for voice.');
   }
+  return chosen;
+}
 
-  throw new Error(`Every voice provider refused — ${refusals.join(' | ')}`);
+/** Synthesise with ElevenLabs. A failure is returned to the caller; nothing else speaks. */
+export async function synthesise(options) {
+  const provider = resolveVoiceProvider();
+  const result = await provider.synth(options);
+  return { ...result, provider: provider.name };
 }

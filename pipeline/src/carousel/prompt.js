@@ -84,11 +84,11 @@ Last slide query हमेशा abstract dark finance texture हो.
     {"band":"center","headline":"one bold hook line","subline":null,"source":null,"cta":false,"query":"english visual search terms for THIS topic","person":null},
     {"band":"bottom","headline":"short key fact","subline":"one short line","source":"real source name","cta":false,"query":"english visual search terms for THIS topic","person":null}
   ],
-  "caption":"पहली line strong hook. फिर 2 short Hinglish lines. आख़िर में save/share/comment. Referral URL मत लिखो.",
-  "hashtags":["#stockmarket","#nifty","#investing","#शेयरबाजार","#optionstrading"]
+  "caption":"पहली line strong hook. फिर 2 short Hinglish lines. Save/follow/share line मत लिखो. Referral URL मत लिखो.",
+  "hashtags":["#roce","#nifty50","#nse","#cashflow","#fiidii"]
 }
 </output_format>
 
-भेजने से पहले: topic नया है, facts sourceable हैं, slide 1 hook/cover है, slide 2 strongest है, visual queries उसी topic के हैं, hashtags ज़्यादा से ज़्यादा 5 हैं, और आख़िरी slide सेव करो और फ़ॉलो करो कहती है. Caption में कोई URL नहीं.
+भेजने से पहले: topic नया है, facts sourceable हैं, slide 1 hook/cover है, slide 2 strongest है, visual queries उसी topic के हैं, hashtags ज़्यादा से ज़्यादा 5 हैं और niche Indian-finance हैं (#stockmarket #finance #investing मत लिखो), और आख़िरी slide सेव करो और फ़ॉलो करो कहती है. Caption में save/follow line और कोई URL नहीं.
 `;
 }
