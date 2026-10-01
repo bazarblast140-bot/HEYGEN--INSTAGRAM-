@@ -12,6 +12,7 @@ import { SYSTEM, buildUserPrompt } from './prompt.js';
 import { resolveProvider, callOpenAICompatible, VENDORS } from './providers.js';
 import { readHistory, findRepeat, recordTopic } from './topics.js';
 import { FAMILY_NAMES } from './families.js';
+import { shortenReelScript, spokenWordCount, wordCountProblem, retryNoteFor } from './length.js';
 
 const Stat = z.object({
   value: z.string(),
@@ -199,9 +200,8 @@ function validateShape(spec, recentTopics = []) {
   }
   // Runtime is set by how long the narration actually takes, so the check is on
   // the words rather than on numbers the model guessed.
-  const words = spec.segments.reduce((n, s) => n + String(s.say || '').trim().split(/\s+/).filter(Boolean).length, 0);
-
-  if (words < 56 || words > 72) problems.push(`${words} spoken words is outside 56–72 (about 20–26 seconds)`);
+  const lengthProblem = wordCountProblem(spokenWordCount(spec));
+  if (lengthProblem) problems.push(lengthProblem);
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
 
   const opener = spec.segments[0];
@@ -342,19 +342,20 @@ export async function generateSpec({
     // A second pass is given the specific complaints rather than being asked
     // again and hoped at.
     if (lastProblems.length) {
-      userPrompt += `\n\nYour previous attempt was rejected:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nFix exactly these and return the full spec again.`;
+      userPrompt += `\n\n${retryNoteFor(lastProblems)}`;
     }
 
     onAttempt?.(attempt, `${provider.name}/${chosenModel}`);
 
     try {
-      const { output, model: used } = provider.kind === 'anthropic'
+      let { output, model: used } = provider.kind === 'anthropic'
         ? await callAnthropic({ system: SYSTEM, user: userPrompt, model: chosenModel, effort })
         : await callOpenAICompatible({
             provider: { ...provider, model: chosenModel },
             system: SYSTEM, user: userPrompt, schema: ParsedReelSpec,
           });
 
+      output = shortenReelScript(output);
       lastProblems = validateShape(output, recentTopics);
       if (!lastProblems.length) {
         // Written down only once the spec is accepted, so a rejected draft does
