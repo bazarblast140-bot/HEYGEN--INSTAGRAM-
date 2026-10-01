@@ -26,6 +26,16 @@ export function buildSourcedPrompt({ kind, stories, date, recentTopics = [] }) {
     ? `\n<already_covered>\n${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}\n</already_covered>\n`
     : '';
 
+  const direction = kind === 'news'
+    ? `
+<market_direction>
+Yield और bond price उल्टी दिशा में चलते हैं.
+Yield बढ़ना = bond की कीमत गिरना = bond sell-off. इसे bond rally या "बॉन्ड रैली" मत कहो.
+Rally तभी, जब कीमत बढ़े या yield गिरे. Yield बढ़ने वाली ख़बर पर "sell-off" या "कीमतें गिरीं" लिखो.
+</market_direction>
+`
+    : '';
+
   return `<task>
 आज (${date}) का ${subject} carousel. ${angle}
 नीचे सिर्फ़ वे ख़बरें हैं जो build के समय fetch हुईं और 48 घंटे से नई हैं. इनमें से चुनो. कोई और घटना मत लिखो.
@@ -34,12 +44,46 @@ ${already}
 <stories>
 ${list}
 </stories>
-
+${direction}
 <structure>
 ठीक ${SLIDES} slides.
   1. cover — band "center", curiosity hook, स्रोत नहीं
   2-${SLIDES - 1}. fact slides — band "bottom", source में नाम और तारीख़
   ${SLIDES}. follow card — cta true, source null
 आख़िरी fact slide पर स्रोत ज़रूर हो. Caption की एक पंक्ति "स्रोत: नाम, YYYY-MM-DD" हो.
-</structure>`;
+</structure>
+
+<output_format>
+सिर्फ़ एक JSON object भेजो. ऊपर कोई wrapper मत रखो: carousel, data, items, beats मत बनाओ.
+हर slide में headline और query ज़रूरी हैं. query null मत छोड़ो — वह photo search के लिए plain English है.
+title मत लिखो, headline लिखो. body या text मत लिखो, subline लिखो.
+caption और hashtags ऊपर के level पर ज़रूरी हैं. इन्हें null या छोटी मत छोड़ो.
+
+{
+  "topic": "3 से 7 शब्दों में विषय",
+  "category": "${kind === 'ai' ? 'ai-news' : 'latest-news'}",
+  "slides": [
+    {
+      "band": "center",
+      "headline": "curiosity hook",
+      "subline": null,
+      "source": null,
+      "cta": false,
+      "query": "server room gpu",
+      "person": null
+    },
+    {
+      "band": "bottom",
+      "headline": "एक fact",
+      "subline": "ख़बर से जो असर निकलता है",
+      "source": "Reuters, 2026-10-01",
+      "cta": false,
+      "query": "bond market trading screen",
+      "person": null
+    }
+  ],
+  "caption": "पहली पंक्ति छोटी हो.\\n\\nस्रोत: Reuters, 2026-10-01",
+  "hashtags": ["#nifty50", "#sensex", "#intraday"]
+}
+</output_format>`;
 }

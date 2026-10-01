@@ -13,6 +13,8 @@ export const SYSTEM = `तुम "Rajesh Technical Traders" के लिए र
 5. थोड़ा context दो — सिर्फ़ नंबर नहीं, 2–4 पंक्तियों में समझाओ.
 
 लहजा: सीधा और साफ़. Hype नहीं, "क्रांति" नहीं — क्या हुआ और इससे क्या फ़र्क़ पड़ता है.
+
+बाज़ार की दिशा: yield और bond price उल्टी दिशा में चलते हैं. Yield बढ़ना bond की कीमत गिरना है — bond sell-off. उसे bond rally या "बॉन्ड रैली" मत कहो. Rally तभी जब कीमत बढ़े या yield गिरे.
 Respond only in valid JSON. The response format is json.`;
 
 export function buildUserPrompt({ stories, date, recentTopics = [] }) {

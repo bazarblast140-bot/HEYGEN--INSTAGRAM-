@@ -48,6 +48,106 @@ export const CarouselSpec = z.object({
   hashtags: z.array(z.string()),
 });
 
+const WRAPPERS = ['carousel', 'spec', 'data', 'result', 'output', 'post', 'json', 'response'];
+
+const FALLBACK_HASHTAGS = {
+  'ai-news': ['#nifty50', '#banknifty', '#ai'],
+  'latest-news': ['#nifty50', '#sensex', '#intraday'],
+};
+
+function asText(value) {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) return value.map(asText).filter(Boolean).join('\n');
+  return '';
+}
+
+/** Plain English search words. Devanagari and empty values become ''. */
+export function englishQuery(value) {
+  return asText(value)
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => /[A-Za-z]/.test(word))
+    .slice(0, 8)
+    .join(' ');
+}
+
+function unwrapCarousel(raw) {
+  let node = raw;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) break;
+    if (Array.isArray(node.slides) || Array.isArray(node.items) || Array.isArray(node.beats) || Array.isArray(node.cards)) break;
+    const key = WRAPPERS.find((name) => node[name] && typeof node[name] === 'object' && !Array.isArray(node[name]));
+    if (!key) break;
+    node = node[key];
+  }
+  return node && typeof node === 'object' && !Array.isArray(node) ? node : {};
+}
+
+function slideList(src) {
+  if (Array.isArray(src.slides)) return src.slides;
+  if (Array.isArray(src.items)) return src.items;
+  if (Array.isArray(src.beats)) return src.beats;
+  if (Array.isArray(src.cards)) return src.cards;
+  return [];
+}
+
+/**
+ * DeepSeek often wraps the spec, renames fields, or leaves query/caption/hashtags
+ * null. Repair that shape before Zod sees it so a usable draft is not rejected.
+ */
+export function normalizeCarouselDraft(raw, { category } = {}) {
+  const src = unwrapCarousel(raw);
+  const list = slideList(src);
+  const slides = list.filter((slide) => slide && typeof slide === 'object' && !Array.isArray(slide)).map((slide, index, all) => {
+    let headline = asText(slide.headline) || asText(slide.title) || asText(slide.heading) || asText(slide.name);
+    let subline = asText(slide.subline ?? slide.body ?? slide.description ?? slide.caption) || null;
+    const text = asText(slide.text);
+    if (!headline && text) headline = text;
+    else if (!subline && text) subline = text;
+    const query = englishQuery(slide.query) || englishQuery(headline) || englishQuery(slide.title) || 'indian stock exchange';
+    const isLast = index === all.length - 1 && all.length > 1;
+    const band = slide.band === 'center' || slide.band === 'bottom'
+      ? slide.band
+      : (index === 0 ? 'center' : 'bottom');
+    return {
+      band,
+      headline: headline || (index === 0 ? 'आज की ख़बर' : 'मुख्य बात'),
+      subline,
+      source: index === 0 ? null : (asText(slide.source) || null),
+      cta: typeof slide.cta === 'boolean' ? slide.cta : isLast,
+      query,
+      person: englishQuery(slide.person) || null,
+    };
+  });
+
+  const topic = asText(src.topic) || asText(src.title) || asText(src.subject) || slides[0]?.headline || 'आज का बाज़ार';
+  const resolvedCategory = asText(src.category) || category || 'latest-news';
+  const cited = slides.map((slide) => slide.source).find(Boolean);
+  const caption = asText(src.caption)
+    || [...slides.filter((slide) => !slide.cta).slice(0, 2).map((slide) => slide.headline), cited ? `स्रोत: ${cited}` : '']
+      .filter(Boolean)
+      .join('\n\n')
+    || topic;
+  let hashtags = [];
+  if (Array.isArray(src.hashtags)) hashtags = src.hashtags.map(asText).filter(Boolean);
+  else if (typeof src.hashtags === 'string') hashtags = src.hashtags.split(/[\s,]+/).map((tag) => tag.trim()).filter(Boolean);
+  if (!hashtags.length) hashtags = FALLBACK_HASHTAGS[resolvedCategory] || FALLBACK_HASHTAGS['latest-news'];
+
+  return {
+    topic,
+    category: resolvedCategory,
+    slides,
+    caption,
+    hashtags: hashtags.slice(0, 5),
+  };
+}
+
+/** Schema for AI and news carousels: repair the draft, then apply CarouselSpec. */
+export function sourcedCarouselSchema(category) {
+  return z.preprocess((raw) => normalizeCarouselDraft(raw, { category }), CarouselSpec);
+}
+
 /**
  * Force a valid 10-slide shape the renderer and Instagram path can accept.
  * Models sometimes return two covers or forget cta on the last slide.
@@ -66,7 +166,7 @@ export function normalizeSpec(spec, { sourced = false } = {}) {
       subline: null,
       source: null,
       cta: false,
-      query: 'dark abstract finance texture',
+      query: englishQuery(last.headline) || 'indian stock exchange',
       person: null,
     });
   }
@@ -119,7 +219,7 @@ export function normalizeSpec(spec, { sourced = false } = {}) {
       source,
       headline,
       subline,
-      query: String(s.query || 'dark abstract finance texture').replace(/[^\x20-\x7E]/g, ' ').trim() || 'dark abstract finance texture',
+      query: englishQuery(s.query) || englishQuery(headline) || 'indian stock exchange',
       person: s.person && /^[\x20-\x7E]+$/.test(String(s.person)) ? s.person : null,
     };
   });

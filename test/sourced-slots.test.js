@@ -163,6 +163,13 @@ test('the sourced prompt teaches a finance angle and forbids invented facts', ()
   const news = buildSourcedPrompt({ kind: 'news', stories: [freshItem], date: '2026-10-01' });
   assert.match(news, /latest big news/);
   assert.match(news, /finance angle/);
+  assert.match(news, /sell-off/);
+  assert.match(news, /बॉन्ड रैली/);
+  assert.match(news, /"query"/);
+  assert.match(news, /"caption"/);
+  assert.match(news, /"hashtags"/);
+  assert.match(text, /"headline"/);
+  assert.match(text, /title मत लिखो/);
 });
 
 test('feeds are the named outlets, not a generic fallback', () => {

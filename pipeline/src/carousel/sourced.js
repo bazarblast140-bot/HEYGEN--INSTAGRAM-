@@ -7,7 +7,7 @@ import { parseRss } from './news.js';
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError } from '../script/providers.js';
 import { readHistory, recordTopic } from '../script/topics.js';
 import {
-  LEDGER, CarouselSpec, normalizeSpec, validateShape, softProblems, checkSources,
+  LEDGER, normalizeSpec, validateShape, softProblems, checkSources, sourcedCarouselSchema,
 } from './generate.js';
 import { SYSTEM, buildSourcedPrompt } from './sourced-prompt.js';
 
@@ -150,7 +150,7 @@ export async function generateSourcedCarousel({
     try {
       const { output, model: used } = await callOpenAICompatible({
         provider: { ...provider, model: chosenModel },
-        system: SYSTEM, user: userPrompt, schema: CarouselSpec,
+        system: SYSTEM, user: userPrompt, schema: sourcedCarouselSchema(category),
       });
       lastOutput = output;
       lastUsed = used;
