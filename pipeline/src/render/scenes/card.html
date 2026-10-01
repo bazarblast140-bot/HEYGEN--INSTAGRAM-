@@ -349,6 +349,23 @@
     content.style.transform = `scale(${(1 + progress * 0.075).toFixed(4)}) translateY(${(-progress * 30).toFixed(2)}px)`;
     content.style.transformOrigin = 'center center';
 
+    if (data.instant) {
+      // The opening hook is the cover. Frame 0 has to show the whole line;
+      // the fade used to leave that frame blank.
+      document.querySelectorAll('#chips .chip, #headline .w').forEach((el) => {
+        el.style.opacity = 1;
+        el.style.transform = 'none';
+      });
+      const powerNow = document.getElementById('power');
+      powerNow.style.opacity = 1;
+      powerNow.style.transform = 'none';
+      const statNow = document.getElementById('statBlock');
+      if (!data.stat) { statNow.style.display = 'none'; return; }
+      statNow.style.opacity = 1;
+      statNow.style.transform = 'none';
+      return;
+    }
+
     document.querySelectorAll('#chips .chip').forEach((chip, i) => {
       const t = outCubic(p(f - i * 1.5, BEAT.chips));
       chip.style.opacity = t;

@@ -3,7 +3,7 @@
 
 import { SLIDES } from './categories.js';
 
-export const SYSTEM = `तुम "FACTVIZER" के लिए रोज़ दोपहर का technology carousel लिखते हो — Instagram पर ठीक ${SLIDES} slides की एक Hindi post.
+export const SYSTEM = `तुम "Rajesh Technical Traders" के लिए रोज़ दोपहर का technology carousel लिखते हो — Instagram पर ठीक ${SLIDES} slides की एक Hindi post.
 
 कड़े नियम:
 1. सिर्फ़ वही लिखो जो नीचे दी गयी ख़बरों में है. अपनी याद से नंबर, तारीख़ या कंपनी मत जोड़ो.

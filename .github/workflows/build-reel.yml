@@ -22,6 +22,10 @@ on:
         description: Write today's script with Claude (off = use the checked-in spec)
         type: boolean
         default: true
+      preview:
+        description: Generate a reel for review. Does not publish and does not use the posting queue.
+        type: boolean
+        default: false
   # ALWAYS ON — Paise ki Pathshala Instagram reel
   # User request 2026-09-28: keep reel pipeline running permanently.
   # 07:00 IST daily (Actions cron is UTC; IST = UTC+5:30 → 01:30 UTC)
@@ -32,7 +36,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-reel
+  # Preview must not sit in the same queue as a scheduled publish.
+  group: ${{ github.event.inputs.preview == 'true' && 'build-reel-preview' || 'build-reel' }}
   cancel-in-progress: false
 
 jobs:
@@ -95,11 +100,22 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: |
+          PREVIEW="${{ github.event.inputs.preview }}"
+          GEN=""
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.generate }}" != "false" ] || [ "$PREVIEW" = "true" ]; then
+            GEN="--generate"
+          fi
+          REQUIRE=""
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "$PREVIEW" = "true" ]; then
+            REQUIRE="--require-generated"
+          fi
+          PREVIEW_ARG=""
+          if [ "$PREVIEW" = "true" ]; then PREVIEW_ARG="--preview"; fi
           node pipeline/build-reel.js \
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/default.json' }}" \
             ${{ github.event.inputs.fixture == 'true' && '--fixture' || '' }} \
             ${{ github.event.inputs.no_avatar == 'true' && '--no-avatar' || '' }} \
-            ${{ github.event_name == 'schedule' || github.event.inputs.generate != 'false' && '--generate' || '' }}
+            $GEN $REQUIRE $PREVIEW_ARG
 
       - name: Summarise the run
         if: always()
@@ -121,7 +137,7 @@ jobs:
       - name: Remember today's topic
         # The ledger is what stops the reel telling the same story twice. It only
         # works if it outlives the runner, so it is committed back to the branch.
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.generate != 'false' }}
+        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.generate != 'false') }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -138,7 +154,7 @@ jobs:
 
       - name: Host the video where Instagram can fetch it
         id: host
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MEDIA_REPO: ${{ vars.MEDIA_REPO }}
@@ -149,7 +165,7 @@ jobs:
           node pipeline/host-video.js --file pipeline/out/reel-final.mp4 $COVER
 
       - name: Publish to Instagram
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -170,6 +186,7 @@ jobs:
           path: |
             pipeline/out/reel-final.mp4
             pipeline/out/reel-cover.jpg
+            pipeline/out/caption.txt
             pipeline/out/run-report.json
             pipeline/out/build/word-timestamps.json
           retention-days: 14

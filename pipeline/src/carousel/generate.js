@@ -104,8 +104,10 @@ export function normalizeSpec(spec) {
     } else {
       band = 'bottom';
       cta = false;
-      // Fact slides need a source; keep model source if present, else a dated generic.
-      if (!String(source || '').trim()) {
+      // A missing source on a real fact can be labelled. A padded copy of the
+      // follow card must not be given a market citation it does not have.
+      const filler = /रोज़ एक नया तथ्य|सेव करो|फ़ॉलो करो|^follow me$/i.test(`${headline || ''}\n${subline || ''}`);
+      if (!String(source || '').trim() && !filler) {
         source = 'NSE / BSE public market data, 2024';
       }
     }
@@ -199,6 +201,7 @@ export async function generateCarousel({
   model,
   onAttempt,
   onReject,
+  record = true,
 } = {}) {
   const provider = resolveProvider();
   if (!provider) {
@@ -241,10 +244,12 @@ export async function generateCarousel({
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        await recordTopic({ topic: shaped.topic, angle: shaped.category, date: `${date} ${slot}`, file: LEDGER });
+        if (record) await recordTopic({ topic: shaped.topic, angle: shaped.category, date: `${date} ${slot}`, file: LEDGER });
         return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category, slot };
       }
     } catch (err) {
+      console.log(`  attempt ${attempt} failed: ${err.message}`);
+      if (err.retryable === false) throw err;
       if (!err.schemaIssues || attempt === 5) {
         // Last-chance: if we have any prior output, normalize and try to ship it.
         if (lastOutput && attempt === 5) break;
@@ -263,7 +268,7 @@ export async function generateCarousel({
       !p.includes('repeats') && !p.includes('no year'),
     );
     if (!hard.length) {
-      await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
+      if (record) await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
       return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category, slot };
     }
   }

@@ -53,7 +53,7 @@ if (live) {
 
 const rows = join(entries, posts);
 
-console.log(bold(`\nFACTVIZER — last ${DAYS} days\n`));
+console.log(bold(`\nRajesh Technical Traders — last ${DAYS} days\n`));
 
 // 1. Did the posts go out at all? Three a day is the schedule.
 const made = entries.length;

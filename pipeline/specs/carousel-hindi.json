@@ -1,56 +1,84 @@
 {
-  "brand": "FACTVIZER",
+  "brand": "Rajesh Technical Traders",
   "ink": "#FFD200",
   "brandInk": "#F2F2F2",
-  "topic": "ग्रहों की घूर्णन अवधि — दिन बनाम साल",
+  "topic": "ROCE और operating cash flow",
+  "category": "fundamentals",
+  "fallback": true,
+  "reviewed": true,
   "slides": [
     {
       "band": "center",
-      "headline": "किस ग्रह पर एक दिन,\nउसके पूरे साल से भी लंबा होता है?",
-      "query": "milky way galaxy"
+      "headline": "Profit बढ़ा,\nनकद नहीं",
+      "subline": null,
+      "source": null,
+      "cta": false,
+      "query": "indian stock exchange trading screen"
     },
     {
-      "headline": "शुक्र",
-      "subline": "अपनी धुरी पर एक चक्कर\n243 दिन",
-      "source": "NASA Planetary Fact Sheet",
-      "query": "venus planet globe"
+      "headline": "ROCE",
+      "subline": "Operating profit ÷ capital employed",
+      "source": "Company annual report, capital employed definition",
+      "cta": false,
+      "query": "financial statement calculator desk"
     },
     {
-      "headline": "शुक्र का साल",
-      "subline": "सूरज का एक चक्कर\n225 दिन",
-      "source": "NASA Planetary Fact Sheet — दिन, साल से लंबा",
-      "query": "venus surface radar"
+      "headline": "नकद कहाँ गया",
+      "subline": "Profit के बाद working capital चेक करें",
+      "source": "Cash flow statement, operating activities",
+      "cta": false,
+      "query": "cash flow statement close up"
     },
     {
-      "headline": "बृहस्पति",
-      "subline": "अपनी धुरी पर एक चक्कर\n9 घंटे 56 मिनट",
-      "source": "NASA Planetary Fact Sheet — सबसे तेज़",
-      "query": "jupiter planet"
+      "headline": "Inventory बढ़े",
+      "subline": "बिक्री नहीं, तो नकद अटक जाता है",
+      "source": "Annual report, inventory note",
+      "cta": false,
+      "query": "warehouse inventory shelves"
     },
     {
-      "headline": "पृथ्वी",
-      "subline": "अपनी धुरी पर एक चक्कर\n23 घंटे 56 मिनट",
-      "source": "NASA Planetary Fact Sheet",
-      "query": "earth full disk"
+      "headline": "Receivables",
+      "subline": "उधार बिक्री profit दिखाती है, नकद बाद में",
+      "source": "Annual report, trade receivables",
+      "cta": false,
+      "query": "invoice and ledger book"
     },
     {
+      "headline": "Operating cash",
+      "subline": "कई साल नकारात्मक हो तो सवाल पूछें",
+      "source": "Cash flow statement, multi-year comparison",
+      "cta": false,
+      "query": "accountant reviewing printed reports"
+    },
+    {
+      "headline": "Debt",
+      "subline": "ब्याज coverage गिरे तो दबाव दिखता है",
+      "source": "Annual report, finance cost note",
+      "cta": false,
+      "query": "bank building exterior india"
+    },
+    {
+      "headline": "Promoter pledge",
+      "subline": "Pledge बढ़ना balance sheet का संकेत है",
+      "source": "Exchange shareholding pattern",
+      "cta": false,
+      "query": "stock market shareholding chart"
+    },
+    {
+      "headline": "एक साथ पढ़ें",
+      "subline": "ROCE, नकद और debt अलग-अलग कहानी नहीं",
+      "source": "Annual report, financial highlights",
+      "cta": false,
+      "query": "annual report open on desk"
+    },
+    {
+      "headline": "सेव करो",
+      "subline": "फ़ॉलो करो",
+      "source": null,
       "cta": true,
-      "headline": "रोज़ एक नया तथ्य",
-      "subline": "Follow me",
-      "query": "hubble space telescope"
+      "query": "dark abstract finance texture"
     }
   ],
-  "caption": "किस ग्रह पर एक दिन, उसके पूरे साल से भी लंबा होता है? 🪐\n\nशुक्र (Venus) अपनी धुरी पर एक चक्कर 243 दिन में लगाता है, और सूरज का चक्कर 225 दिन में — यानी वहाँ दिन, साल से लंबा है। बृहस्पति (Jupiter) वही काम 10 घंटे से भी कम में कर लेता है।\n\nआँकड़े: NASA Planetary Fact Sheet",
-  "hashtags": [
-    "#विज्ञान",
-    "#अंतरिक्ष",
-    "#रोचकतथ्य",
-    "#शुक्रग्रह",
-    "#नासा",
-    "#venus",
-    "#space",
-    "#planetfacts",
-    "#sciencefacts",
-    "#hindifacts"
-  ]
+  "caption": "Profit बढ़ा, नकद नहीं।\n\nROCE और operating cash flow साथ पढ़ो। Inventory या receivables अटके हों तो profit की quality सवाल में है।",
+  "hashtags": ["#roce", "#cashflow", "#fundamentals", "#nifty", "#stockmarket"]
 }
