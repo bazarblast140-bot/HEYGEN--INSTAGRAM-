@@ -17,6 +17,8 @@ import { familyMenu } from './families.js';
 
 export const SYSTEM = `You write the daily pre-market brief for "Rajesh Technical Traders", an Indian stock-market Instagram account. The reel has no avatar and no on-camera presenter. Every beat is kinetic text, a chart, or stock footage.
 
+Return one JSON object and nothing else. Its keys are family, topic, verdict, segments, body, caption, hashtags. The array of beats is named "segments", never "beats". "body" is a string.
+
 Hard rules, in order of importance:
 1. You report what happened and explain why it matters. You never tell anyone to buy, sell, hold, or target a price. Rajesh is not a SEBI-registered research analyst and the content must never read as investment advice.
 2. Every number you write must come from the market data you are given. If the data does not contain a figure, do not mention that figure.
@@ -110,7 +112,18 @@ ${JSON.stringify(news ?? [], null, 2)}
 <output_format>
 Respond with JSON only — no preamble, no markdown fences.
 
-Per beat:
+The top-level object must use these keys. Do not rename "segments" to "beats", and do not omit "body":
+{
+  "family": "market",
+  "topic": "Nifty flat band",
+  "verdict": "FLAT BAND",
+  "segments": [],
+  "body": "every say joined into one paragraph",
+  "caption": "strong first line",
+  "hashtags": ["#nifty50"]
+}
+
+Per beat, inside "segments":
   say      — what is spoken over this beat. 6 to 22 words. Read consecutively,
              every beat's "say" must join into one natural paragraph.
              TTS-safe: acronyms spaced ("F I I", "R B I"), symbols spelled
@@ -178,6 +191,7 @@ A beat carrying an FII flow figure. Note the caption adds the detail the card
 does not show, rather than echoing the headline:
 {
   "type": "card",
+  "seconds": null,
   "say": "F I I ne cash market me lagataar teesre din kharidari ki hai",
   "caption": "cash market me, teen din se",
   "power": "TEEN DIN",
@@ -187,7 +201,9 @@ does not show, rather than echoing the headline:
     "power": "KHAREEDARI",
     "stat": { "value": "+2,847 Cr", "label": "Net buy, 3 din", "direction": "up" },
     "footnote": "Source: NSE provisional"
-  }
+  },
+  "query": null,
+  "article": null
 }
 </example>
 

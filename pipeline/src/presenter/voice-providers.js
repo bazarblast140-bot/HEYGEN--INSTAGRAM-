@@ -67,8 +67,20 @@ function elevenHeaders(extra = {}) {
  */
 let discoveredVoice = null;
 
+/**
+ * Voice and model used for synthesis.
+ * Repository variables ELEVENLABS_VOICE_ID and ELEVENLABS_MODEL override these.
+ * A blank variable (the repo var is unset) keeps the built-in defaults.
+ */
+export function elevenSettings() {
+  return {
+    voiceId: env('ELEVENLABS_VOICE_ID') || ELEVEN_DEFAULTS.voiceId,
+    model: env('ELEVENLABS_MODEL') || ELEVEN_DEFAULTS.model,
+  };
+}
+
 export async function discoverElevenVoice() {
-  const configured = env('ELEVENLABS_VOICE_ID') || ELEVEN_DEFAULTS.voiceId;
+  const configured = elevenSettings().voiceId;
   if (configured) return { id: configured, name: null, category: 'configured' };
   if (discoveredVoice) return discoveredVoice;
 
@@ -109,8 +121,9 @@ const elevenlabs = {
   name: 'elevenlabs',
   configured: () => Boolean(env('ELEVENLABS_API_KEY')),
   async synth({ text, speed, voiceId }) {
-    const voice = voiceId || (await discoverElevenVoice()).id;
-    const model = env('ELEVENLABS_MODEL') || ELEVEN_DEFAULTS.model;
+    const settings = elevenSettings();
+    const voice = voiceId || settings.voiceId || (await discoverElevenVoice()).id;
+    const model = settings.model;
 
     // The with-timestamps variant costs the same and returns the alignment that
     // the plain endpoint throws away.
