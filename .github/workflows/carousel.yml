@@ -1,8 +1,12 @@
 name: Build carousel
 
-# Two finance carousels a day. AI news and the general-news digest are off.
+# Two finance carousels a day stay on.
 #   midday   optional, 12:30 IST (catch-up 12:52)
 #   evening  the main post, 19:30 IST (catch-up 19:52), plus one Story
+# Two more slots exist and no-op unless the repository variable
+# ENABLE_AI_NEWS_CAROUSELS is true:
+#   ai       latest AI update, 09:30 IST (catch-up 09:52)
+#   news     latest big news, 16:30 IST (catch-up 16:52)
 # GitHub's schedule is often hours late. slot-status keeps the cron's slot
 # anyway, and the ledger (YYYY-MM-DD <slot>, IST) stops a second copy.
 # A dispatch with no slot publishes only inside those IST windows.
@@ -21,6 +25,12 @@ on:
     # evening 19:30 IST + catch-up 19:52
     - cron: '0 14 * * *'
     - cron: '22 14 * * *'
+    # ai 09:30 IST + catch-up 09:52 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
+    - cron: '0 4 * * *'
+    - cron: '22 4 * * *'
+    # news 16:30 IST + catch-up 16:52 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
+    - cron: '0 11 * * *'
+    - cron: '22 11 * * *'
 
   workflow_dispatch:
     inputs:
@@ -42,7 +52,7 @@ on:
       slot:
         description: auto derives the slot from the IST clock, or skips outside the windows
         type: choice
-        options: ['auto', 'midday', 'evening']
+        options: ['auto', 'midday', 'evening', 'ai', 'news']
         default: 'auto'
       publish:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
@@ -65,6 +75,9 @@ jobs:
 
     env:
       AUTOMATED: ${{ github.event_name == 'schedule' || github.event_name == 'repository_dispatch' }}
+      # Unset means off. Do not set these repository variables until a preview is approved.
+      ENABLE_AI_NEWS_CAROUSELS: ${{ vars.ENABLE_AI_NEWS_CAROUSELS }}
+      ENABLE_CAROUSEL_STORY: ${{ vars.ENABLE_CAROUSEL_STORY }}
 
     permissions:
       contents: write
@@ -142,7 +155,7 @@ jobs:
           SLOT_ARG=""
           if [ "$PREVIEW" = "true" ]; then
             case "$CHOSEN" in
-              midday|evening) SLOT="$CHOSEN" ;;
+              midday|evening|ai|news) SLOT="$CHOSEN" ;;
               *) SLOT="evening" ;;
             esac
             SLOT_ARG="--preview --require-generated --slot $SLOT"

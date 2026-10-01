@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import worker, { SLOTS, dispatch } from '../scheduler/src/worker.js';
+import worker, { SLOTS, OPTIONAL_CRONS, dispatch } from '../scheduler/src/worker.js';
 
 const read = (p) => readFile(new URL(p, import.meta.url), 'utf8');
 const crons = (text) => [...text.matchAll(/["'](\d[^"']*\*[^"']*)["']/g)].map((m) => m[1]);
@@ -17,9 +17,39 @@ test('the Worker fires one cron per slot', () => {
 });
 
 // A cron in wrangler.toml with no entry in SLOTS fires nothing.
-test('wrangler.toml and the Worker schedule the same times', async () => {
+test('wrangler.toml lists the finance crons and the disabled ai and news crons', async () => {
   const configured = crons(await read('../scheduler/wrangler.toml'));
-  assert.deepEqual(configured.sort(), Object.keys(SLOTS).sort());
+  assert.deepEqual(
+    configured.sort(),
+    [...Object.keys(SLOTS), ...Object.keys(OPTIONAL_CRONS)].sort(),
+  );
+});
+
+test('ai and news crons do not dispatch while the flag is off', async () => {
+  let called = false;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { called = true; return { ok: true, status: 204, text: async () => '' }; };
+  try {
+    await worker.scheduled({ cron: '0 4 * * *' }, { REPO: 'o/r', GITHUB_TOKEN: 't' });
+    await worker.scheduled({ cron: '0 11 * * *' }, { REPO: 'o/r', GITHUB_TOKEN: 't' });
+    assert.equal(called, false);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('an ai cron dispatches only when the flag is on', async () => {
+  let seen = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { seen = { url, init }; return { ok: true, status: 204, text: async () => '' }; };
+  try {
+    await worker.scheduled({ cron: '0 4 * * *' }, {
+      REPO: 'o/r', GITHUB_TOKEN: 't', ENABLE_AI_NEWS_CAROUSELS: 'true',
+    });
+    assert.equal(JSON.parse(seen.init.body).client_payload.slot, 'ai');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 // The Worker says "carousel"; if the workflow listens for anything else the

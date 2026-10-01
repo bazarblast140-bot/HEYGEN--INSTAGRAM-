@@ -29,6 +29,8 @@ if (decision.reason === 'duplicate') {
   console.log(`${label} — ${decision.slot} is outside its IST window. Skipping.`);
 } else if (decision.reason === 'outside') {
   console.log(`${label} — no slot, and the clock is outside both posting windows. Skipping.`);
+} else if (decision.reason === 'disabled') {
+  console.log(`${label} — ${decision.slot} is off until ENABLE_AI_NEWS_CAROUSELS is true. Skipping.`);
 } else {
   console.log(`${label} — not posted yet.`);
 }

@@ -41,6 +41,10 @@ async function main() {
   const reportPath = args.report || 'pipeline/out/carousel-report.json';
 
   const report = JSON.parse(await fs.readFile(reportPath, 'utf8'));
+  if (report.skipped) {
+    console.log(report.reason || 'Skipped. Nothing published.');
+    return;
+  }
   const files = report.files || [];
   if (!files.length) throw new Error(`${reportPath} lists no slide files. Run build-carousel.js first.`);
 
@@ -59,6 +63,8 @@ async function main() {
     fallback: report.fallback !== false && report.generated !== true,
     category: report.category || '',
     allowReviewed: args['allow-reviewed-fallback'] === true,
+    verifiedSource: report.verifiedSource === true,
+    sourceFresh: report.sourceFresh === true,
     spec: {
       brand: report.brand,
       topic: report.topic,

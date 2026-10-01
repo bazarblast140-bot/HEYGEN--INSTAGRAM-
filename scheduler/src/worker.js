@@ -5,9 +5,9 @@
 // lives here and the trigger is an HTTP call.
 //
 // Two finance posts: optional midday at 12:30 IST, main evening at 19:30 IST.
-// AI news and the general-news digest are off. The slot still travels in the
-// payload. The pipeline also refuses a dispatch that arrives outside that
-// slot's window, so an old cron cannot publish at 06:07 or 17:07.
+// AI (09:30 IST) and news (16:30 IST) are mapped but do not dispatch unless
+// ENABLE_AI_NEWS_CAROUSELS is true. The pipeline also refuses a dispatch that
+// arrives outside that slot's window, so an old cron cannot publish at 06:07.
 //
 // Cloudflare cron triggers are UTC, like GitHub's. IST is UTC+5:30.
 // Redeploy after changing these (`npx wrangler deploy` from scheduler/).
@@ -17,6 +17,22 @@ export const SLOTS = {
   '0 7 * * *': 'midday',    // 12:30 IST
   '0 14 * * *': 'evening',  // 19:30 IST
 };
+
+// Present in wrangler so a later deploy can fire them, but inert until the flag
+// is set. They must not dispatch while it is off.
+export const OPTIONAL_CRONS = {
+  '0 4 * * *': 'ai',     // 09:30 IST
+  '0 11 * * *': 'news',  // 16:30 IST
+};
+
+export function slotForCron(cron, env = {}) {
+  if (SLOTS[cron]) return { slot: SLOTS[cron], enabled: true };
+  if (OPTIONAL_CRONS[cron]) {
+    const on = ['1', 'true', 'yes', 'on'].includes(String(env.ENABLE_AI_NEWS_CAROUSELS || '').trim().toLowerCase());
+    return { slot: OPTIONAL_CRONS[cron], enabled: on };
+  }
+  return { slot: null, enabled: false };
+}
 
 export async function dispatch({ repo, token, slot }) {
   const res = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
@@ -42,11 +58,15 @@ export async function dispatch({ repo, token, slot }) {
 
 export default {
   async scheduled(event, env) {
-    const slot = SLOTS[event.cron];
+    const { slot, enabled } = slotForCron(event.cron, env);
     if (!slot) {
       // A cron added here and not to the table would otherwise fire nothing at
       // all, silently.
       throw new Error(`No slot mapped for cron "${event.cron}"`);
+    }
+    if (!enabled) {
+      console.log(`${slot} skipped — ENABLE_AI_NEWS_CAROUSELS is off`);
+      return;
     }
     await dispatch({ repo: env.REPO, token: env.GITHUB_TOKEN, slot });
     console.log(`dispatched ${slot}`);

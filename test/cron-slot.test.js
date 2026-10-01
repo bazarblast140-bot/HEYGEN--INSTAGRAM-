@@ -52,9 +52,13 @@ test('every cron in the workflow is in the table', async () => {
   }
 });
 
-test('and every entry in the table is one of the two finance slots', () => {
+test('finance crons stay on the two finance slots', () => {
   const known = new Set(SLOTS);
   for (const [cron, slot] of Object.entries(CRON_SLOTS)) {
-    assert.ok(known.has(slot), `${cron} maps to unknown slot "${slot}"`);
+    if (cron.endsWith('7 * * *') || cron.endsWith('14 * * *')) {
+      assert.ok(known.has(slot), `${cron} maps to unknown slot "${slot}"`);
+    }
   }
+  assert.equal(CRON_SLOTS['0 7 * * *'], 'midday');
+  assert.equal(CRON_SLOTS['0 14 * * *'], 'evening');
 });

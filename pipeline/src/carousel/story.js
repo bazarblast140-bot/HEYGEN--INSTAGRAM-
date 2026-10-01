@@ -69,7 +69,13 @@ export function storyFrames(spec, { handle } = {}) {
  * story used to be. The account now posts at most one Story a day, and only
  * with the main evening carousel, so the feed gets the cover frame alone.
  */
-export function framesToPost(spec, { slot } = {}) {
-  if (slot !== 'evening') return [];
-  return storyFrames(spec).slice(0, 1);
+export function framesToPost(spec, { slot, carouselStory = false, preview = false } = {}) {
+  const cover = storyFrames(spec).slice(0, 1);
+  if (!cover.length) return [];
+  // The evening finance Story is the existing path. A second frame is not added
+  // when the cover-Story flag is also on.
+  if (slot === 'evening') return cover;
+  if (carouselStory && slot) return cover;
+  if (preview && (slot === 'ai' || slot === 'news')) return cover;
+  return [];
 }

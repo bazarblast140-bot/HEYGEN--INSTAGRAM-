@@ -34,6 +34,64 @@ export function checkStory({ imageUrl }) {
   return problems;
 }
 
+/** Graph params for a video Story. The Reel file is reused; nothing else is uploaded. */
+export function videoStoryParams({ videoUrl } = {}) {
+  return { media_type: 'STORIES', video_url: videoUrl };
+}
+
+export function checkVideoStory({ videoUrl } = {}) {
+  const problems = [];
+  if (!videoUrl) problems.push('no video');
+  else if (!/^https:\/\//.test(String(videoUrl))) problems.push('video is not a public https URL');
+  return problems;
+}
+
+export async function publishVideoStory({
+  igUserId = env('IG_USER_ID'),
+  token = env('IG_ACCESS_TOKEN'),
+  videoUrl,
+  surface = env('IG_SURFACE') || undefined,
+  onStatus,
+}) {
+  if (!igUserId) throw new Error('No IG_USER_ID. Set it in .env or pass igUserId.');
+  if (!token) throw new Error('No IG_ACCESS_TOKEN. Set it in .env or pass token.');
+  const problems = checkVideoStory({ videoUrl });
+  if (problems.length) throw new Error(`Refusing to publish video story:\n  ${problems.join('\n  ')}`);
+
+  const { id: containerId } = await call(`${igUserId}/media`, {
+    method: 'POST', token, surface,
+    params: videoStoryParams({ videoUrl }),
+  });
+  onStatus?.('container', containerId);
+
+  await waitForContainer({
+    containerId, token, surface, pollMs: 3000, maxPolls: 40,
+    onStatus: (code) => onStatus?.('processing', code),
+  });
+
+  const { id: mediaId } = await call(`${igUserId}/media_publish`, {
+    method: 'POST', token, surface, params: { creation_id: containerId },
+  });
+  onStatus?.('published', mediaId);
+  return { mediaId, containerId };
+}
+
+/**
+ * Run after the Reel is already published. A Story failure is logged and
+ * swallowed so the Reel is not failed or undone.
+ */
+export async function attachReelStory({ enabled = false, videoUrl, publish = publishVideoStory, onNote } = {}) {
+  if (!enabled) return { attempted: false };
+  try {
+    const story = await publish({ videoUrl });
+    onNote?.(`reel story published ${story.mediaId}`);
+    return { attempted: true, mediaId: story.mediaId };
+  } catch (err) {
+    onNote?.(`reel story failed (reel already published): ${err.message}`);
+    return { attempted: true, error: err.message };
+  }
+}
+
 export async function publishStory({
   igUserId = env('IG_USER_ID'),
   token = env('IG_ACCESS_TOKEN'),
