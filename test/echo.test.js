@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { echoes, checkEcho, meaningful } from '../pipeline/src/carousel/echo.js';
+import { SLIDES } from '../pipeline/src/carousel/categories.js';
 
 test('a headline restated underneath is caught', () => {
   assert.ok(echoes('California में Linux को छूट', 'उम्र सत्यापन कानून से Linux को मिली छूट, सर्वसम्मति से पारित'));
@@ -75,7 +76,7 @@ const echoing = () => ({
   topic: 'शुक्र ग्रह का दिन',
   slides: [
     { band: 'center', headline: 'क्या आप जानते हैं?', cta: false, query: 'venus planet' },
-    ...Array.from({ length: 7 }, (_, i) => ({
+    ...Array.from({ length: SLIDES - 2 }, (_, i) => ({
       band: 'bottom',
       headline: 'पृथ्वी का घूर्णन',
       subline: 'पृथ्वी का घूर्णन धीमा है',

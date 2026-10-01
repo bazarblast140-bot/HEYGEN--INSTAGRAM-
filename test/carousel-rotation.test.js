@@ -70,6 +70,16 @@ test('the morning and evening posts are never the same category', () => {
   assert.deepEqual(same, []);
 });
 
+// 1 Oct 2026 was the day this showed up: both finance slots were "stocks",
+// because the evening offset wrapped around an 8-item pool.
+test('different daily slots get different categories', () => {
+  const sample = [...dates(POOL.length * 2), '2026-10-01'];
+  for (const date of sample) {
+    const picked = SLOTS.map((slot) => categoryFor(date, slot));
+    assert.equal(new Set(picked).size, SLOTS.length, `${date}: ${picked.join(', ')}`);
+  }
+});
+
 test('no two posts in a row repeat, reading the day as morning then evening', () => {
   const runs = [];
   let previous = null;
@@ -83,8 +93,7 @@ test('no two posts in a row repeat, reading the day as morning then evening', ()
   assert.deepEqual(runs, []);
 });
 
-// The evening slot no longer draws from this pool -- it is money now, from
-// FINANCE -- so the general subjects get one morning each per cycle.
+// Morning walks the finance pool once per cycle.
 test('over a full cycle each general subject gets exactly one morning', () => {
   const counts = new Map();
   for (const day of dates(POOL.length)) {
@@ -114,10 +123,11 @@ test('the slot offset clears the longest block of one category', () => {
 test('the slot is read from the clock, IST 06:00 and 17:00 being 00:30 and 11:30 UTC', () => {
   assert.equal(slotFor(new Date('2026-03-14T00:30:00Z')), 'morning');
   assert.equal(slotFor(new Date('2026-03-14T11:30:00Z')), 'evening');
-  // A run that starts late is still the run it was scheduled as.
-  assert.equal(slotFor(new Date('2026-03-14T05:45:00Z')), 'morning');
+  // A run that starts late, but still inside the morning window (before 05:00 UTC).
+  assert.equal(slotFor(new Date('2026-03-14T04:30:00Z')), 'morning');
+  assert.equal(slotFor(new Date('2026-03-14T05:45:00Z')), 'midday');
 });
 
 test('an unknown slot is refused rather than silently treated as morning', () => {
-  assert.throws(() => categoryFor('2026-03-14', 'afternoon'), /Unknown slot/);
+  assert.throws(() => categoryFor('2026-03-14', 'night'), /Unknown slot/);
 });

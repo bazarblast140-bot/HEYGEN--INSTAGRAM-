@@ -12,7 +12,12 @@ export const POOL = [
 
 export const STRIDE = 5;
 export const SLIDES = 10;
-export const SLOT_OFFSET = 8;
+// How far the evening finance pick sits from the morning one.
+// 8 is a multiple of this pool, so the evening step wrapped to zero and both
+// slots landed on the same category. Half the pool (4) is also wrong here:
+// with stride 5 it is the morning of four days later. 3 moves the evening
+// and stays off the next five mornings.
+export const SLOT_OFFSET = 3;
 export const SLOTS = ['morning', 'midday', 'afternoon', 'evening'];
 export const FINANCE = POOL;
 
@@ -168,13 +173,17 @@ export function slotFor(date = new Date()) {
   return 'evening';
 };
 
+// Midday and afternoon are fixed topics. They are not steps in the finance
+// walk — counting them put evening three offsets away, and that distance
+// collapsed to the morning category.
+const FINANCE_SLOTS = ['morning', 'evening'];
+
 // Fixed mapping so 4 slots always feel different:
 // midday = AI, afternoon = news, morning/evening = finance rotation.
 export function categoryFor(date = new Date(), slot = 'evening') {
   if (slot === 'midday') return 'ai-news';
   if (slot === 'afternoon') return 'latest-news';
-  const index = SLOTS.indexOf(slot);
+  const index = FINANCE_SLOTS.indexOf(slot);
   if (index === -1) throw new Error('Unknown slot ' + slot + ' — ' + SLOTS.join(' or ') + '.');
-  // morning=0, evening=3 → different finance categories
   return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
 };
