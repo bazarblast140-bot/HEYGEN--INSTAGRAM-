@@ -190,12 +190,13 @@ export async function callOpenAICompatible({ provider, system, user, schema }) {
   }
 
   const msg = payload?.choices?.[0]?.message || {};
+  const hasDraft = (obj) => Boolean(obj && (obj.segments || obj.beats || obj.slides));
   let parsed = extractJsonObject(msg.content);
   // Thinking models sometimes leave content empty, or return a stub object,
-  // and put the spec in reasoning_content.
-  if ((!parsed || parsed.segments == null) && typeof msg.reasoning_content === 'string') {
+  // and put the spec in reasoning_content. A `beats` array is a real draft.
+  if (!hasDraft(parsed) && typeof msg.reasoning_content === 'string') {
     const fromReasoning = extractJsonObject(msg.reasoning_content);
-    if (fromReasoning && (fromReasoning.segments || fromReasoning.slides)) parsed = fromReasoning;
+    if (hasDraft(fromReasoning)) parsed = fromReasoning;
   }
   if (!parsed) {
     const failure = describeProviderFailure({

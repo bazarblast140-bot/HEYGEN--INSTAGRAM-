@@ -81,6 +81,9 @@ jobs:
           SCRIPT_PROVIDER: ${{ vars.SCRIPT_PROVIDER }}
           SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          # Optional. Leave unset to use src/config.js ELEVEN
+          # (voice dqdRKSzyiQodrYo9UFzG, model eleven_multilingual_v2).
+          # Set repository variables ELEVENLABS_VOICE_ID and ELEVENLABS_MODEL to override.
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
           ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
           TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}

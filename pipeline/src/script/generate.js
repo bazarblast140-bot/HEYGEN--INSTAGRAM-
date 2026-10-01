@@ -63,6 +63,121 @@ const ReelSpec = z.object({
   hashtags: z.array(z.string()),
 });
 
+const BEAT_TYPES = new Set(['hook', 'cutin', 'chart', 'card', 'stock', 'article']);
+const FAMILIES = new Set(['market', 'ai', 'fund', 'policy', 'commodity']);
+
+function asString(value) {
+  return value == null ? '' : String(value);
+}
+
+function asNullableString(value) {
+  if (value == null || String(value).trim() === '') return null;
+  return String(value);
+}
+
+function asNullableNumber(value) {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeStat(stat) {
+  if (!stat || typeof stat !== 'object') return null;
+  const direction = ['up', 'down', 'flat'].includes(stat.direction) ? stat.direction : 'flat';
+  if (!asString(stat.value).trim() && !asString(stat.label).trim()) return null;
+  return { value: asString(stat.value), label: asString(stat.label), direction };
+}
+
+function normalizeCard(beat) {
+  const card = beat?.card;
+  if (card && typeof card === 'object' && !Array.isArray(card)) {
+    return {
+      chips: Array.isArray(card.chips) ? card.chips.map(asString).filter((c) => c.trim()) : [],
+      headline: asString(card.headline || beat.headline || beat.caption),
+      power: asString(card.power || beat.power),
+      stat: normalizeStat(card.stat),
+      footnote: asString(card.footnote),
+    };
+  }
+  // A chart draws itself. Every other beat needs a card, so a missing one is
+  // built from the line the model did write.
+  if (beat?.type === 'chart') return null;
+  return {
+    chips: [],
+    headline: asString(beat?.headline || beat?.caption),
+    power: asString(beat?.power),
+    stat: null,
+    footnote: '',
+  };
+}
+
+function normalizeArticle(article, type) {
+  if (type !== 'article' || !article || typeof article !== 'object' || Array.isArray(article)) return null;
+  return {
+    source: asString(article.source),
+    date: asString(article.date),
+    headline: asString(article.headline),
+    body: Array.isArray(article.body) ? article.body.map(asString) : [],
+    highlight: asString(article.highlight),
+  };
+}
+
+/**
+ * DeepSeek names the array `beats`, omits `body`, and leaves optional beat
+ * fields out instead of sending null. The schema still wants one shape.
+ */
+export function normalizeReelDraft(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const list = Array.isArray(src.segments) ? src.segments
+    : Array.isArray(src.beats) ? src.beats
+    : [];
+
+  const segments = list.filter((beat) => beat && typeof beat === 'object').map((beat) => {
+    const type = BEAT_TYPES.has(beat.type) ? beat.type : 'card';
+    const query = type === 'stock'
+      ? (asNullableString(beat.query) || 'stock market screen')
+      : asNullableString(beat.query);
+    return {
+      type,
+      seconds: asNullableNumber(beat.seconds),
+      say: asString(beat.say),
+      caption: asString(beat.caption),
+      power: asString(beat.power),
+      card: normalizeCard({ ...beat, type }),
+      query,
+      article: normalizeArticle(beat.article, type),
+    };
+  });
+
+  const spoken = segments.map((s) => s.say.trim()).filter(Boolean).join(' ');
+  const body = typeof src.body === 'string' && src.body.trim() ? src.body.trim() : spoken;
+  const hashtags = Array.isArray(src.hashtags)
+    ? src.hashtags.map(asString)
+    : typeof src.hashtags === 'string'
+      ? src.hashtags.split(/\s+/).filter(Boolean)
+      : [];
+
+  return {
+    topic: asString(src.topic),
+    family: FAMILIES.has(src.family) ? src.family : 'market',
+    verdict: asString(src.verdict),
+    segments,
+    body,
+    caption: asString(src.caption),
+    hashtags,
+  };
+}
+
+const ParsedReelSpec = z.preprocess(
+  (value) => normalizeReelDraft(value),
+  ReelSpec,
+);
+
+/** Accept the shapes DeepSeek actually returns, then validate the reel schema. */
+export function parseReelDraft(raw) {
+  return ParsedReelSpec.safeParse(raw);
+}
+
 export const MODEL = env('SCRIPT_MODEL') || 'claude-fable-5';
 
 /**
@@ -237,7 +352,7 @@ export async function generateSpec({
         ? await callAnthropic({ system: SYSTEM, user: userPrompt, model: chosenModel, effort })
         : await callOpenAICompatible({
             provider: { ...provider, model: chosenModel },
-            system: SYSTEM, user: userPrompt, schema: ReelSpec,
+            system: SYSTEM, user: userPrompt, schema: ParsedReelSpec,
           });
 
       lastProblems = validateShape(output, recentTopics);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 import { resolveProvider } from '../pipeline/src/script/providers.js';
-import { resolveVoiceProvider, synthesise, VOICE_PROVIDERS } from '../pipeline/src/presenter/voice-providers.js';
+import { elevenSettings, resolveVoiceProvider, synthesise, VOICE_PROVIDERS } from '../pipeline/src/presenter/voice-providers.js';
 import { SYSTEM, buildUserPrompt } from '../pipeline/src/script/prompt.js';
 import { brollNormalise } from '../pipeline/src/assemble/timeline.js';
 
@@ -44,6 +44,22 @@ test('DeepSeek writes the script when its key is set, even if other keys exist',
 test('another script provider is optional when DeepSeek is not configured', () => {
   const provider = withEnv({ MOONSHOT_API_KEY: 'test-moonshot' }, () => resolveProvider());
   assert.equal(provider.name, 'moonshot');
+});
+
+test('a blank ElevenLabs voice or model var keeps the built-in default', () => {
+  const blank = withEnv({
+    ELEVENLABS_VOICE_ID: '',
+    ELEVENLABS_MODEL: '   ',
+  }, () => elevenSettings());
+  assert.equal(blank.voiceId, 'dqdRKSzyiQodrYo9UFzG');
+  assert.equal(blank.model, 'eleven_multilingual_v2');
+
+  const override = withEnv({
+    ELEVENLABS_VOICE_ID: 'voice-from-the-repo-var',
+    ELEVENLABS_MODEL: 'eleven_turbo_v2_5',
+  }, () => elevenSettings());
+  assert.equal(override.voiceId, 'voice-from-the-repo-var');
+  assert.equal(override.model, 'eleven_turbo_v2_5');
 });
 
 test('the reel voice is ElevenLabs and does not require a HeyGen key', async () => {
