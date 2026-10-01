@@ -37,18 +37,47 @@ const FALLBACK_NICHE = ['#nifty50', '#banknifty', '#nse', '#fiidii', '#priceacti
  * more. A line that is that invitation is dropped so the caption carries the
  * fixed line once.
  */
+// `\b` is ASCII-only, so Devanagari invitations ("सेव करें") need a letter boundary.
+const EDGE = String.raw`(?:^|[^\p{L}\p{N}])`;
+const END = String.raw`(?=$|[^\p{L}\p{N}])`;
+const INVITE = String.raw`(?:karo|karein|karen|kar|करो|करें|करे|कर)`;
+
+function ctaHits(text) {
+  const t = String(text || '');
+  const save = new RegExp(`${EDGE}(?:save|सेव)${END}(?:\\s*,|\\s*${INVITE})`, 'iu').test(t);
+  const share = new RegExp(`${EDGE}share\\s*,`, 'iu').test(t)
+    || new RegExp(`${EDGE}(?:share|शेयर)\\s*${INVITE}`, 'iu').test(t);
+  const comment = /aapka view|आपका व्यू|apna sawal/i.test(t)
+    || new RegExp(`${EDGE}(?:comment|कमेंट|कमेन्ट)\\s*(?:${INVITE}|mein|में)`, 'iu').test(t)
+    || (new RegExp(`${EDGE}comment${END}`, 'iu').test(t) && new RegExp(`${EDGE}(?:save|share)${END}`, 'iu').test(t));
+  const follow = new RegExp(`${EDGE}(?:follow|फॉलो|फ़ॉलो)\\s*${INVITE}`, 'iu').test(t);
+  return [save, share, comment, follow].filter(Boolean).length;
+}
+
 export function isModelCtaLine(line) {
   const t = String(line || '').trim();
   if (!t) return false;
   if (t === ENGAGEMENT) return true;
   if (/^link in bio\.?$/i.test(t)) return true;
-  const save = /(सेव|save)\s*कर|(save|share)\s+karo/i.test(t);
-  const follow = /(फॉलो|फ़ॉलो|follow)\s*(कर|karo)/i.test(t);
-  const share = /(शेयर|share)\s*(कर|karo)/i.test(t);
-  const comment = /(कमेंट|कमेन्ट|comment)\s*(कर|mein|में|karo)/i.test(t);
-  const hits = [save, follow, share, comment].filter(Boolean).length;
+  const hits = ctaHits(t);
   if (hits >= 2) return true;
   return hits === 1 && t.length < 140 && !/\d/.test(t);
+}
+
+/** Drop save/share/comment sentences so the standard CTA is the only one. */
+export function stripCtaSentences(text) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => line
+      .split(/(?<=[.?!।])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence && !isModelCtaLine(sentence))
+      .join(' ')
+      .trim())
+    .filter((line, index, lines) => line || (index > 0 && lines[index - 1]))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export function nicheHashtags(tags, { caption = '', limit = MAX_HASHTAGS } = {}) {
@@ -104,16 +133,7 @@ export function shapeCaption({ caption = '', hashtags = [], brandTag, limit = MA
   const rawBody = trailing ? cleaned.slice(0, trailing.index).trim() : cleaned;
   const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
 
-  const body = rawBody
-    .split('\n')
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return true;
-      return !isModelCtaLine(trimmed);
-    })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const body = stripCtaSentences(rawBody);
 
   const tags = nicheHashtags([...inline, ...hashtags, brandTag], { caption: body, limit });
 
