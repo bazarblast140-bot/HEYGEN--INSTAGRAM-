@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 
 import { checkSources } from '../pipeline/src/carousel/generate.js';
 import { fetchStories, ON_TOPIC, OFF_TOPIC } from '../pipeline/src/carousel/news.js';
-import { slotFor, SLOTS, categoryFor } from '../pipeline/src/carousel/categories.js';
+import { slotFor, categoryFor, POOL, SLOT_OFFSET } from '../pipeline/src/carousel/categories.js';
 
 const sites = new Set(['arstechnica.com', 'nature.com', 'theverge.com']);
 
@@ -64,12 +64,17 @@ test('stories come back sorted by points, not by recency', async () => {
   } finally { globalThis.fetch = original; }
 });
 
-// The midday slot must not consume a step of the fact rotation, or the morning
-// and evening categories would drift.
-test('midday is a slot but not a rotation slot', () => {
+// Midday is a real post (today's AI), but it must not take a step of the
+// finance walk. If it did, morning and evening would share an index whenever
+// the offset wraps the pool.
+test('midday is a fixed topic and does not step the finance rotation', () => {
   assert.equal(slotFor(new Date('2026-08-31T07:37:00Z')), 'midday');
-  assert.ok(!SLOTS.includes('midday'));
-  assert.throws(() => categoryFor('2026-08-31', 'midday'), /Unknown slot/);
+  assert.equal(categoryFor('2026-08-31', 'midday'), 'ai-news');
+  assert.equal(categoryFor('2026-09-01', 'midday'), 'ai-news');
+  const morning = categoryFor('2026-08-31', 'morning');
+  const evening = categoryFor('2026-08-31', 'evening');
+  assert.notEqual(morning, evening);
+  assert.equal(POOL.indexOf(evening), (POOL.indexOf(morning) + SLOT_OFFSET) % POOL.length);
 });
 
 // From the first live technology build: the model wrote the query "linux

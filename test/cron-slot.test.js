@@ -14,16 +14,21 @@ import { CRON_SLOTS, slotForCron, slotFor, SLOTS } from '../pipeline/src/carouse
 const WORKFLOW = new URL('../.github/workflows/carousel.yml', import.meta.url);
 
 test('a late run keeps the slot it was scheduled for', () => {
-  // 00:37 UTC scheduled, 07:05 UTC delivered.
+  // 02:37 UTC scheduled, 07:05 UTC delivered.
   const late = new Date('2026-09-01T07:05:00Z');
   assert.equal(slotFor(late), 'midday', 'precondition: the clock says midday');
-  assert.equal(slotForCron('37 0 * * *'), 'morning');
+  assert.equal(slotForCron('37 2 * * *'), 'morning');
 });
 
 test('both firings of a slot agree', () => {
-  assert.equal(slotForCron('37 0 * * *'), slotForCron('22 1 * * *'));
-  assert.equal(slotForCron('37 7 * * *'), slotForCron('22 8 * * *'));
+  assert.equal(slotForCron('37 2 * * *'), slotForCron('22 3 * * *'));
+  assert.equal(slotForCron('37 6 * * *'), slotForCron('22 7 * * *'));
+  assert.equal(slotForCron('37 9 * * *'), slotForCron('22 10 * * *'));
   assert.equal(slotForCron('37 11 * * *'), slotForCron('22 12 * * *'));
+  assert.equal(slotForCron('37 2 * * *'), 'morning');
+  assert.equal(slotForCron('37 6 * * *'), 'midday');
+  assert.equal(slotForCron('37 9 * * *'), 'afternoon');
+  assert.equal(slotForCron('37 11 * * *'), 'evening');
 });
 
 test('an unknown cron falls back rather than guessing', () => {
@@ -33,7 +38,7 @@ test('an unknown cron falls back rather than guessing', () => {
 });
 
 test('extra whitespace still resolves', () => {
-  assert.equal(slotForCron('  37   0 * * *  '), 'morning');
+  assert.equal(slotForCron('  37   2 * * *  '), 'morning');
 });
 
 // The drift that would switch this off silently: a cron added to the workflow

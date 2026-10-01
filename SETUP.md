@@ -111,12 +111,12 @@ on it works once, then fails every morning after.
 
 **Actions → Set up Instagram token → Run workflow** → paste the short-lived token → Run.
 
-When it finishes, download the **instagram-token** artifact, open the file, and paste
-the line into the secret `IG_ACCESS_TOKEN`. Then delete the downloaded file.
+When it finishes, the Page token is stored as the repository secret
+`IG_ACCESS_TOKEN`. Nothing is printed and nothing is uploaded. On a public
+repository an Actions artifact can be downloaded by any logged-in user, so the
+token is not handed back as a file.
 
 The result is a Page token, which does not expire — so this is a one-time job.
-The token is handed over as a private artifact rather than printed, because
-workflow logs are not a safe place for a credential.
 
 ## 5. Run it
 

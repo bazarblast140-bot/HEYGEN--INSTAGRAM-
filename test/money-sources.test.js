@@ -21,11 +21,14 @@ const spec = (category, slides) => ({ category, topic: 'विषय', slides })
 
 test('it applies to the money pool and to nothing else', () => {
   for (const c of FINANCE) assert.equal(isMoney(c), true, `${c} should be money`);
-  for (const c of POOL) assert.equal(isMoney(c), false, `${c} should not be money`);
+  for (const c of ['ai-news', 'latest-news', 'space']) {
+    assert.equal(isMoney(c), false, `${c} should not be money`);
+  }
+  assert.equal(POOL.some((c) => !FINANCE.includes(c)), false);
 });
 
 test('a source with no year is flagged', () => {
-  const problems = checkMoneySources(spec('economy', [
+  const problems = checkMoneySources(spec('fundamentals', [
     slide({ band: 'center', subline: null, source: null }),
     slide({ source: 'भारतीय रिज़र्व बैंक (RBI), ऐतिहासिक आँकड़े' }),
   ]));
@@ -35,7 +38,7 @@ test('a source with no year is flagged', () => {
 });
 
 test('a source naming its report and date passes', () => {
-  const problems = checkMoneySources(spec('economy', [
+  const problems = checkMoneySources(spec('fundamentals', [
     slide({ source: 'RBI, साप्ताहिक सांख्यिकीय पूरक, सितंबर 2025' }),
     slide({ source: 'विश्व बैंक, World Development Indicators 2024' }),
   ]));
@@ -43,7 +46,7 @@ test('a source naming its report and date passes', () => {
 });
 
 test('the cover and the follow card are asked for nothing', () => {
-  const problems = checkMoneySources(spec('markets', [
+  const problems = checkMoneySources(spec('fundamentals', [
     slide({ band: 'center', subline: null, source: null }),
     slide({ cta: true, subline: 'और अपडेट के लिए', source: null }),
   ]));
@@ -56,7 +59,7 @@ test('a science post is left alone', () => {
 });
 
 test('it is advisory: softProblems carries it, validateShape does not', () => {
-  const bad = spec('economy', [slide({ source: 'RBI' })]);
+  const bad = spec('fundamentals', [slide({ source: 'RBI' })]);
   assert.equal(softProblems(bad).some((p) => /no year/.test(p)), true);
   assert.equal(validateShape(bad, []).some((p) => /no year/.test(p)), false);
 });
