@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
+import { readTrendPrompt } from '../research/load.js';
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from './providers.js';
 import { readHistory, findRepeat, recordTopic } from './topics.js';
 import { FAMILY_NAMES } from './families.js';
@@ -331,6 +332,7 @@ export async function generateSpec({
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   const recentTopics = await readHistory();
+  const trendNote = await readTrendPrompt();
 
   let lastProblems = [];
   // Schema slips from an empty body get more than one retry. An auth or
@@ -338,6 +340,7 @@ export async function generateSpec({
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildUserPrompt({ market, news, date, recentTopics });
+    if (trendNote) userPrompt += `\n\n${trendNote}`;
 
     // A second pass is given the specific complaints rather than being asked
     // again and hoped at.
