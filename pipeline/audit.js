@@ -67,7 +67,7 @@ const missing = [];
 for (let d = 1; d <= DAYS && oldest; d += 1) {
   const day = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
   if (day < oldest) continue;
-  for (const slot of ['morning', 'midday', 'evening']) {
+  for (const slot of ['midday', 'evening']) {
     if (!entries.some((e) => e.date === `${day} ${slot}`)) missing.push(`${day} ${slot}`);
   }
 }

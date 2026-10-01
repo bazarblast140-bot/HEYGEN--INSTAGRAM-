@@ -64,9 +64,9 @@ in a row on the same kind of subject is itself a repeat, even when the facts dif
 </task>${alreadyCovered}${proxy}
 
 <context>
-The reel is 9:16, roughly 26 to 32 seconds, posted at 7:00 AM IST before the market opens.
+The reel is 9:16 and 20 to 30 seconds.
 Structure, in order:
-  1. One "hook" beat — Rajesh on camera, opens the reel, states what the viewer is about to learn.
+  1. One "hook" beat — a full-frame text card, not the presenter. The first frame the viewer sees is a bold on-screen hook. Do not open with "Namaste", "Namaste doston", or "main Rajesh". The spoken line is the hook itself.
   2. Three to five middle beats — a chart beat, one "stock" footage beat, and card beats.
   3. One "cutin" beat — Rajesh on camera again for two to three seconds, right before the most important number.
   4. One final card beat — the call to action.
@@ -76,7 +76,7 @@ and each beat's picture is held for exactly as long as its own words take. A bea
 with no words would be a silent gap, so there are none.
 
 Beat types:
-  "hook"  — presenter on camera over a card. Opens the reel.
+  "hook"  — a full-frame text card. Opens the reel. Bold hook, no greeting.
   "cutin" — presenter on camera again, 6 to 12 words, right before the biggest number.
             Its card must NOT repeat the next beat's headline: when the avatar is
             unavailable this beat falls back to a full-frame card, and two beats
@@ -153,8 +153,8 @@ Per beat:
              Give the beat a "card" as well — it is what renders if the search
              comes back empty.
 
-Total spoken length across all beats: 70 to 95 words. That lands the reel near
-30 seconds when read aloud.
+Total spoken length across all beats: 50 to 80 words. That lands the reel
+between 20 and 30 seconds when read aloud.
 
 Also produce:
   family     — which kind of subject this is. It sets the reel's whole look, so
@@ -165,8 +165,10 @@ ${familyMenu()}
                "H D F C Bank Q2 margins", not "aaj ka bada move". This is a label
                for the ledger, not a headline, so no hype and no punctuation.
   verdict    — two or three words describing the session, for the chart beat.
-  caption    — the Instagram caption. 2 to 3 sentences, then the comment prompt.
-  hashtags   — 8 to 12, lowercase, Indian market relevant.
+  caption    — the Instagram caption. Open with a strong first line, then one or
+               two short Hinglish lines, then ask the viewer to save, share, and
+               comment. No URLs. No "Namaste".
+  hashtags   — at most 5, lowercase, niche Indian-market tags.
 </output_format>
 
 <example>

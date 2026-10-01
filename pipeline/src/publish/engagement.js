@@ -11,16 +11,13 @@
 // it belongs to, so the two are joined on that.
 
 import { call } from './instagram.js';
+import { slotFor } from '../carousel/categories.js';
 
-/** IST is UTC+5:30, and the slots are 06:07, 13:07 and 17:07 there. */
+/** The posting windows are 12:00–13:45 and 19:00–20:45 IST. Anything else is not a slot. */
 export function slotOfPost(timestamp) {
   const t = new Date(timestamp);
   if (Number.isNaN(t.getTime())) return null;
-  const ist = new Date(t.getTime() + (5.5 * 60 * 60 * 1000));
-  const hour = ist.getUTCHours();
-  if (hour < 11) return 'morning';
-  if (hour < 16) return 'midday';
-  return 'evening';
+  return slotFor(t);
 }
 
 export function dateOfPost(timestamp) {

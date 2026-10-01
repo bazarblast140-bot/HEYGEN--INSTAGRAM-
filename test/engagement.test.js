@@ -7,17 +7,20 @@ import assert from 'node:assert/strict';
 
 import { slotOfPost, dateOfPost, join, byAngle } from '../pipeline/src/publish/engagement.js';
 
-// Instagram timestamps are UTC; the slots are 06:07, 13:07 and 17:07 IST.
+// Instagram timestamps are UTC. The windows are 12:00–13:45 and 19:00–20:45 IST.
 test('a post lands in the slot it was published for', () => {
-  assert.equal(slotOfPost('2026-09-10T00:40:00+0000'), 'morning');   // 06:10 IST
+  assert.equal(slotOfPost('2026-09-10T07:00:00+0000'), 'midday');    // 12:30 IST
   assert.equal(slotOfPost('2026-09-10T07:40:00+0000'), 'midday');    // 13:10 IST
-  assert.equal(slotOfPost('2026-09-10T11:40:00+0000'), 'evening');   // 17:10 IST
+  assert.equal(slotOfPost('2026-09-10T14:00:00+0000'), 'evening');   // 19:30 IST
+  assert.equal(slotOfPost('2026-09-10T00:40:00+0000'), null);        // 06:10 IST
+  assert.equal(slotOfPost('2026-09-10T11:40:00+0000'), null);        // 17:10 IST
 });
 
-// A late post must still count as its own slot, not the next one.
+// An hour later is still inside the same window. Further out is not a slot.
 test('a post an hour late is still its own slot', () => {
-  assert.equal(slotOfPost('2026-09-10T02:00:00+0000'), 'morning');   // 07:30 IST
-  assert.equal(slotOfPost('2026-09-10T09:30:00+0000'), 'midday');    // 15:00 IST
+  assert.equal(slotOfPost('2026-09-10T08:00:00+0000'), 'midday');    // 13:30 IST
+  assert.equal(slotOfPost('2026-09-10T15:00:00+0000'), 'evening');   // 20:30 IST
+  assert.equal(slotOfPost('2026-09-10T09:30:00+0000'), null);        // 15:00 IST
 });
 
 test('the date is the Indian date, not the UTC one', () => {

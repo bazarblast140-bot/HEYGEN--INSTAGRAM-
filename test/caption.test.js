@@ -14,13 +14,23 @@ test('hashtags the model wrote into the caption are not printed twice', () => {
   }, '#factvizer');
 
   assert.equal(caption.match(/#विज्ञान/g).length, 1);
-  assert.equal(caption, 'क्या आप जानते हैं? 🐢\n\nजानवरों की दुनिया.\n\n#विज्ञान #जानवर #turtle #animals #factvizer');
+  assert.equal(caption, [
+    'क्या आप जानते हैं? 🐢',
+    '',
+    'जानवरों की दुनिया.',
+    '',
+    'Save karo, share karo, comment mein apna sawal likho.',
+    '',
+    'Link in bio.',
+    '',
+    '#विज्ञान #जानवर #turtle #animals #factvizer',
+  ].join('\n'));
 });
 
 // Instagram treats these as one tag. A reader sees two.
 test('the same tag in two cases is one tag', () => {
   const caption = composeCaption({ caption: 'text', hashtags: ['#Venus', '#venus'] }, '#factvizer');
-  assert.equal(caption, 'text\n\n#Venus #factvizer');
+  assert.equal(caption, 'text\n\nSave karo, share karo, comment mein apna sawal likho.\n\nLink in bio.\n\n#Venus #factvizer');
 });
 
 test('the brand tag is always there, exactly once', () => {
@@ -51,4 +61,26 @@ test('a long opening line is split at its first sentence end', () => {
 test('a short opening line is left exactly as written', () => {
   const fine = 'क्या आप जानते हैं? 🐢\n\nबाक़ी बात.';
   assert.equal(reflowHook(fine), fine);
+});
+
+test('a caption drops referral links and keeps at most five tags', () => {
+  const caption = composeCaption({
+    caption: [
+      'ROCE गिर रहा है।',
+      '',
+      'यह referral link है। इनमें से किसी link से account खोलने पर हमें referral benefit मिल सकता है।',
+      'Zerodha: https://zerodha.com/open-account?c=KU3466',
+      'Upstox: https://upstox.onelink.me/0H1s/3T23',
+      'INDmoney: https://indmoney.onelink.me/RmHC/615z6rm1',
+      'Delta Exchange: https://www.delta.exchange/?code=TPBYQA',
+    ].join('\n'),
+    hashtags: ['#roce', '#stocks', '#nifty', '#investing', '#trading', '#extra', '#sixth'],
+  });
+
+  assert.match(caption, /^ROCE गिर रहा है।/);
+  assert.match(caption, /Save karo, share karo, comment mein apna sawal likho\./);
+  assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
+  assert.equal(caption.includes('http'), false);
+  assert.equal(caption.includes('Zerodha'), false);
+  assert.equal((caption.match(/#/g) || []).length, 5);
 });

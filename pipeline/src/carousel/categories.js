@@ -1,9 +1,8 @@
 // Instagram carousel categories for @rajesh_technical_trader.
-// 4 slots/day → 4 different topics:
-//   morning   → finance education (rotating)
-//   midday    → latest AI topics / tech AI news
-//   afternoon → latest news (markets + tech + India)
-//   evening   → finance education (rotating)
+// Two finance carousels a day. AI news and the general-news digest are off.
+//   midday   → optional finance post, aimed at 12:30 IST
+//   evening  → the main finance post, aimed at 19:30 IST
+// A story goes out only with the evening post, so the account posts at most one.
 
 export const POOL = [
   'fundamentals', 'options', 'intraday', 'stocks',
@@ -18,7 +17,8 @@ export const SLIDES = 10;
 // with stride 5 it is the morning of four days later. 3 moves the evening
 // and stays off the next five mornings.
 export const SLOT_OFFSET = 3;
-export const SLOTS = ['morning', 'midday', 'afternoon', 'evening'];
+export const SLOTS = ['midday', 'evening'];
+export const MAIN_SLOT = 'evening';
 export const FINANCE = POOL;
 
 export const TOPIC_SEEDS = {
@@ -152,13 +152,37 @@ export function dayNumber(date = new Date()) {
   return Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000);
 };
 
-// Main fire + one catch-up per slot (IST).
+// Main fire + one catch-up per slot. Times are UTC; IST is UTC+5:30.
+// midday  12:30 / 12:52 IST → 07:00 / 07:22 UTC
+// evening 19:30 / 19:52 IST → 14:00 / 14:22 UTC
 export const CRON_SLOTS = {
-  '37 2 * * *': 'morning', '22 3 * * *': 'morning',
-  '37 6 * * *': 'midday', '22 7 * * *': 'midday',
-  '37 9 * * *': 'afternoon', '22 10 * * *': 'afternoon',
-  '37 11 * * *': 'evening', '22 12 * * *': 'evening',
+  '0 7 * * *': 'midday', '22 7 * * *': 'midday',
+  '0 14 * * *': 'evening', '22 14 * * *': 'evening',
 };
+
+// Posting windows in minutes from midnight IST. A run that does not name a
+// slot may post only inside one of these. 06:07, 17:07 and the other old
+// triggers fall outside both, so they do not publish.
+export const WINDOWS = {
+  midday: { start: 12 * 60, end: 13 * 60 + 45 },
+  evening: { start: 19 * 60, end: 20 * 60 + 45 },
+};
+
+export function istParts(date = new Date()) {
+  const when = date instanceof Date ? date : new Date(date);
+  const ist = new Date(when.getTime() + (5.5 * 60 * 60 * 1000));
+  return {
+    date: ist.toISOString().slice(0, 10),
+    minutes: ist.getUTCHours() * 60 + ist.getUTCMinutes(),
+  };
+}
+
+export function inWindow(slot, date = new Date()) {
+  const window = WINDOWS[slot];
+  if (!window) return false;
+  const { minutes } = istParts(date);
+  return minutes >= window.start && minutes < window.end;
+}
 
 export function slotForCron(cron) {
   const key = String(cron || '').trim().replace(/\s+/g, ' ');
@@ -166,24 +190,62 @@ export function slotForCron(cron) {
 };
 
 export function slotFor(date = new Date()) {
-  const hour = typeof date === 'string' ? 0 : date.getUTCHours();
-  if (hour < 5) return 'morning';
-  if (hour < 8) return 'midday';
-  if (hour < 11) return 'afternoon';
-  return 'evening';
+  const when = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(when.getTime())) return null;
+  for (const slot of SLOTS) {
+    if (inWindow(slot, when)) return slot;
+  }
+  return null;
 };
 
-// Midday and afternoon are fixed topics. They are not steps in the finance
-// walk — counting them put evening three offsets away, and that distance
-// collapsed to the morning category.
-const FINANCE_SLOTS = ['morning', 'evening'];
+// Both remaining slots are finance. Midday is not an AI step and afternoon
+// is not a news step; counting those used to pin both finance posts together.
+const FINANCE_SLOTS = ['midday', 'evening'];
 
-// Fixed mapping so 4 slots always feel different:
-// midday = AI, afternoon = news, morning/evening = finance rotation.
 export function categoryFor(date = new Date(), slot = 'evening') {
-  if (slot === 'midday') return 'ai-news';
-  if (slot === 'afternoon') return 'latest-news';
   const index = FINANCE_SLOTS.indexOf(slot);
   if (index === -1) throw new Error('Unknown slot ' + slot + ' — ' + SLOTS.join(' or ') + '.');
   return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
+};
+
+/**
+ * Decide whether this run may publish.
+ *
+ * A GitHub schedule carries its slot in the cron, and that cron is often
+ * hours late — the slot still stands, and the ledger stops a second copy.
+ * Anything else (a workflow_dispatch with no slot, an old external trigger)
+ * has to be inside the slot's IST window. Outside it, the run does not post.
+ */
+export function resolveRun({
+  event = '',
+  dispatchSlot = '',
+  cron = '',
+  now = new Date(),
+  entries = [],
+} = {}) {
+  const { date } = istParts(now);
+  const raw = String(dispatchSlot || '').trim();
+  const explicit = raw && raw !== 'auto' ? raw : '';
+  const fromCron = slotForCron(cron);
+
+  let slot = '';
+  let reason = 'due';
+
+  if (event === 'schedule' && fromCron) {
+    slot = fromCron;
+  } else if (explicit) {
+    slot = explicit;
+    if (!SLOTS.includes(explicit)) reason = 'unknown';
+    else if (!inWindow(explicit, now)) reason = 'wrong-time';
+  } else {
+    slot = slotFor(now) || '';
+    if (!slot) reason = 'outside';
+  }
+
+  const key = slot ? `${date} ${slot}` : '';
+  if (reason !== 'due') return { date, slot, key, pending: false, reason, posted: null };
+
+  const posted = entries.find((e) => e.date === key) || null;
+  if (posted) return { date, slot, key, pending: false, reason: 'duplicate', posted };
+  return { date, slot, key, pending: true, reason: 'due', posted: null };
 };

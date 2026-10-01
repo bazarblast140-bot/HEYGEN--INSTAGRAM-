@@ -111,6 +111,13 @@ on it works once, then fails every morning after.
 
 **Actions → Set up Instagram token → Run workflow** → paste the short-lived token → Run.
 
+Before the first run, add a repository secret named `SECRETS_ADMIN_TOKEN`.
+It is a fine-grained personal access token for this repository with
+permission to write Actions secrets (Administration → Secrets), or a classic
+token with the `repo` scope. The workflow's own `GITHUB_TOKEN` cannot create
+repository secrets, so without `SECRETS_ADMIN_TOKEN` the job stops and tells
+you so. It does not print the Instagram token and it does not upload a file.
+
 When it finishes, the Page token is stored as the repository secret
 `IG_ACCESS_TOKEN`. Nothing is printed and nothing is uploaded. On a public
 repository an Actions artifact can be downloaded by any logged-in user, so the

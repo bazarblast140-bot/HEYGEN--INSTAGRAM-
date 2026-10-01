@@ -45,12 +45,21 @@ test('a photo already used in this carousel is not offered again', () => {
   assert.equal(bestPhoto(candidates, { query: 'venus planet', used }), null);
 });
 
-// Ranking has to fall back to the library's own order, or two equally
-// irrelevant photos would be picked at random between runs.
-test('ties keep the source ordering', () => {
+// A described photo that shares nothing with the query is the unrelated
+// stock photo that used to land on a finance slide. Leave it out.
+test('a described photo that misses the topic is not used', () => {
   const chosen = bestPhoto([
     photo(1, 'a rock'),
     photo(2, 'a stone'),
+  ], { query: 'venus planet', used: new Set() });
+
+  assert.equal(chosen, null);
+});
+
+test('undescribed photos keep the source ordering', () => {
+  const chosen = bestPhoto([
+    photo(1, ''),
+    photo(2, ''),
   ], { query: 'venus planet', used: new Set() });
 
   assert.equal(chosen.id, 1);

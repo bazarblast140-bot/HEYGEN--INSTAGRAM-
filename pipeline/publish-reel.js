@@ -57,6 +57,7 @@ async function main() {
   const { mediaId } = await publishReel({
     videoUrl: args.url,
     caption,
+    coverUrl: args.cover,
     onStatus: (stage, value) => console.log(`  ${stage}: ${value}`),
   });
 

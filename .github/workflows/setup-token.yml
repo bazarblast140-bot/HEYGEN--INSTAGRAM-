@@ -6,6 +6,10 @@ name: Set up Instagram token
 #
 # The token is masked and never uploaded. On a public repository any logged-in
 # user can download Actions artifacts, so a file is not a safe handoff.
+#
+# The default Actions token cannot create repository secrets. This job uses
+# the optional SECRETS_ADMIN_TOKEN secret (a PAT that can write secrets) and
+# stops with instructions when that secret is missing.
 
 on:
   workflow_dispatch:
@@ -34,10 +38,17 @@ jobs:
           FB_APP_ID: ${{ vars.FB_APP_ID }}
           FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
           FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SECRETS_ADMIN_TOKEN }}
         run: |
           if [ -n "${SHORT_LIVED}" ]; then
             printf '%s\n' "::add-mask::${SHORT_LIVED}"
+          fi
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "SECRETS_ADMIN_TOKEN is not set, so this run cannot store IG_ACCESS_TOKEN."
+            echo "The default GITHUB_TOKEN cannot create repository secrets."
+            echo "Add a repository secret named SECRETS_ADMIN_TOKEN: a fine-grained personal access token for this repository with Administration permission to write secrets (or a classic token with the repo scope)."
+            echo "Then run this workflow again. The Instagram token was not printed and was not uploaded."
+            exit 1
           fi
           node --input-type=module -e '
             import { exchangeForLongLived, pageToken, inspect } from "./pipeline/src/publish/token.js";
