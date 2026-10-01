@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-// Build one complete reel from a spec.
+// Build one complete reel from a spec. No avatar and no HeyGen.
 //
 //   node pipeline/build-reel.js --spec pipeline/specs/default.json
 //   node pipeline/build-reel.js --spec ... --fixture      # synthetic market data
-//   node pipeline/build-reel.js --spec ... --no-avatar    # skip HeyGen entirely
+//   node pipeline/build-reel.js --spec ... --no-voice     # offline picture only
 //
-// Degrading rather than failing is the point of this file. HeyGen quota runs out,
-// stock providers rate-limit, and a market holiday leaves no fresh candles — none
-// of which should cost the day's post. Every optional stage falls back to something
-// publishable and records what it did in the run report.
+// The script is DeepSeek (or an optional fallback provider). The voice is
+// ElevenLabs. The picture is kinetic text, the chart, and stock b-roll.
+// If the script or the voice fails, the run stops and does not publish.
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -21,11 +20,9 @@ import { motifFor } from './src/script/families.js';
 import { syntheticSeries } from './src/harvest/fixture.js';
 import { captureScene } from './src/render/capture.js';
 import { encodeFrames, probe } from './src/assemble/encode.js';
-import { composeHybrid } from './src/assemble/compose.js';
 import { buildReel } from './src/assemble/timeline.js';
 import { burnCaptions } from './src/assemble/captions.js';
-import { renderPresenter } from './src/presenter/segment.js';
-import { renderNarration, cutPresenterWindow, alignBeats } from './src/presenter/narration.js';
+import { renderNarration, alignBeats } from './src/presenter/narration.js';
 import { fetchStock } from './src/stock/index.js';
 import { generateSpec, durationNote } from './src/script/generate.js';
 import { shapeCaption } from './src/publish/caption.js';
@@ -86,11 +83,6 @@ async function renderSceneClip({ scene, data, seconds, layout, out, workDir, tag
 }
 
 /**
- * Avatar panel, with a fallback. When HeyGen refuses — monthly limit reached,
- * insufficient credit, plan restriction — the beat is rebuilt as a full-frame
- * card and the line is spoken by TTS instead. The reel loses the face, not the day.
- */
-/**
  * A card that prints the same figure twice.
  *
  * The generator is free to set `power` and `stat.value` to the same string, and
@@ -103,32 +95,6 @@ function dedupeCard(card) {
   const power = String(card.power || '').trim().toLowerCase();
   const stat = String(card.stat?.value || '').trim().toLowerCase();
   return power && power === stat ? { ...card, power: '' } : card;
-}
-
-async function buildPresenterBeat({ segment, workDir, tag, narration, start, duration, fallbackCard, motif }) {
-  const cardPanel = await renderSceneClip({
-    scene: 'card.html', data: { ...segment.card, motif }, seconds: duration,
-    layout: 'panel', out: path.join(workDir, `${tag}-card.mp4`), workDir, tag: `${tag}-card`,
-  });
-
-  if (!narration?.video) {
-    // No presenter footage — either no narration at all, or narration that came
-    // from speech synthesis rather than an avatar render. Either way there is no
-    // face to stack, so show the card full frame instead of a blank panel.
-    const full = await renderSceneClip({
-      scene: 'card.html', data: { ...(fallbackCard ?? segment.card), motif }, seconds: duration,
-      layout: 'full', out: path.join(workDir, `${tag}-full.mp4`), workDir, tag: `${tag}-full`,
-    });
-    return { file: full, avatarSeconds: 0 };
-  }
-
-  const window = await cutPresenterWindow({
-    narration, start, duration, out: path.join(workDir, `${tag}-presenter.mp4`),
-  });
-
-  const out = path.join(workDir, `${tag}.mp4`);
-  await composeHybrid({ chart: cardPanel, presenter: window, out });
-  return { file: out, avatarSeconds: duration };
 }
 
 async function main() {
@@ -222,10 +188,8 @@ async function main() {
   const chartData = { ...series, summary, verdict: spec.verdict || '' };
   console.log(`  ${chartData.name}  ${chartData.summary.last.toFixed(2)}  ${chartData.summary.changePct >= 0 ? '+' : ''}${chartData.summary.changePct.toFixed(2)}%`);
 
-  // Two separate switches. --no-avatar drops the face and keeps the voice, which
-  // is what an exhausted HeyGen allowance does anyway; --no-voice is for offline
-  // builds where nothing can reach the API at all.
-  const wantFace = !args['no-avatar'];
+  // --no-voice is only for an offline picture check. A real build speaks, and
+  // it stops if ElevenLabs does not.
   const wantVoice = !args['no-voice'];
 
   // Every spoken word in the reel, in the order it is heard. One voice throughout.
@@ -238,20 +202,20 @@ async function main() {
     try {
       narration = await renderNarration({
         script: fullScript,
-        wantFace,
         workDir: path.join(workDir, 'narration'),
-        onStatus: (st) => process.stdout.write(`\r  ${st.status}      `),
         onNote: note,
       });
-      process.stdout.write('\n');
-      const how = narration.source === 'avatar' ? 'avatar render' : 'speech synthesis';
-      console.log(`  ${narration.duration.toFixed(1)}s in Rajesh's voice via ${how}`);
+      console.log(`  ${narration.duration.toFixed(1)}s via ElevenLabs (${narration.provider})`);
     } catch (err) {
-      // Not truncated. When the reel comes out silent this sentence is the only
-      // record of why, and the first provider's refusal had been filling the
-      // whole budget — hiding the second provider's, which was the actionable one.
-      note(`narration unavailable — the reel will be silent. ${err.message}`);
+      const status = err.status ? `HTTP ${err.status}` : 'HTTP n/a';
+      console.error(`ElevenLabs narration failed (${status}): ${err.message}`);
+      console.error('This run will not publish.');
+      process.exit(1);
     }
+  } else if ((args['require-generated'] || args.preview) && !args['no-voice']) {
+    console.error('ElevenLabs narration failed (HTTP n/a): the script has no spoken lines.');
+    console.error('This run will not publish.');
+    process.exit(1);
   }
 
   // Beat lengths follow the narration, so the picture lands on the words. Prefer
@@ -272,7 +236,6 @@ async function main() {
 
   const segments = [];
   const captionBeats = [];
-  let avatarSeconds = 0;
   let cursor = 0;
   let cardIndex = -1;
 
@@ -285,14 +248,12 @@ async function main() {
     let file = null;
     let beatTheme = 'dark';
     let captionSuppressed = false;
-    let showsPresenter = false;
     // An article beat is already dense with type. A burned-in caption on top of
     // a scrolling document is two things asking to be read at once.
     if (segment.type === 'article') captionSuppressed = true;
 
     if (i === 0 && segment.type === 'hook') {
-      // The first frame is a bold text card. Opening on the presenter saying
-      // "Namaste, main Rajesh" is what the viewer scrolls past.
+      // Frame 0 is the hook, fully drawn. There is no presenter.
       beatTheme = 'dark';
       const hookCard = segment.card || {
         chips: [],
@@ -308,11 +269,8 @@ async function main() {
       });
 
     } else if (segment.type === 'hook' || segment.type === 'cutin') {
-      // Without a face, a cut-in falls back to a full-frame card — and its card
-      // is often the same one the next beat is about to show. In the last cut
-      // "Lagataar teesre din / KHAREEDARI" filled the screen for seven seconds
-      // across two beats. When the neighbour repeats it, build a plain statement
-      // card out of this beat's own words instead.
+      // A cut-in is a kinetic text card, not a face. When it repeats the next
+      // card's headline, build the card from this beat's own words instead.
       const next = spec.segments[i + 1]?.card;
       const repeatsNeighbour = segment.card && next
         && String(segment.card.headline || '').trim().toLowerCase()
@@ -343,12 +301,12 @@ async function main() {
       // frame. The card is now carrying those words, so the caption stands down.
       if (repeatsNeighbour) captionSuppressed = true;
 
-      const beat = await buildPresenterBeat({
-        segment, workDir, tag, narration, start: cursor, duration, fallbackCard, motif,
+      file = await renderSceneClip({
+        scene: 'card.html',
+        data: { ...(fallbackCard || { chips: [], headline: segment.caption || '', power: segment.power || '', footnote: '' }), theme: 'ink', motif },
+        seconds: duration,
+        layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
       });
-      showsPresenter = beat.avatarSeconds > 0;
-      file = beat.file;
-      avatarSeconds += beat.avatarSeconds;
 
     } else if (segment.type === 'chart') {
       file = await renderSceneClip({
@@ -416,9 +374,7 @@ async function main() {
         start: cursor, duration, text: captionText,
         power: powerEchoes ? null : segment.power,
         theme: beatTheme,
-        // On a beat where the presenter is on screen, the bottom of the frame is
-        // his face. Captions go above the divider instead of across it.
-        region: showsPresenter ? 'upper' : 'lower',
+        region: 'lower',
       });
     }
 
@@ -426,11 +382,7 @@ async function main() {
     process.stdout.write('ok\n');
   }
 
-  const narrated = Boolean(narration);
-  // Losing the face is a downgrade worth posting; losing the voice is not.
-  if (narrated && narration.source === 'speech') {
-    note("no avatar allowance left — Rajesh's voice over cards, no face this time");
-  }
+  const narrated = Boolean(narration) && narration.provider === 'elevenlabs';
 
   console.log('Assembling');
   const music = spec.music ? path.resolve(HERE, spec.music) : undefined;
@@ -504,9 +456,9 @@ async function main() {
     duration: Number(info.duration.toFixed(2)),
     sizeMB: Number((info.sizeBytes / 1024 / 1024).toFixed(2)),
     hasAudio: info.hasAudio,
-    avatarSeconds: Number(avatarSeconds.toFixed(2)),
+    avatarSeconds: 0,
     narrated,
-    voiceSource: narration?.source || null,
+    voiceSource: narration?.provider || null,
     synthetic: Boolean(series.synthetic),
     fresh: freshScript,
     publishable: freshScript && narrated && !series.synthetic && lengthOk,
@@ -524,7 +476,7 @@ async function main() {
 
   console.log(
     `\n${path.relative(process.cwd(), out)}  ${info.width}x${info.height}  ${info.fps}fps  ` +
-    `${report.duration}s  ${report.sizeMB}MB  avatar ${report.avatarSeconds}s  voice ${report.voiceSource || 'none'}`,
+    `${report.duration}s  ${report.sizeMB}MB  voice ${report.voiceSource || 'none'}`,
   );
 
   const problems = [];

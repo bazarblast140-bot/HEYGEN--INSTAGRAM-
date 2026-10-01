@@ -10,10 +10,6 @@ on:
         description: Use sample market data instead of live
         type: boolean
         default: false
-      no_avatar:
-        description: Skip HeyGen avatar (saves credits)
-        type: boolean
-        default: false
       publish:
         description: Publish to Instagram after building
         type: boolean
@@ -23,7 +19,7 @@ on:
         type: boolean
         default: true
       preview:
-        description: Generate a reel for review. Does not publish and does not use the posting queue.
+        description: Build the mp4, cover, and caption for review. Never publishes, and does not use the posting queue.
         type: boolean
         default: false
   # ALWAYS ON — Paise ki Pathshala Instagram reel
@@ -65,7 +61,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Check the Instagram token
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
+        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -84,14 +80,6 @@ jobs:
           SCRIPT_BASE_URL: ${{ vars.SCRIPT_BASE_URL }}
           SCRIPT_PROVIDER: ${{ vars.SCRIPT_PROVIDER }}
           SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
-          HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
-          HEYGEN_AVATAR_ID: ${{ vars.HEYGEN_AVATAR_ID }}
-          HEYGEN_AVATAR_KIND: ${{ vars.HEYGEN_AVATAR_KIND }}
-          HEYGEN_ENGINE: ${{ vars.HEYGEN_ENGINE }}
-          HEYGEN_VOICE_ID: ${{ vars.HEYGEN_VOICE_ID }}
-          HEYGEN_SPEECH_PATH: ${{ vars.HEYGEN_SPEECH_PATH }}
-          HEYGEN_TTS_LANGUAGE: ${{ vars.HEYGEN_TTS_LANGUAGE }}
-          VOICE_PROVIDER: ${{ vars.VOICE_PROVIDER }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
           ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
@@ -106,7 +94,7 @@ jobs:
             GEN="--generate"
           fi
           REQUIRE=""
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "$PREVIEW" = "true" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "$PREVIEW" = "true" ] || [ "${{ github.event.inputs.publish }}" = "true" ]; then
             REQUIRE="--require-generated"
           fi
           PREVIEW_ARG=""
@@ -114,7 +102,6 @@ jobs:
           node pipeline/build-reel.js \
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/default.json' }}" \
             ${{ github.event.inputs.fixture == 'true' && '--fixture' || '' }} \
-            ${{ github.event.inputs.no_avatar == 'true' && '--no-avatar' || '' }} \
             $GEN $REQUIRE $PREVIEW_ARG
 
       - name: Summarise the run
@@ -171,6 +158,10 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_SURFACE: ${{ vars.IG_SURFACE }}
         run: |
+          if [ "${{ github.event.inputs.preview }}" = "true" ]; then
+            echo "Preview never publishes."
+            exit 1
+          fi
           COVER=""
           if [ -n "${{ steps.host.outputs.cover_url }}" ]; then COVER="--cover ${{ steps.host.outputs.cover_url }}"; fi
           node pipeline/publish-reel.js \

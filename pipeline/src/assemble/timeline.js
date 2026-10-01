@@ -1,14 +1,8 @@
 // Assemble a finished reel from a segment manifest.
 //
-// The cost model drives the shape. HeyGen bills avatar video by the minute, so the
-// avatar appears only in the hook — a few seconds of face to establish who is
-// talking — and everything after that is rendered graphics or free stock footage
-// with a voiceover laid over it. A 45s reel therefore buys ~5s of avatar instead
-// of 45s, while still opening on a real presenter.
-//
-// Video and audio are built separately and muxed at the end: concat behaves badly
-// when some inputs carry audio and others do not, and the voice track needs its
-// own treatment anyway.
+// The picture is rendered graphics and stock b-roll, with the voice mixed on
+// afterwards. Video and audio are built separately: concat behaves badly when
+// some inputs carry audio and others do not.
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -21,14 +15,32 @@ export const FRAME = { width: 1080, height: 1920, fps: 30 };
 export const LOUDNESS = { I: -14, TP: -1.5, LRA: 11 };
 
 /**
+ * Slow push-in for b-roll, so a stock clip is not a locked-off still.
+ * The comma inside min() is escaped because commas separate ffmpeg filters.
+ */
+export function brollNormalise(duration) {
+  const travel = Math.max(Number(duration) || 0, 0.1).toFixed(3);
+  const w = Math.round(FRAME.width * 1.08);
+  const h = Math.round(FRAME.height * 1.08);
+  return [
+    `scale=${w}:${h}:force_original_aspect_ratio=increase`,
+    `crop=${FRAME.width}:${FRAME.height}:(iw-ow)*min(1\\,t/${travel}):(ih-oh)/2`,
+  ];
+}
+
+/**
  * One filter chain that makes any source match the reel frame: fill it by
  * scaling up, centre-crop the overflow, lock the frame rate and pixel aspect.
  * Stock footage arrives in every shape imaginable, so this is not optional.
  */
 function normaliseVideo(index, duration, { grade = false } = {}) {
   const chain = [
-    `scale=${FRAME.width}:${FRAME.height}:force_original_aspect_ratio=increase`,
-    `crop=${FRAME.width}:${FRAME.height}`,
+    ...(grade
+      ? brollNormalise(duration)
+      : [
+          `scale=${FRAME.width}:${FRAME.height}:force_original_aspect_ratio=increase`,
+          `crop=${FRAME.width}:${FRAME.height}`,
+        ]),
     `fps=${FRAME.fps}`,
     'setsar=1',
     // Stock clips are shot in every colour temperature going. A slight darken and
