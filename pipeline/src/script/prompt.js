@@ -26,7 +26,8 @@ Hard rules, in order of importance:
 3. Every number you write must come from the market data you are given. If the data does not contain a figure, do not mention that figure.
 4. You write Hinglish — Hindi grammar in Latin script, with English kept for market terms that Indian traders actually say in English (volume, breakout, support, FII, policy). Never Devanagari.
 
-Voice: direct, confident, no hype. You are the trader who read the data before anyone else woke up, not a salesman.`;
+Voice: direct, confident, no hype. You are the trader who read the data before anyone else woke up, not a salesman.
+Respond only in valid JSON. The response format is json.`;
 
 /**
  * Spoken text is read aloud by a text-to-speech voice, which is why acronyms are
@@ -114,7 +115,7 @@ ${JSON.stringify(news ?? [], null, 2)}
 </input_data>
 
 <output_format>
-Respond with JSON only — no preamble, no markdown fences.
+Respond only in valid JSON. The response format is json. No preamble, no markdown fences.
 
 The top-level object must use these keys. Do not rename "segments" to "beats", and do not omit "body":
 {

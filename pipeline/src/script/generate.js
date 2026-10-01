@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
-import { resolveProvider, callOpenAICompatible, VENDORS } from './providers.js';
+import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from './providers.js';
 import { readHistory, findRepeat, recordTopic } from './topics.js';
 import { FAMILY_NAMES } from './families.js';
 import { shortenReelScript, spokenWordCount, wordCountProblem, retryNoteFor } from './length.js';
@@ -368,7 +368,7 @@ export async function generateSpec({
       console.log(`  attempt ${attempt} failed: ${err.message}`);
       // A schema mismatch is worth another pass with the field paths attached.
       // An auth or balance failure is not going to fix itself.
-      if (err.retryable === false || !err.schemaIssues || attempt === maxAttempts) throw err;
+      if (!shouldRetryProviderError(err) || !err.schemaIssues || attempt === maxAttempts) throw err;
       lastProblems = err.schemaIssues;
     }
   }
