@@ -10,6 +10,8 @@
 
 import fs from 'node:fs/promises';
 import { publishReel, whoami } from './src/publish/instagram.js';
+import { attachReelStory } from './src/publish/story.js';
+import { flagOn, ENABLE_REEL_STORY } from './src/publish/flags.js';
 
 function parseArgs(argv) {
   const args = {};
@@ -62,6 +64,12 @@ async function main() {
   });
 
   console.log(`published: ${mediaId}`);
+
+  await attachReelStory({
+    enabled: flagOn(ENABLE_REEL_STORY),
+    videoUrl: args.url,
+    onNote: (line) => console.log(line),
+  });
 }
 
 main().catch((err) => { console.error(`\n${err.message}`); process.exit(1); });

@@ -24,7 +24,9 @@ import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } f
 import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
-import { SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
+import { ALL_SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
+import { generateSourcedCarousel } from './src/carousel/sourced.js';
+import { flagOn, ENABLE_AI_NEWS_CAROUSELS, ENABLE_CAROUSEL_STORY } from './src/publish/flags.js';
 import { ACCOUNT_BRAND } from './src/publish/allow.js';
 import { framesToPost } from './src/carousel/story.js';
 import { shapeCaption } from './src/publish/caption.js';
@@ -131,28 +133,69 @@ async function main() {
 
   let slotUsed = args.slot || slotFor(new Date()) || '';
   let generated = false;
+  let verifiedSource = false;
+  let sourceFresh = false;
+  let sourcedSlot = false;
 
   let spec;
   if (args.generate || args.preview) {
-    console.log(args.preview ? 'Preview — writing a finance carousel without posting' : 'Writing today\'s carousel');
+    console.log(args.preview ? 'Preview — writing a carousel without posting' : 'Writing today\'s carousel');
     const requested = args.preview
       ? ((!args.slot || args.slot === 'auto') ? 'evening' : args.slot)
       : (args.slot || slotFor(new Date()));
     const slot = requested;
     slotUsed = slot || '';
-    if (!slot || !SLOTS.includes(slot)) {
+    if (!slot || !ALL_SLOTS.includes(slot)) {
       if (args['require-generated'] || args.preview) {
         console.error('\nNo finance slot for this run, so nothing was built and nothing will be published.');
         process.exit(1);
       }
       note('outside the posting windows — checked-in spec is not publishable');
+    } else if ((slot === 'ai' || slot === 'news') && !args.preview && !flagOn(ENABLE_AI_NEWS_CAROUSELS)) {
+      console.log(`${slot} skipped — ENABLE_AI_NEWS_CAROUSELS is off. Nothing will be published.`);
+      process.exit(0);
     } else try {
-      const written = await generateCarousel({
-        slot,
-        record: !args.preview,
-        onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
-        onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
-      });
+      sourcedSlot = slot === 'ai' || slot === 'news';
+      const written = sourcedSlot
+        ? await generateSourcedCarousel({
+          slot,
+          kind: slot,
+          record: !args.preview,
+          onNote: note,
+          onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
+          onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
+        })
+        : await generateCarousel({
+          slot,
+          record: !args.preview,
+          onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
+          onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
+        });
+      if (written.skipped) {
+        const skipReport = {
+          skipped: true,
+          publishable: false,
+          generated: false,
+          fallback: false,
+          category: written.category,
+          slot: written.slot,
+          reason: written.reason,
+          files: [],
+          stories: [],
+          notes: [written.reason],
+        };
+        await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
+        await fs.writeFile(path.join(HERE, 'out', 'carousel-report.json'), JSON.stringify(skipReport, null, 2));
+        console.log(written.reason);
+        if (args.preview) {
+          console.error('No fresh verifiable source. Preview will not invent a carousel.');
+          process.exit(1);
+        }
+        console.log('Skipping this post. Nothing will be published.');
+        process.exit(0);
+      }
+      verifiedSource = written.verifiedSource === true;
+      sourceFresh = written.sourceFresh === true;
       spec = {
         brand: BRAND.brand, ink: BRAND.ink, brandInk: BRAND.brandInk,
         ...written.spec, category: written.category, fallback: false, reviewed: false,
@@ -199,7 +242,7 @@ async function main() {
   // Always normalize bands/cta/sources before the hard gate. Models occasionally
   // return two covers; that used to reject the whole day after generation spent
   // three attempts. Repair is cheaper than silence.
-  spec = normalizeSpec(spec);
+  spec = normalizeSpec(spec, { sourced: sourcedSlot });
   note('shape normalized (exactly one cover, last slide save and follow)');
 
   const problems = validateSpec(spec);
@@ -251,7 +294,11 @@ async function main() {
   process.stdout.write('\n');
 
   let stories = [];
-  const frames = framesToPost(ready, { slot: slotUsed });
+  const frames = framesToPost(ready, {
+    slot: slotUsed,
+    carouselStory: flagOn(ENABLE_CAROUSEL_STORY),
+    preview: args.preview === true,
+  });
   if (!frames.length) {
     console.log('story    none — one Story a day, only with the evening post');
   } else try {
@@ -289,7 +336,11 @@ async function main() {
     generated,
     fallback: !generated,
     reviewed: !generated && spec.reviewed === true && FINANCE.includes(spec.category),
-    publishable: generated && FINANCE.includes(spec.category),
+    verifiedSource,
+    sourceFresh,
+    publishable: (generated && FINANCE.includes(spec.category))
+      || (generated && verifiedSource && sourceFresh && flagOn(ENABLE_AI_NEWS_CAROUSELS)
+        && (spec.category === 'ai-news' || spec.category === 'latest-news')),
     stories,
     lines: (ready.slides || []).map((s, i) => ({
       n: i + 1,

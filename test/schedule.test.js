@@ -64,7 +64,7 @@ test('a second run in the same window does not post again', () => {
 
 test('the build uses the resolved slot, not the raw auto input', async () => {
   const text = await readFile(new URL('../.github/workflows/carousel.yml', import.meta.url), 'utf8');
-  assert.match(text, /options: \['auto', 'midday', 'evening'\]/);
+  assert.match(text, /options: \['auto', 'midday', 'evening', 'ai', 'news'\]/);
   assert.match(text, /default: 'auto'/);
   assert.equal(text.includes("format('--slot {0}', github.event.inputs.slot)"), false);
   assert.match(text, /RESOLVED="\$\{\{ steps\.slot\.outputs\.slot \}\}"/);
@@ -85,4 +85,6 @@ test('only the evening post gets a story, and only one frame', () => {
   const frames = framesToPost(spec, { slot: 'evening' });
   assert.equal(frames.length, 1);
   assert.equal(frames[0].headline, 'ROCE गिर रहा है');
+  const both = framesToPost(spec, { slot: 'evening', carouselStory: true });
+  assert.equal(both.length, 1);
 });

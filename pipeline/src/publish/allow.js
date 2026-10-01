@@ -5,6 +5,7 @@
 // able to reach the feed by accident.
 
 import { FINANCE } from '../carousel/categories.js';
+import { flagOn, ENABLE_AI_NEWS_CAROUSELS } from './flags.js';
 
 export const ACCOUNT_BRAND = 'Rajesh Technical Traders';
 
@@ -28,10 +29,22 @@ export function offNicheReasons(spec = {}) {
   return reasons;
 }
 
+const SOURCED = new Set(['ai-news', 'latest-news']);
+const DATED = /\b(19|20)\d{2}(?:-\d{2}-\d{2})?\b/;
+
+export function hasDatedCitation(spec = {}) {
+  const blob = [spec.caption, ...(spec.slides || []).map((slide) => slide.source)].filter(Boolean).join('\n');
+  return DATED.test(blob);
+}
+
 /**
  * Fresh finance generation may publish.
  * A checked-in finance spec may publish only when it is marked reviewed and
  * the caller passes the explicit review flag. Anything else is refused.
+ *
+ * AI and news may publish only when the flag is on and the build attached a
+ * verified source from the last 48 hours. Planets, FACTVIZER, and a sourceless
+ * draft stay blocked even then.
  */
 export function publishDecision({
   generated = false,
@@ -40,13 +53,30 @@ export function publishDecision({
   category = '',
   spec = {},
   allowReviewed = false,
+  verifiedSource = false,
+  sourceFresh = false,
+  aiNewsEnabled = flagOn(ENABLE_AI_NEWS_CAROUSELS),
 } = {}) {
   const niche = offNicheReasons(spec);
-  const finance = FINANCE.includes(category) && niche.length === 0;
+  if (niche.length) return { ok: false, reasons: niche };
+
+  const finance = FINANCE.includes(category);
   if (generated && finance && !fallback) return { ok: true, reasons: [] };
   if (allowReviewed && reviewed && fallback && finance) return { ok: true, reasons: [] };
 
-  const reasons = [...niche];
+  if (SOURCED.has(category)) {
+    const cited = hasDatedCitation(spec);
+    if (generated && !fallback && aiNewsEnabled && verifiedSource && sourceFresh && cited) {
+      return { ok: true, reasons: [] };
+    }
+    const reasons = [];
+    if (!aiNewsEnabled) reasons.push('AI and news carousels are disabled');
+    if (!generated || fallback) reasons.push('checked-in or fallback content is not publishable');
+    if (!verifiedSource || !sourceFresh || !cited) reasons.push('sourced carousel needs a verified fresh source');
+    return { ok: false, reasons };
+  }
+
+  const reasons = [];
   if (!generated) reasons.push('checked-in or fallback content is not publishable');
   if (!finance) reasons.push('not a finance carousel');
   if (fallback && !reviewed) reasons.push('fallback is not marked reviewed');

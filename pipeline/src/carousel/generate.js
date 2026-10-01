@@ -53,7 +53,7 @@ export const CarouselSpec = z.object({
  * Models sometimes return two covers or forget cta on the last slide.
  * Repairing is better than burning the day.
  */
-export function normalizeSpec(spec) {
+export function normalizeSpec(spec, { sourced = false } = {}) {
   const slides = [...(spec.slides || [])];
   if (!slides.length) return spec;
 
@@ -107,7 +107,7 @@ export function normalizeSpec(spec) {
       // A missing source on a real fact can be labelled. A padded copy of the
       // follow card must not be given a market citation it does not have.
       const filler = /रोज़ एक नया तथ्य|सेव करो|फ़ॉलो करो|^follow me$/i.test(`${headline || ''}\n${subline || ''}`);
-      if (!String(source || '').trim() && !filler) {
+      if (!sourced && !String(source || '').trim() && !filler) {
         source = 'NSE / BSE public market data, 2024';
       }
     }

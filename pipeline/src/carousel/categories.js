@@ -1,8 +1,14 @@
+import { flagOn, ENABLE_AI_NEWS_CAROUSELS } from '../publish/flags.js';
+
 // Instagram carousel categories for @rajesh_technical_trader.
-// Two finance carousels a day. AI news and the general-news digest are off.
+// Two finance carousels a day stay on:
 //   midday   → optional finance post, aimed at 12:30 IST
 //   evening  → the main finance post, aimed at 19:30 IST
-// A story goes out only with the evening post, so the account posts at most one.
+// Two more slots exist but publish only when ENABLE_AI_NEWS_CAROUSELS is on:
+//   ai       → latest AI update, aimed at 09:30 IST
+//   news     → latest big news, aimed at 16:30 IST
+// A story goes out with the evening post. Other slots get a cover Story only
+// when ENABLE_CAROUSEL_STORY is on, and never a second Story for the same post.
 
 export const POOL = [
   'fundamentals', 'options', 'intraday', 'stocks',
@@ -18,6 +24,8 @@ export const SLIDES = 10;
 // and stays off the next five mornings.
 export const SLOT_OFFSET = 3;
 export const SLOTS = ['midday', 'evening'];
+export const OPTIONAL_SLOTS = ['ai', 'news'];
+export const ALL_SLOTS = [...SLOTS, ...OPTIONAL_SLOTS];
 export const MAIN_SLOT = 'evening';
 export const FINANCE = POOL;
 
@@ -155,9 +163,13 @@ export function dayNumber(date = new Date()) {
 // Main fire + one catch-up per slot. Times are UTC; IST is UTC+5:30.
 // midday  12:30 / 12:52 IST → 07:00 / 07:22 UTC
 // evening 19:30 / 19:52 IST → 14:00 / 14:22 UTC
+// ai      09:30 / 09:52 IST → 04:00 / 04:22 UTC   (no-op unless the flag is on)
+// news    16:30 / 16:52 IST → 11:00 / 11:22 UTC   (no-op unless the flag is on)
 export const CRON_SLOTS = {
   '0 7 * * *': 'midday', '22 7 * * *': 'midday',
   '0 14 * * *': 'evening', '22 14 * * *': 'evening',
+  '0 4 * * *': 'ai', '22 4 * * *': 'ai',
+  '0 11 * * *': 'news', '22 11 * * *': 'news',
 };
 
 // Posting windows in minutes from midnight IST. A run that does not name a
@@ -166,6 +178,8 @@ export const CRON_SLOTS = {
 export const WINDOWS = {
   midday: { start: 12 * 60, end: 13 * 60 + 45 },
   evening: { start: 19 * 60, end: 20 * 60 + 45 },
+  ai: { start: 9 * 60, end: 10 * 60 + 45 },
+  news: { start: 16 * 60, end: 17 * 60 + 45 },
 };
 
 export function istParts(date = new Date()) {
@@ -189,10 +203,14 @@ export function slotForCron(cron) {
   return CRON_SLOTS[key] || null;
 };
 
-export function slotFor(date = new Date()) {
+export function enabledSlots(env = process.env) {
+  return flagOn(ENABLE_AI_NEWS_CAROUSELS, env) ? ALL_SLOTS : SLOTS;
+}
+
+export function slotFor(date = new Date(), env = process.env) {
   const when = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(when.getTime())) return null;
-  for (const slot of SLOTS) {
+  for (const slot of enabledSlots(env)) {
     if (inWindow(slot, when)) return slot;
   }
   return null;
@@ -203,6 +221,8 @@ export function slotFor(date = new Date()) {
 const FINANCE_SLOTS = ['midday', 'evening'];
 
 export function categoryFor(date = new Date(), slot = 'evening') {
+  if (slot === 'ai') return 'ai-news';
+  if (slot === 'news') return 'latest-news';
   const index = FINANCE_SLOTS.indexOf(slot);
   if (index === -1) throw new Error('Unknown slot ' + slot + ' — ' + SLOTS.join(' or ') + '.');
   return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
@@ -222,6 +242,7 @@ export function resolveRun({
   cron = '',
   now = new Date(),
   entries = [],
+  env = process.env,
 } = {}) {
   const { date } = istParts(now);
   const raw = String(dispatchSlot || '').trim();
@@ -235,14 +256,17 @@ export function resolveRun({
     slot = fromCron;
   } else if (explicit) {
     slot = explicit;
-    if (!SLOTS.includes(explicit)) reason = 'unknown';
+    if (!ALL_SLOTS.includes(explicit)) reason = 'unknown';
     else if (!inWindow(explicit, now)) reason = 'wrong-time';
   } else {
-    slot = slotFor(now) || '';
+    slot = slotFor(now, env) || '';
     if (!slot) reason = 'outside';
   }
 
   const key = slot ? `${date} ${slot}` : '';
+  if (OPTIONAL_SLOTS.includes(slot) && !flagOn(ENABLE_AI_NEWS_CAROUSELS, env)) {
+    return { date, slot, key, pending: false, reason: 'disabled', posted: null };
+  }
   if (reason !== 'due') return { date, slot, key, pending: false, reason, posted: null };
 
   const posted = entries.find((e) => e.date === key) || null;

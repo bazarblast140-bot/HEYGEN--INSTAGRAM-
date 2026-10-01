@@ -160,6 +160,8 @@ jobs:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_SURFACE: ${{ vars.IG_SURFACE }}
+          # Unset means off. A Reel Story is not published until this variable is true.
+          ENABLE_REEL_STORY: ${{ vars.ENABLE_REEL_STORY }}
         run: |
           if [ "${{ github.event.inputs.preview }}" = "true" ]; then
             echo "Preview never publishes."
@@ -180,6 +182,7 @@ jobs:
           path: |
             pipeline/out/reel-final.mp4
             pipeline/out/reel-cover.jpg
+            pipeline/out/reel-story-preview.jpg
             pipeline/out/caption.txt
             pipeline/out/run-report.json
             pipeline/out/build/word-timestamps.json

@@ -437,6 +437,11 @@ async function main() {
     const seek = coverTimestamp({ instant: true });
     await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(seek), '-i', out, '-frames:v', '1', '-q:v', '2', coverPath]);
     cover = coverPath;
+    if (args.preview) {
+      const storyPreview = path.join(path.dirname(out), 'reel-story-preview.jpg');
+      await fs.copyFile(coverPath, storyPreview);
+      note('reel story preview frame copied from the cover — not published');
+    }
   } catch (err) {
     note(`cover frame not extracted (${String(err.message).slice(0, 80)})`);
   }
