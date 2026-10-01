@@ -115,3 +115,17 @@ test('a model save/follow line is not printed again, and broad tags are dropped'
   assert.ok((caption.match(/#/g) || []).length <= 5);
   assert.match(caption, /^Revenue बढ़ रहा है/);
 });
+
+test('the model view line is not printed beside the standard save/share/comment CTA', () => {
+  const model = 'Aapka view kya hai? Save, share, aur comment karein.';
+  const caption = composeCaption({
+    caption: `NIFTYBEES ne ek pattern banaya.\n\n${model}`,
+    hashtags: ['#nifty50'],
+  });
+
+  assert.equal(caption.includes(model), false);
+  assert.equal(caption.includes('Aapka view kya hai'), false);
+  assert.equal(caption.includes('Save, share, aur comment karein'), false);
+  assert.equal((caption.match(/Save karo, share karo, comment mein apna sawal likho\./g) || []).length, 1);
+  assert.match(caption, /^NIFTYBEES ne ek pattern banaya\./);
+});

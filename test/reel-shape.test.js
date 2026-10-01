@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 import { checkReelShape, durationNote } from '../pipeline/src/script/generate.js';
-import { buildUserPrompt } from '../pipeline/src/script/prompt.js';
+import { SYSTEM, buildUserPrompt } from '../pipeline/src/script/prompt.js';
 import { reelContainerParams } from '../pipeline/src/publish/instagram.js';
 import { shapeCaption } from '../pipeline/src/publish/caption.js';
 
@@ -37,6 +37,31 @@ test('the prompt asks for a text hook and five tags', () => {
   assert.match(text, /full-frame text card/);
   assert.match(text, /at most 5/);
   assert.match(text, /Do not open with "Namaste"/);
+});
+
+test('the prompt requires one saveable lesson and a curiosity hook', () => {
+  assert.match(SYSTEM, /one concrete, saveable lesson/);
+  assert.match(SYSTEM, /common mistake/);
+  assert.match(SYSTEM, /A data recap is not a reel/);
+  assert.match(SYSTEM, /first two seconds/);
+  const text = buildUserPrompt({ market: { name: 'Nifty' }, news: [], date: '2026-10-01' });
+  assert.match(text, /Teach one saveable lesson/);
+  assert.match(text, /curiosity hook for the first two seconds/);
+  assert.match(text, /not a recap of the close, the percent, and the day low/);
+  assert.match(text, /Do not open by reading out the percent, the close, and the low/);
+});
+
+test('an ETF standing in for the index is not mixed with the index percent', () => {
+  const text = buildUserPrompt({
+    market: { name: 'NIFTYBEES', tracks: 'NIFTY 50', change: '-0.42%', close: 258.45 },
+    news: [],
+    date: '2026-10-01',
+  });
+  assert.match(text, /The percentage\s+change belongs to NIFTY 50/);
+  assert.match(text, /The rupee level belongs to NIFTYBEES/);
+  assert.match(text, /Do not mix them in the same claim/);
+  assert.match(text, /Never say the index fell to the E T F's\s+price/);
+  assert.match(text, /never quote both the index percent and the E T F level/);
 });
 
 test('checked-in reel specs do not open with a greeting', async () => {

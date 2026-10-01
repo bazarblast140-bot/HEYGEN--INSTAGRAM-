@@ -55,15 +55,65 @@ function header() {
   ].join('\n');
 }
 
+// Hindi postpositions and particles. A caption chunk must not start on one,
+// and must not end on one while the noun it belongs to is still coming.
+const PARTICLES = new Set([
+  'ke', 'ki', 'ka', 'me', 'mein', 'se', 'par', 'ko', 'saath', 'aur', 'hai',
+]);
+
+function wordText(word) {
+  return String(typeof word === 'string' ? word : word?.word || '');
+}
+
+function particleKey(word) {
+  return wordText(word).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+}
+
+export function isParticle(word) {
+  return PARTICLES.has(particleKey(word));
+}
+
+function meaningfulCount(group) {
+  return group.filter((word) => !isParticle(word)).length;
+}
+
 /**
- * Split a line into short caption groups. Two or three words at a time is what
- * the reference reels show — long enough to read, short enough that estimated
- * timings never drift far from the voice.
+ * Split a line into short caption groups.
+ *
+ * Two or three meaningful words is the target. A postposition stays with the
+ * noun phrase around it, so a chunk never opens on "ke" or "saath" and does
+ * not close on "ke" while "band" is the next word.
  */
 export function groupWords(words, perGroup = 3) {
+  const soft = perGroup;
+  const hard = perGroup + 4;
   const groups = [];
-  for (let i = 0; i < words.length; i += perGroup) groups.push(words.slice(i, i + perGroup));
-  return groups;
+  let i = 0;
+
+  while (i < words.length) {
+    let end = i + 1;
+    while (end < words.length) {
+      const size = end - i;
+      const slice = words.slice(i, end);
+      const endsOnParticle = isParticle(words[end - 1]);
+      const nextIsParticle = isParticle(words[end]);
+      const underTarget = size < soft || meaningfulCount(slice) < 2;
+      const phraseOpen = endsOnParticle || nextIsParticle;
+      if (size >= hard && !endsOnParticle) break;
+      if (!underTarget && !phraseOpen) break;
+      end += 1;
+    }
+    groups.push(words.slice(i, end));
+    i = end;
+  }
+
+  const merged = [];
+  for (const group of groups) {
+    const thin = meaningfulCount(group) < 2 || isParticle(group[0]);
+    if (thin && merged.length) merged[merged.length - 1] = merged[merged.length - 1].concat(group);
+    else merged.push(group);
+  }
+  return merged;
 }
 
 /**
