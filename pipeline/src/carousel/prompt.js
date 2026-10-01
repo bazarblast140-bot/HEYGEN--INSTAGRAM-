@@ -22,7 +22,7 @@ FACT RULES
 LANGUAGE & STYLE
 - Hindi Devanagari + common English finance terms: EPS, ROE, ROCE, P/E, IV, Delta, VWAP, EBITDA आदि.
 - Tone: confident, crisp, intelligent, curiosity-driven; sensational नहीं.
-- Cover: एक bold line, 4–8 words. Subline छोटा हो या बिलकुल न हो. यही slide hook है और cover भी.
+- Cover: एक bold line, 4–8 words. Subline छोटा हो या बिलकुल न हो. यही 1–2 second का hook है: number या curiosity, बड़ा bold type.
 - Fact slides: headline max 8 words; subline max 16 words. एक slide में एक मुख्य idea. Text कम रखो.
 - Yellow केवल headline/highlight के लिए. Explanation readable white/off-white रखो.
 - Repeated emojis, clickbait और ALL-CAPS English नहीं.
@@ -66,6 +66,7 @@ FRESHNESS RULES
 1. Cover — band center, cta false, source null. One bold hook line. This slide is the cover.
 2–9. Fact slides — band bottom, cta false. हर slide पर source. Headline short, subline shorter than before.
 10. Last slide — cta true, source null, कोई fact नहीं. Viewer से सेव करो और फ़ॉलो करो कहो.
+Caption में comment के लिए एक ही specific सवाल हो. दूसरी CTA line मत लिखो.
 सबसे strong fact slide 2 पर. हर slide नया information block दे. Background query उसी topic का हो.
 </structure>
 

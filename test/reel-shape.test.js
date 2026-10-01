@@ -100,7 +100,7 @@ test('a reel caption ends with a prompt and five tags', () => {
     hashtags: ['#nifty', '#nse', '#banknifty', '#intraday', '#fii', '#sensex'],
   });
   assert.match(caption, /^Nifty flat band\./);
-  assert.match(caption, /Save karo, share karo, comment mein apna sawal likho\./);
+  assert.match(caption, /Aaj wala number aapko sahi laga ya galat\? Comment mein ek line likho\./);
   assert.match(caption, /Link in bio\./);
   assert.equal((caption.match(/#/g) || []).length, 5);
 });

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
+import { loadTrends, nextQualityStep, reviewContent } from '../quality/review.js';
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from './providers.js';
 import { readHistory, findRepeat, recordTopic } from './topics.js';
 import { FAMILY_NAMES } from './families.js';
@@ -331,8 +332,10 @@ export async function generateSpec({
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   const recentTopics = await readHistory();
+  const trendSnapshot = loadTrends();
 
   let lastProblems = [];
+  let qualityFails = 0;
   // Schema slips from an empty body get more than one retry. An auth or
   // balance error will not change on the next call, so those stop at once.
   const maxAttempts = 5;
@@ -358,11 +361,17 @@ export async function generateSpec({
       output = shortenReelScript(output);
       lastProblems = validateShape(output, recentTopics);
       if (!lastProblems.length) {
-        // Written down only once the spec is accepted, so a rejected draft does
-        // not burn a subject the reel never actually covered. A preview does
-        // not record, or it would block the scheduled post.
-        if (record) await recordTopic({ topic: output.topic, angle: output.verdict, date });
-        return { spec: output, provider: provider.name, model: used, attempts: attempt };
+        const review = reviewContent({ kind: 'reel', spec: output, trends: trendSnapshot, now: date });
+        const step = nextQualityStep({ review, fails: qualityFails, attempt, maxAttempts });
+        if (step.action === 'retry') {
+          qualityFails = step.fails;
+          lastProblems = review.problems;
+          continue;
+        }
+        // Written down only once the spec passes the gate, so a rejected draft
+        // does not burn a subject the reel never actually covered.
+        if (step.action === 'accept' && record) await recordTopic({ topic: output.topic, angle: output.verdict, date });
+        return { spec: output, provider: provider.name, model: used, attempts: attempt, quality: review };
       }
     } catch (err) {
       console.log(`  attempt ${attempt} failed: ${err.message}`);

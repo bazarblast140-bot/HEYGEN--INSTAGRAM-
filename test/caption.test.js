@@ -19,7 +19,7 @@ test('hashtags the model wrote into the caption are not printed twice', () => {
     '',
     'जानवरों की दुनिया.',
     '',
-    'Save karo, share karo, comment mein apna sawal likho.',
+    'Aaj wala number aapko sahi laga ya galat? Comment mein ek line likho.',
     '',
     'Link in bio.',
     '',
@@ -30,7 +30,7 @@ test('hashtags the model wrote into the caption are not printed twice', () => {
 // Instagram treats these as one tag. A reader sees two.
 test('the same tag in two cases is one tag', () => {
   const caption = composeCaption({ caption: 'text', hashtags: ['#Venus', '#venus'] }, '#factvizer');
-  assert.equal(caption, 'text\n\nSave karo, share karo, comment mein apna sawal likho.\n\nLink in bio.\n\n#Venus #factvizer');
+  assert.equal(caption, 'text\n\nAaj wala number aapko sahi laga ya galat? Comment mein ek line likho.\n\nLink in bio.\n\n#Venus #factvizer');
 });
 
 test('the brand tag is always there, exactly once', () => {
@@ -78,7 +78,7 @@ test('a caption drops referral links and keeps at most five tags', () => {
   });
 
   assert.match(caption, /^ROCE गिर रहा है।/);
-  assert.match(caption, /Save karo, share karo, comment mein apna sawal likho\./);
+  assert.match(caption, /Aaj wala number aapko sahi laga ya galat\? Comment mein ek line likho\./);
   assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
   assert.equal(caption.includes('http'), false);
   assert.equal(caption.includes('Zerodha'), false);
@@ -103,7 +103,7 @@ test('a model save/follow line is not printed again, and broad tags are dropped'
 
   assert.equal(caption.includes('सेव करें'), false);
   assert.equal(caption.includes('फॉलो करें'), false);
-  assert.equal((caption.match(/Save karo, share karo, comment mein apna sawal likho\./g) || []).length, 1);
+  assert.equal((caption.match(/Aaj wala number aapko sahi laga ya galat\? Comment mein ek line likho\./g) || []).length, 1);
   assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
   assert.equal(caption.includes('#stockmarket'), false);
   assert.equal(caption.includes('#finance'), false);
@@ -126,6 +126,6 @@ test('the model view line is not printed beside the standard save/share/comment 
   assert.equal(caption.includes(model), false);
   assert.equal(caption.includes('Aapka view kya hai'), false);
   assert.equal(caption.includes('Save, share, aur comment karein'), false);
-  assert.equal((caption.match(/Save karo, share karo, comment mein apna sawal likho\./g) || []).length, 1);
+  assert.equal((caption.match(/Aaj wala number aapko sahi laga ya galat\? Comment mein ek line likho\./g) || []).length, 1);
   assert.match(caption, /^NIFTYBEES ne ek pattern banaya\./);
 });

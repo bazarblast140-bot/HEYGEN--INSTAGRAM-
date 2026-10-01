@@ -417,7 +417,7 @@
 
       document.getElementById('chipSymbol').textContent = data.name;
       document.getElementById('chipInterval').textContent = data.interval;
-      document.getElementById('chipDate').textContent = data.summary.date;
+      document.getElementById('chipDate').textContent = data.credit || data.summary.date;
       document.getElementById('verdict').textContent = data.verdict || '';
 
       // A synthetic series must be visibly marked so a test render can never be
