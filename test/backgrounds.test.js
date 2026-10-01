@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bestPhoto, relevance } from '../pipeline/src/render/backgrounds.js';
+import { bestPhoto, notePhotoUse, relevance } from '../pipeline/src/render/backgrounds.js';
 
 const photo = (id, alt) => ({ id, alt });
 
@@ -131,6 +131,46 @@ test('a drawing of the subject loses to a photograph of it', () => {
 
 // From the first live news carousel: the follow card carried a photograph of a
 // stranger's real Instagram profile, handle and follower count included.
+// News preview slides 8–10 all showed a sticky note reading "hind". The
+// fallback query shared only backdrop words with the photo, so the slide
+// should keep the branded gradient instead.
+test('a sticky note that misses the query and topic is not used', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: "a sticky note reading hind on a wall" },
+    { id: 2, alt: 'abstract textured wall' },
+  ], { query: 'dark abstract finance texture', topic: 'global bond yields', used: new Set() });
+
+  assert.equal(chosen, null);
+});
+
+test('a described photo that only shares backdrop words is not used', () => {
+  const chosen = bestPhoto([
+    { id: 1, alt: 'abstract dark texture background' },
+  ], { query: 'dark abstract finance texture', used: new Set() });
+
+  assert.equal(chosen, null);
+});
+
+test('the same photo is not used on more than two slides', () => {
+  const sticky = (id) => ({ id, alt: 'a sticky note reading hind on a wall' });
+  const onTopic = (id) => ({ id, alt: 'bond traders watching yield screens' });
+  const used = new Map();
+  notePhotoUse(used, sticky(1));
+  notePhotoUse(used, sticky(2));
+
+  assert.equal(bestPhoto([
+    sticky(3),
+    onTopic(4),
+  ], { query: 'sticky note hind wall', topic: 'bond yields', used }).id, 4);
+
+  notePhotoUse(used, onTopic(4));
+  notePhotoUse(used, onTopic(4));
+  assert.equal(bestPhoto([
+    sticky(3),
+    onTopic(4),
+  ], { query: 'sticky note hind wall', topic: 'bond yields', used }), null);
+});
+
 test('somebody else\'s profile is not a background', async () => {
   const { bestPhoto } = await import('../pipeline/src/render/backgrounds.js');
   const chosen = bestPhoto([

@@ -20,8 +20,9 @@
 //   * search on the Hindi headline. Neither library indexes Devanagari, and a
 //     Hindi query returns whatever the fallback ranking coughs up. The spec
 //     carries an explicit English `query` per slide.
-//   * reuse one photo across slides. Ten identical backgrounds looks like a
-//     broken render, so a photo already used in this carousel is skipped.
+//   * reuse one photo on more than two slides. The same stock frame on the
+//     tail of a carousel looks like a broken render, so a photo already used
+//     twice is skipped and the slide keeps the branded gradient.
 //   * fail the build. No key, no result, rate limit, a source that is down —
 //     all of it falls back to the generated gradient, because a plainer
 //     carousel beats no carousel.
@@ -100,6 +101,16 @@ export function deBrand(query, index = 0) {
 
 const FILLER = /\b(abstract|blur|blurred|bokeh|wallpaper|backdrop|background|texture|pattern|gradient|copy\s?space|mockup)\b/i;
 
+// Words that describe a backdrop, not a subject. A fallback query such as
+// "dark abstract finance texture" used to match a sticky note whose alt also
+// said "abstract", and that photo then repeated across the last slides.
+const GENERIC = new Set([
+  'abstract', 'blur', 'blurred', 'bokeh', 'wallpaper', 'backdrop', 'background',
+  'texture', 'textured', 'pattern', 'gradient', 'copy', 'space', 'mockup',
+  'dark', 'minimal', 'photo', 'image', 'black', 'white', 'color', 'colours',
+  'colors', 'gold', 'finance', 'financial',
+]);
+
 /**
  * Titles where the subject is in the picture by accident.
  *
@@ -117,6 +128,11 @@ const INCIDENTAL = /\b(sunset|sunrise|crew|astronauts?|briefing|conference|patch
 
 const words = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g) || [];
 
+/** Subject words. Backdrop words do not count as a match. */
+export function subjectWords(text) {
+  return words(text).filter((word) => !GENERIC.has(word));
+}
+
 /**
  * How much is this photo ABOUT what was asked?
  *
@@ -130,8 +146,8 @@ const words = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g) || [];
  * of it, while one that mentions it in passing puts it late.
  */
 export function relevance(alt, query) {
-  const asked = new Set(words(query));
-  const said = words(alt);
+  const asked = new Set(subjectWords(query));
+  const said = subjectWords(alt);
   if (!asked.size || !said.length) return 0;
 
   const matches = said.filter((w) => asked.has(w)).length;
@@ -145,15 +161,45 @@ export function relevance(alt, query) {
   return leads + density - incidental - filler;
 }
 
+const MAX_SAME_PHOTO = 2;
+
+function altKey(candidate) {
+  return words(candidate?.alt).join(' ');
+}
+
+/** A Set means "already used up". A Map counts id and description, capped at 2. */
+export function photoBlocked(used, candidate) {
+  if (!used || !candidate) return false;
+  const id = String(candidate.id);
+  if (used instanceof Set) return used.has(id);
+  if (typeof used.get !== 'function') return false;
+  if ((used.get(`id:${id}`) || 0) >= MAX_SAME_PHOTO) return true;
+  const alt = altKey(candidate);
+  return Boolean(alt) && (used.get(`alt:${alt}`) || 0) >= MAX_SAME_PHOTO;
+}
+
+export function notePhotoUse(used, candidate) {
+  const id = String(candidate.id);
+  used.set(`id:${id}`, (used.get(`id:${id}`) || 0) + 1);
+  const alt = altKey(candidate);
+  if (alt) used.set(`alt:${alt}`, (used.get(`alt:${alt}`) || 0) + 1);
+  return used;
+}
+
 /**
  * Rank candidates: junk out, on-topic first, source order breaking ties.
  *
- * `used` is per-carousel, so the same photo cannot appear on two slides even
- * when two slides share a query.
+ * `used` is per-carousel. A photo id, or the same description, may appear on
+ * at most two slides. A Set passed by older callers means "do not use again".
  */
-export function bestPhoto(candidates, { query, used }) {
-  const fresh = candidates.filter((c) => !used.has(String(c.id)));
-  const scored = fresh.map((c, i) => ({ c, i, score: relevance(c.alt, query) }));
+export function bestPhoto(candidates, { query, topic, used } = {}) {
+  const queryWords = subjectWords(query);
+  const topicWords = subjectWords(topic);
+  const matchText = [...queryWords, ...topicWords].join(' ');
+  const fresh = (candidates || []).filter((c) => !photoBlocked(used, c));
+  if (!matchText) return null;
+
+  const scored = fresh.map((c, i) => ({ c, i, score: relevance(c.alt, matchText) }));
 
   // First choice: something that actually names the subject.
   const onTopic = scored
@@ -165,9 +211,12 @@ export function bestPhoto(candidates, { query, used }) {
   // gives no useful alt text, and a silent photo is not a bad one -- the
   // library ranked it first for this query for some reason.
   //
-  // A described photo that shares no words with the query is a different
-  // thing. That fallback is how a finance slide picked up an unrelated stock
-  // photo. Leave it out and let the slide use the gradient.
+  // A described photo that shares no words with the query or the slide topic
+  // is a different thing. That fallback is how a finance slide picked up an
+  // unrelated stock photo (a sticky note reading "hind"). Leave it out and
+  // let the slide use the branded gradient. A generic fallback query with no
+  // subject words does not get an undescribed photo either.
+  if (!queryWords.length) return null;
   const undescribed = scored.filter((s) => !words(s.c.alt).length && !FILLER.test(s.c.alt || ''));
   return undescribed.length ? undescribed[0].c : null;
 }
@@ -280,7 +329,7 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
 
   await fs.mkdir(outDir, { recursive: true });
 
-  const used = new Set();
+  const used = new Map();
   const out = [];
   let attached = 0;
 
@@ -291,6 +340,7 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
     // A branded query is replaced before either library sees it.
     const asked = slide.query;
     const query = deBrand(asked, i);
+    const topic = [spec.topic, slide.headline, slide.subline].filter(Boolean).join(' ');
     if (query !== asked) note(`slide ${n}: "${asked}" names a product — searching "${query}" instead`);
 
     try {
@@ -299,7 +349,7 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
 
       if (SPACE.test(query)) {
         try {
-          chosen = bestPhoto(await searchNasa({ query }), { query, used });
+          chosen = bestPhoto(await searchNasa({ query }), { query, topic, used });
           if (chosen) {
             chosen = { ...chosen, src: await nasaAsset(chosen.nasaId) };
             source = 'NASA';
@@ -314,19 +364,19 @@ export async function attachBackgrounds(spec, { outDir, key = env('PEXELS_API_KE
         const orient = /mansion|estate|villa|aerial|skyscraper|building/i.test(query)
           ? 'landscape'
           : 'portrait';
-        chosen = bestPhoto(await searchPexels({ query, key, orientation: orient }), { query, used });
+        chosen = bestPhoto(await searchPexels({ query, key, orientation: orient }), { query, topic, used });
         source = 'Pexels';
       }
 
       if (!chosen) {
         note(key
-          ? `nothing usable for "${query}" — gradient on slide ${n}`
+          ? `nothing usable for "${query}" — branded gradient on slide ${n}`
           : 'no PEXELS_API_KEY — gradient behind every non-space slide');
-        out.push(slide);
+        out.push({ ...slide, background: null });
         continue;
       }
 
-      used.add(String(chosen.id));
+      notePhotoUse(used, chosen);
       const dest = path.join(outDir, `${String(n).padStart(2, '0')}.jpg`);
       await download({ url: chosen.src, dest });
 
