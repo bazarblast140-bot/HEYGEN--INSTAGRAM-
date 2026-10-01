@@ -27,7 +27,8 @@ import { burnCaptions } from './src/assemble/captions.js';
 import { renderPresenter } from './src/presenter/segment.js';
 import { renderNarration, cutPresenterWindow, alignBeats } from './src/presenter/narration.js';
 import { fetchStock } from './src/stock/index.js';
-import { generateSpec } from './src/script/generate.js';
+import { generateSpec, durationNote } from './src/script/generate.js';
+import { shapeCaption } from './src/publish/caption.js';
 import { run } from './src/assemble/encode.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -278,7 +279,24 @@ async function main() {
     // a scrolling document is two things asking to be read at once.
     if (segment.type === 'article') captionSuppressed = true;
 
-    if (segment.type === 'hook' || segment.type === 'cutin') {
+    if (i === 0 && segment.type === 'hook') {
+      // The first frame is a bold text card. Opening on the presenter saying
+      // "Namaste, main Rajesh" is what the viewer scrolls past.
+      beatTheme = 'dark';
+      const hookCard = segment.card || {
+        chips: [],
+        headline: segment.caption || segment.power || '',
+        power: segment.power || '',
+        footnote: '',
+      };
+      file = await renderSceneClip({
+        scene: 'card.html',
+        data: { ...dedupeCard(hookCard), theme: beatTheme, motif },
+        seconds: duration,
+        layout: 'full', out: path.join(workDir, `${tag}.mp4`), workDir, tag,
+      });
+
+    } else if (segment.type === 'hook' || segment.type === 'cutin') {
       // Without a face, a cut-in falls back to a full-frame card — and its card
       // is often the same one the next beat is about to show. In the last cut
       // "Lagataar teesre din / KHAREEDARI" filled the screen for seven seconds
@@ -430,8 +448,21 @@ async function main() {
     note('no caption text in the spec — nothing burned in');
   }
 
+  const coverPath = path.join(path.dirname(out), 'reel-cover.jpg');
+  let cover = null;
+  try {
+    await run('ffmpeg', ['-y', '-v', 'error', '-i', out, '-frames:v', '1', '-q:v', '2', coverPath]);
+    cover = coverPath;
+  } catch (err) {
+    note(`cover frame not extracted (${String(err.message).slice(0, 80)})`);
+  }
+
+  const lengthNote = durationNote(info.duration);
+  if (lengthNote) note(lengthNote);
+
   const report = {
     out,
+    cover,
     width: info.width, height: info.height, fps: info.fps,
     duration: Number(info.duration.toFixed(2)),
     sizeMB: Number((info.sizeBytes / 1024 / 1024).toFixed(2)),
@@ -447,11 +478,10 @@ async function main() {
 
   // The caption is written next to the video so the publish step never has to
   // reconstruct it, and so a bad caption is visible in the artifact before it ships.
-  const caption = [
-    spec.caption?.trim(),
-    spec.hashtags?.length ? spec.hashtags.join(' ') : null,
-    spec.disclaimer?.trim(),
-  ].filter(Boolean).join('\n\n');
+  const caption = shapeCaption({
+    caption: [spec.caption?.trim(), spec.disclaimer?.trim()].filter(Boolean).join('\n\n'),
+    hashtags: spec.hashtags || [],
+  });
   await fs.writeFile(path.join(path.dirname(out), 'caption.txt'), caption);
 
   console.log(

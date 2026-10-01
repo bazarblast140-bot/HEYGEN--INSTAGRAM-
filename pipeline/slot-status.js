@@ -1,46 +1,41 @@
 #!/usr/bin/env node
-// Has this slot already been posted today?
+// Should this run publish?
 //
-//   node pipeline/slot-status.js
-//
-// 4 slots/day: morning, midday, afternoon, evening — each with its own topic.
-// Ledger key is "YYYY-MM-DD <slot>". Catch-up crons for the same slot are
-// no-ops once that key exists.
+// Two finance slots a day: midday (about 12:30 IST) and evening (about 19:30 IST).
+// Ledger key is "YYYY-MM-DD <slot>" in IST. A second run in the same window is
+// a no-op. A run with no slot publishes only inside one of those windows.
 
 import fs from 'node:fs/promises';
 
 import { readHistory } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
-import { slotFor, slotForCron, SLOTS } from './src/carousel/categories.js';
-
-const now = new Date();
-const date = now.toISOString().slice(0, 10);
-const slot =
-  (process.env.DISPATCH_SLOT || '').trim()
-  || slotForCron(process.env.SCHEDULED_CRON)
-  || slotFor(now);
-const key = `${date} ${slot}`;
-
-if (!SLOTS.includes(slot)) {
-  console.log(`${key} — unknown slot (allowed: ${SLOTS.join(', ')}). Skipping.`);
-  if (process.env.GITHUB_OUTPUT) {
-    await fs.appendFile(process.env.GITHUB_OUTPUT, `pending=false\nslot=${slot}\n`);
-  }
-  process.exit(0);
-}
+import { resolveRun } from './src/carousel/categories.js';
 
 const entries = await readHistory(LEDGER);
-const posted = entries.find((e) => e.date === key);
+const decision = resolveRun({
+  event: process.env.GITHUB_EVENT_NAME || '',
+  dispatchSlot: process.env.DISPATCH_SLOT || '',
+  cron: process.env.SCHEDULED_CRON || '',
+  now: new Date(),
+  entries,
+});
 
-if (posted) {
-  console.log(`${key} — already posted: "${posted.topic}". Nothing to do.`);
+const label = decision.key || decision.date;
+if (decision.reason === 'duplicate') {
+  console.log(`${label} — already posted: "${decision.posted.topic}". Nothing to do.`);
+} else if (decision.reason === 'unknown') {
+  console.log(`${label} — unknown slot "${decision.slot}". Skipping.`);
+} else if (decision.reason === 'wrong-time') {
+  console.log(`${label} — ${decision.slot} is outside its IST window. Skipping.`);
+} else if (decision.reason === 'outside') {
+  console.log(`${label} — no slot, and the clock is outside both posting windows. Skipping.`);
 } else {
-  console.log(`${key} — not posted yet.`);
+  console.log(`${label} — not posted yet.`);
 }
 
 if (process.env.GITHUB_OUTPUT) {
   await fs.appendFile(
     process.env.GITHUB_OUTPUT,
-    `pending=${posted ? 'false' : 'true'}\nslot=${slot}\n`,
+    `pending=${decision.pending ? 'true' : 'false'}\nslot=${decision.pending ? decision.slot : ''}\nreason=${decision.reason}\n`,
   );
 }

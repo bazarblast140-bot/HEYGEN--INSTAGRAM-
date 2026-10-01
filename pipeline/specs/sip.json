@@ -11,12 +11,7 @@
     "#sip",
     "#nifty",
     "#stockmarketindia",
-    "#investing",
-    "#personalfinance",
-    "#nse",
-    "#retailinvestor",
-    "#sipinvestment",
-    "#financialfreedom"
+    "#investing"
   ],
   "disclaimer": "Educational content · Investment advice nahi",
   "segments": [
@@ -24,7 +19,7 @@
       "type": "hook",
       "seconds": null,
       "query": null,
-      "say": "Namaste doston, aaj mutual fund ki sabse badi khabar aapke liye",
+      "say": "Aaj mutual fund ki sabse badi khabar aapke liye",
       "caption": "aaj ki sabse badi khabar",
       "power": "BADI KHABAR",
       "card": {

@@ -1,21 +1,21 @@
 // Fire the carousel on time.
 //
-// GitHub's own cron is best-effort and has been arriving six to eight hours
-// late on this repository -- 00:37 delivered at 07:05, 12:22 at 19:08. A run
-// started by the API, by contrast, begins within a few seconds. So the schedule
-// moves out of GitHub and the trigger becomes an HTTP call.
+// GitHub's own cron is best-effort and has been arriving six to ten hours
+// late. A run started by the API begins within a few seconds, so the schedule
+// lives here and the trigger is an HTTP call.
 //
-// This Worker holds one secret and does one thing: at each cron time it tells
-// the repository which post is due. The slot travels in the payload rather than
-// being worked out at the other end, because the whole failure this replaces
-// was a slot inferred from a clock that had moved on.
+// Two finance posts: optional midday at 12:30 IST, main evening at 19:30 IST.
+// AI news and the general-news digest are off. The slot still travels in the
+// payload. The pipeline also refuses a dispatch that arrives outside that
+// slot's window, so an old cron cannot publish at 06:07 or 17:07.
 //
 // Cloudflare cron triggers are UTC, like GitHub's. IST is UTC+5:30.
+// Redeploy after changing these (`npx wrangler deploy` from scheduler/).
+// A copy already running in Cloudflare keeps the old times until you do.
 
 export const SLOTS = {
-  '37 0 * * *': 'morning',    // 06:07 IST
-  '37 7 * * *': 'midday',     // 13:07 IST -- technology and AI
-  '37 11 * * *': 'evening',   // 17:07 IST
+  '0 7 * * *': 'midday',    // 12:30 IST
+  '0 14 * * *': 'evening',  // 19:30 IST
 };
 
 export async function dispatch({ repo, token, slot }) {
@@ -53,9 +53,9 @@ export default {
   },
 
   // Same job, on demand, for checking the token without waiting for a cron.
-  //   curl -X POST https://<worker>/?slot=morning
+  //   curl -X POST https://<worker>/?slot=evening
   async fetch(request, env) {
-    if (request.method !== 'POST') return new Response('POST ?slot=morning|midday|evening\n', { status: 405 });
+    if (request.method !== 'POST') return new Response('POST ?slot=midday|evening\n', { status: 405 });
     const slot = new URL(request.url).searchParams.get('slot');
     if (!Object.values(SLOTS).includes(slot)) return new Response('unknown slot\n', { status: 400 });
 

@@ -60,6 +60,17 @@ export async function call(pathname, { method = 'GET', params = {}, token, surfa
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Graph params for a Reel container. cover_url is set only when a cover was passed. */
+export function reelContainerParams({ videoUrl, caption, shareToFeed = true, coverUrl } = {}) {
+  return {
+    media_type: 'REELS',
+    video_url: videoUrl,
+    share_to_feed: String(shareToFeed),
+    ...(caption ? { caption } : {}),
+    ...(coverUrl ? { cover_url: coverUrl } : {}),
+  };
+}
+
 /** Step 1 — hand Instagram the video URL and get a container back. */
 export async function createReelContainer({ igUserId, videoUrl, caption, token, shareToFeed = true, coverUrl, surface }) {
   if (!/^https:\/\//.test(videoUrl)) {
@@ -69,13 +80,7 @@ export async function createReelContainer({ igUserId, videoUrl, caption, token, 
   const { id } = await call(`${igUserId}/media`, {
     method: 'POST',
     token, surface,
-    params: {
-      media_type: 'REELS',
-      video_url: videoUrl,
-      share_to_feed: String(shareToFeed),
-      ...(caption ? { caption } : {}),
-      ...(coverUrl ? { cover_url: coverUrl } : {}),
-    },
+    params: reelContainerParams({ videoUrl, caption, shareToFeed, coverUrl }),
   });
   return id;
 }

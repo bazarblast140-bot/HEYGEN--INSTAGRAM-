@@ -64,9 +64,9 @@ const dates = (n, from = '2026-01-01') => {
   return Array.from({ length: n }, (_, i) => new Date((start + i) * 86400000).toISOString().slice(0, 10));
 };
 
-test('the morning and evening posts are never the same category', () => {
+test('the midday and evening posts are never the same category', () => {
   const same = dates(POOL.length * 2)
-    .filter((d) => categoryFor(d, 'morning') === categoryFor(d, 'evening'));
+    .filter((d) => categoryFor(d, 'midday') === categoryFor(d, 'evening'));
   assert.deepEqual(same, []);
 });
 
@@ -80,7 +80,7 @@ test('different daily slots get different categories', () => {
   }
 });
 
-test('no two posts in a row repeat, reading the day as morning then evening', () => {
+test('no two posts in a row repeat, reading the day as midday then evening', () => {
   const runs = [];
   let previous = null;
   for (const day of dates(POOL.length * 2)) {
@@ -93,11 +93,11 @@ test('no two posts in a row repeat, reading the day as morning then evening', ()
   assert.deepEqual(runs, []);
 });
 
-// Morning walks the finance pool once per cycle.
-test('over a full cycle each general subject gets exactly one morning', () => {
+// Midday walks the finance pool once per cycle.
+test('over a full cycle each finance subject gets exactly one midday', () => {
   const counts = new Map();
   for (const day of dates(POOL.length)) {
-    const c = categoryFor(day, 'morning');
+    const c = categoryFor(day, 'midday');
     counts.set(c, (counts.get(c) || 0) + 1);
   }
   for (const category of POOL) assert.equal(counts.get(category), 1, category);
@@ -117,17 +117,19 @@ test('the slot offset clears the longest block of one category', () => {
     POOL.length - (((step % POOL.length) + POOL.length) % POOL.length));
 
   assert.ok(circular(SLOT_OFFSET) >= longest, 'the evening step lands inside a block');
-  assert.ok(circular(STRIDE - SLOT_OFFSET) >= longest, 'the next morning lands inside the evening\'s block');
+  assert.ok(circular(STRIDE - SLOT_OFFSET) >= longest, 'the next midday lands inside the evening\'s block');
 });
 
-test('the slot is read from the clock, IST 06:00 and 17:00 being 00:30 and 11:30 UTC', () => {
-  assert.equal(slotFor(new Date('2026-03-14T00:30:00Z')), 'morning');
-  assert.equal(slotFor(new Date('2026-03-14T11:30:00Z')), 'evening');
-  // A run that starts late, but still inside the morning window (before 05:00 UTC).
-  assert.equal(slotFor(new Date('2026-03-14T04:30:00Z')), 'morning');
-  assert.equal(slotFor(new Date('2026-03-14T05:45:00Z')), 'midday');
+test('the slot is read from the two IST windows', () => {
+  assert.equal(slotFor(new Date('2026-10-01T00:37:00Z')), null);   // 06:07 IST
+  assert.equal(slotFor(new Date('2026-10-01T07:00:00Z')), 'midday'); // 12:30 IST
+  assert.equal(slotFor(new Date('2026-10-01T07:37:00Z')), 'midday'); // 13:07 IST
+  assert.equal(slotFor(new Date('2026-10-01T11:37:00Z')), null);   // 17:07 IST
+  assert.equal(slotFor(new Date('2026-10-01T14:00:00Z')), 'evening'); // 19:30 IST
 });
 
-test('an unknown slot is refused rather than silently treated as morning', () => {
+test('an unknown slot is refused rather than silently treated as evening', () => {
   assert.throws(() => categoryFor('2026-03-14', 'night'), /Unknown slot/);
+  assert.throws(() => categoryFor('2026-03-14', 'morning'), /Unknown slot/);
+  assert.throws(() => categoryFor('2026-03-14', 'afternoon'), /Unknown slot/);
 });

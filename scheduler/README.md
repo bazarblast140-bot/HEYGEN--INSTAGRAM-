@@ -1,42 +1,61 @@
 # On-time scheduler
 
-GitHub's cron did not miss the morning post — it delivered it late enough that
-it stopped being the morning post. Every one of the last five scheduled runs
-arrived six to eight hours after its cron time:
+GitHub's cron often arrives six to ten hours late. A run started through the
+API does not wait, so the two daily posts are fired from this Worker and
+GitHub's own crons stay in the workflow only as a backstop. The ledger
+(`YYYY-MM-DD <slot>`, IST) stops the two from doubling up.
 
-| cron (UTC) | delivered | late by |
+Two finance carousels:
+
+| cron (UTC) | IST | post |
 | --- | --- | --- |
-| 00:37 | 07:05 | 6h 28m |
-| 07:37 | 15:18 | 7h 41m |
-| 08:22 | 16:13 | 7h 51m |
-| 11:37 | 18:07 | 6h 30m |
-| 12:22 | 19:08 | 6h 46m |
+| `0 7 * * *` | 12:30 | optional finance carousel |
+| `0 14 * * *` | 19:30 | main finance carousel, plus one Story |
 
-A run started through the API does not wait: every dispatch made while building
-this pipeline began within about two seconds. So the schedule moves out of
-GitHub and only the trigger stays there.
+AI news and the general-news digest are off. Stories go out only with the
+19:30 post, and only one frame.
 
-This Worker is the whole of it: three cron times, one HTTP call each, telling
-the repository which post is due. The slot travels in the payload — the failure
-being fixed was a slot inferred from a clock that had moved on, so nothing here
-infers anything.
+The slot travels in the `repository_dispatch` payload. The pipeline also
+derives a slot from the IST clock when a run arrives with no slot, and it
+skips anything outside 12:00–13:45 and 19:00–20:45 IST. A GitHub `schedule`
+event keeps the slot written on its cron even when that cron is hours late.
 
-GitHub's own crons stay in the workflow as a backstop. If this Worker stops, a
-late post still beats no post, and the ledger stops the two from doubling up.
+## What to change outside this repo
+
+The Worker that is already deployed does not pick up a git push. Until it is
+redeployed it keeps firing `37 0`, `37 7` and `37 11` (06:07, 13:07 and 17:07
+IST). Those runs have been showing up as `workflow_dispatch` with no slot,
+and the old default then posted the evening carousel at about 06:09 IST.
+
+After this change a run with no slot publishes only inside the two windows
+above, so 06:07 and 17:07 no longer post. 13:07 still falls inside the
+optional midday window, so it will keep posting until the trigger moves.
+
+1. Redeploy this Worker (`npx wrangler deploy` from `scheduler/`, or paste
+   `src/worker.js` into the Cloudflare editor and deploy).
+2. In the Worker → Settings → Triggers, delete `37 0 * * *`, `37 7 * * *`
+   and `37 11 * * *`. Leave only:
+
+   ```
+   0 7 * * *       12:30 IST
+   0 14 * * *      19:30 IST
+   ```
+
+3. If cron-job.org or any other caller starts **Build carousel** with
+   `workflow_dispatch` at 06:07, 13:07 or 17:07, disable it or point it at
+   12:30 and 19:30 IST. A dispatch with no slot now posts only inside the
+   two windows. Do not send `slot=evening` at 06:07: that is refused as the
+   wrong time.
 
 ## Setting it up — browser only, no CLI
-
-Nothing here needs Node or a terminal. Exact button labels move around; the
-things being looked for do not.
 
 1. **A GitHub token.** github.com → Settings → Developer settings → Personal
    access tokens → **Fine-grained tokens** → generate one.
    - Repository access: only `HEYGEN--INSTAGRAM-`
    - Repository permissions: **Contents → Read and write**, nothing else. That
      is what `repository_dispatch` needs.
-   - Expiry: the longest offered, and put a reminder in your calendar. An
-     expired token stops the posts and says nothing about it.
-   - Copy it once — GitHub will not show it again. Do not paste it into a chat.
+   - Expiry: the longest offered, and put a reminder in your calendar.
+   - Copy it once. Do not paste it into a chat.
 
 2. **A Worker.** dash.cloudflare.com → Workers & Pages → create a Worker.
    Open its editor, delete the placeholder, and paste all of
@@ -44,71 +63,50 @@ things being looked for do not.
 
 3. **Its two settings.** In the Worker's Settings → Variables:
    - a plain variable `REPO` = `bazarblast140-bot/HEYGEN--INSTAGRAM-`
-   - a **secret** (encrypted, not a plain variable) `GITHUB_TOKEN` = the token
+   - a **secret** `GITHUB_TOKEN` = the token
 
-4. **Its three times.** In the Worker's Settings → Triggers → Cron Triggers,
-   add these three, exactly. They are UTC, like GitHub's; IST is UTC+5:30.
-
-   ```
-   37 0 * * *      06:07 IST -- a fact carousel
-   37 7 * * *      13:07 IST -- technology and AI
-   37 11 * * *     17:07 IST -- a fact carousel
-   ```
-
-5. **Check it now, without waiting for 06:07.** The Worker has a URL; POST to it:
+4. **Its two times.** Settings → Triggers → Cron Triggers. UTC, like GitHub's.
 
    ```
-   curl -X POST "https://<your-worker>.workers.dev/?slot=morning"
+   0 7 * * *       12:30 IST -- optional finance carousel
+   0 14 * * *      19:30 IST -- main finance carousel
    ```
 
-   `dispatched morning` means the token works and a run has started. If today's
-   morning post already went out, the run ends in a few seconds saying so — that
-   is the ledger doing its job, not a failure.
+5. **Check it.** POST to the Worker URL:
+
+   ```
+   curl -X POST "https://<your-worker>.workers.dev/?slot=evening"
+   ```
+
+   `dispatched evening` means the token works. If that slot already went out
+   today, the run ends in a few seconds saying so.
 
 ## Setting it up — from a terminal instead
 
+From this folder:
 
+```
+npx wrangler login
+npx wrangler secret put GITHUB_TOKEN
+npx wrangler deploy
+```
 
-1. **A GitHub token.** github.com → Settings → Developer settings → Personal
-   access tokens → **Fine-grained tokens** → Generate new token.
-   - Repository access: only `HEYGEN--INSTAGRAM-`
-   - Repository permissions: **Contents → Read and write** (that is what
-     `repository_dispatch` needs; nothing else)
-   - Expiry: the longest offered, and put a reminder in your calendar — an
-     expired token stops the posts and says nothing.
+Then:
 
-2. **Deploy.** With Node installed, from this folder:
-
-From this folder, with the token from step 1 above:
-
-   ```
-   npx wrangler login
-   npx wrangler secret put GITHUB_TOKEN     # paste the token, it is never written to disk
-   npx wrangler deploy
-   ```
-
-   The free Cloudflare plan covers this: three requests a day against a limit of
-   a hundred thousand.
-
-3. **Check it without waiting for 06:07.** `wrangler deploy` prints the Worker's
-   URL:
-
-   ```
-   curl -X POST "https://factvizer-scheduler.<your-subdomain>.workers.dev/?slot=morning"
-   ```
-
-   `dispatched morning` means the token works and a run has started. If today's
-   morning post already went out, the run will end in a few seconds saying so —
-   that is the ledger doing its job, not a failure.
+```
+curl -X POST "https://factvizer-scheduler.<your-subdomain>.workers.dev/?slot=evening"
+```
 
 ## Changing the times
 
 The times live in two places that must agree: `crons` in `wrangler.toml` and
 `SLOTS` in `src/worker.js`. A cron in one and not the other throws rather than
-firing nothing quietly. Both are UTC; IST is UTC+5:30, so subtract 5:30.
+firing nothing quietly. Both are UTC; IST is UTC+5:30, so subtract 5 hours
+30 minutes. The posting windows in `pipeline/src/carousel/categories.js` have
+to cover the new times as well.
 
 ## If you would rather not run code
 
-cron-job.org will do the same POST from a form, with no deploying. The cost is
-that your GitHub token then lives on someone else's server rather than in your
-own Cloudflare account, which is why it is not the recommendation here.
+cron-job.org will do the same POST from a form. The GitHub token then lives
+on someone else's server, which is why it is not the recommendation here.
+If you use it, schedule 12:30 and 19:30 IST only, and send the slot.

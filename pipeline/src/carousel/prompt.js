@@ -22,8 +22,8 @@ FACT RULES
 LANGUAGE & STYLE
 - Hindi Devanagari + common English finance terms: EPS, ROE, ROCE, P/E, IV, Delta, VWAP, EBITDA आदि.
 - Tone: confident, crisp, intelligent, curiosity-driven; sensational नहीं.
-- Cover: 2–3 lines, ideally 4–10 words per line. सवाल की जगह strong statement/challenge.
-- Fact slides: headline छोटा और बड़ा; subline 2–3 short lines. एक slide में एक मुख्य idea.
+- Cover: एक bold line, 4–8 words. Subline छोटा हो या बिलकुल न हो. यही slide hook है और cover भी.
+- Fact slides: headline max 8 words; subline max 16 words. एक slide में एक मुख्य idea. Text कम रखो.
 - Yellow केवल headline/highlight के लिए. Explanation readable white/off-white रखो.
 - Repeated emojis, clickbait और ALL-CAPS English नहीं.
 `;
@@ -62,10 +62,10 @@ FRESHNESS RULES
 
 <structure>
 ठीक ${SLIDES} slides:
-1. Cover — band center, cta false, source null. Big hook.
-2–9. Fact slides — band bottom, cta false. हर slide पर source.
-10. Follow card — cta true, source null, कोई fact नहीं.
-सबसे strong fact slide 2 पर. हर slide नया information block दे.
+1. Cover — band center, cta false, source null. One bold hook line. This slide is the cover.
+2–9. Fact slides — band bottom, cta false. हर slide पर source. Headline short, subline shorter than before.
+10. Last slide — cta true, source null, कोई fact नहीं. Viewer से सेव करो और फ़ॉलो करो कहो.
+सबसे strong fact slide 2 पर. हर slide नया information block दे. Background query उसी topic का हो.
 </structure>
 
 <visual_direction>
@@ -81,14 +81,14 @@ Last slide query हमेशा abstract dark finance texture हो.
   "topic": "3–8 शब्दों में specific topic",
   "category": "${category}",
   "slides": [
-    {"band":"center","headline":"2–3 lines hook","subline":null,"source":null,"cta":false,"query":"english visual search terms","person":null},
-    {"band":"bottom","headline":"short key fact","subline":"2–3 short lines explaining why it matters","source":"real source name","cta":false,"query":"english visual search terms","person":null}
+    {"band":"center","headline":"one bold hook line","subline":null,"source":null,"cta":false,"query":"english visual search terms for THIS topic","person":null},
+    {"band":"bottom","headline":"short key fact","subline":"one short line","source":"real source name","cta":false,"query":"english visual search terms for THIS topic","person":null}
   ],
-  "caption":"पहली line strong but factual, फिर 2–3 useful sentences, फिर source/disclosure.",
-  "hashtags":["#stockmarket","#trading","#investing","#शेयरबाजार","#ट्रेडिंग","#निवेश"]
+  "caption":"पहली line strong hook. फिर 2 short Hinglish lines. आख़िर में save/share/comment. Referral URL मत लिखो.",
+  "hashtags":["#stockmarket","#nifty","#investing","#शेयरबाजार","#optionstrading"]
 }
 </output_format>
 
-भेजने से पहले: topic नया है, facts sourceable हैं, slide 2 strongest है, visual queries unique हैं और आख़िरी CTA सिर्फ़ Follow me है.
+भेजने से पहले: topic नया है, facts sourceable हैं, slide 1 hook/cover है, slide 2 strongest है, visual queries उसी topic के हैं, hashtags ज़्यादा से ज़्यादा 5 हैं, और आख़िरी slide सेव करो और फ़ॉलो करो कहती है. Caption में कोई URL नहीं.
 `;
 }

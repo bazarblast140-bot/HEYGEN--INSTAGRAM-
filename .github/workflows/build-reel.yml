@@ -143,7 +143,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MEDIA_REPO: ${{ vars.MEDIA_REPO }}
           MEDIA_REPO_TOKEN: ${{ secrets.MEDIA_REPO_TOKEN }}
-        run: node pipeline/host-video.js --file pipeline/out/reel-final.mp4
+        run: |
+          COVER=""
+          if [ -f pipeline/out/reel-cover.jpg ]; then COVER="--cover pipeline/out/reel-cover.jpg"; fi
+          node pipeline/host-video.js --file pipeline/out/reel-final.mp4 $COVER
 
       - name: Publish to Instagram
         if: ${{ github.event_name == 'schedule' || github.event.inputs.publish == 'true' }}
@@ -152,10 +155,13 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_SURFACE: ${{ vars.IG_SURFACE }}
         run: |
+          COVER=""
+          if [ -n "${{ steps.host.outputs.cover_url }}" ]; then COVER="--cover ${{ steps.host.outputs.cover_url }}"; fi
           node pipeline/publish-reel.js \
             --url "${{ steps.host.outputs.url }}" \
             --report pipeline/out/run-report.json \
-            --caption-file pipeline/out/caption.txt
+            --caption-file pipeline/out/caption.txt \
+            $COVER
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -163,6 +169,7 @@ jobs:
           name: reel
           path: |
             pipeline/out/reel-final.mp4
+            pipeline/out/reel-cover.jpg
             pipeline/out/run-report.json
             pipeline/out/build/word-timestamps.json
           retention-days: 14

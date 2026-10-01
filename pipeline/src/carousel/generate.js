@@ -62,7 +62,7 @@ export function normalizeSpec(spec) {
     const last = slides[slides.length - 1];
     slides.push({
       band: 'bottom',
-      headline: last.headline || 'Follow me',
+      headline: last.headline || 'सेव करो',
       subline: null,
       source: null,
       cta: false,
@@ -89,11 +89,18 @@ export function normalizeSpec(spec) {
       band = 'bottom';
       cta = true;
       source = null;
-      // CTA copy must be plain Follow me — no brand name.
-      if (!headline || /FACTVIZER|@|follow.*(account|page)/i.test(String(headline))) {
-        headline = 'Follow me';
+      if (/FACTVIZER|@/i.test(String(headline || ''))) headline = 'सेव करो';
+      const blob = `${headline || ''}\n${subline || ''}`;
+      const save = /सेव|save/i.test(blob);
+      const follow = /फ़ॉलो|फॉलो|follow/i.test(blob);
+      if (!save && !follow) {
+        headline = 'सेव करो';
+        subline = 'फ़ॉलो करो';
+      } else if (!save) {
+        subline = [subline, 'सेव करो'].filter(Boolean).join('\n');
+      } else if (!follow) {
+        subline = [subline, 'फ़ॉलो करो'].filter(Boolean).join('\n');
       }
-      subline = subline || null;
     } else {
       band = 'bottom';
       cta = false;
@@ -118,8 +125,38 @@ export function normalizeSpec(spec) {
   return { ...spec, slides: fixed };
 }
 
+const wordCount = (text) => String(text || '').replace(/\n/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+
+/** Soft length and CTA checks. Early attempts are sent back; a late one is repaired. */
+export function slideTextProblems(spec) {
+  const problems = [];
+  const slides = spec.slides || [];
+  const cover = slides[0];
+  if (cover) {
+    const headline = wordCount(cover.headline);
+    const subline = wordCount(cover.subline);
+    if (headline > 12) problems.push(`cover headline is ${headline} words — keep the hook to 12`);
+    if (subline > 8) problems.push(`cover subline is ${subline} words — keep it to 8, or drop it`);
+  }
+  slides.forEach((slide, i) => {
+    if (i === 0 || slide.cta) return;
+    const headline = wordCount(slide.headline);
+    const subline = wordCount(slide.subline);
+    if (headline > 8) problems.push(`slide ${i + 1} headline is ${headline} words — keep it to 8`);
+    if (subline > 16) problems.push(`slide ${i + 1} subline is ${subline} words — keep it to 16`);
+  });
+  const last = slides.at(-1);
+  if (last) {
+    const blob = `${last.headline || ''} ${last.subline || ''}`;
+    if (!/सेव|save/i.test(blob) || !/फ़ॉलो|फॉलो|follow/i.test(blob)) {
+      problems.push('the last slide must ask the viewer to save and to follow');
+    }
+  }
+  return problems;
+}
+
 export function softProblems(spec) {
-  return [...checkEcho(spec), ...checkMoneySources(spec)];
+  return [...checkEcho(spec), ...checkMoneySources(spec), ...slideTextProblems(spec)];
 }
 
 export function validateShape(spec, recentTopics) {

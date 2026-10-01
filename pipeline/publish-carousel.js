@@ -89,7 +89,7 @@ async function main() {
   // The story rides along in the same release. One upload, one tag, and the
   // story URL is simply the last asset — a second release for one JPEG would
   // double the failure surface for the optional half of the job.
-  const storyFiles = args.story === false ? [] : (report.stories || (report.story ? [report.story] : []));
+  const storyFiles = (args.story === false ? [] : (report.stories || (report.story ? [report.story] : []))).slice(0, 1);
 
   console.log('\nHosting');
   const { assets, tag } = await hostFiles({

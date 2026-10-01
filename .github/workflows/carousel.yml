@@ -1,8 +1,11 @@
 name: Build carousel
 
-# 4 finance carousels a day — morning / midday / afternoon / evening — each a
-# different topic. Catch-up crons exist because GitHub schedule is best-effort;
-# the ledger (YYYY-MM-DD <slot>) prevents duplicates.
+# Two finance carousels a day. AI news and the general-news digest are off.
+#   midday   optional, 12:30 IST (catch-up 12:52)
+#   evening  the main post, 19:30 IST (catch-up 19:52), plus one Story
+# GitHub's schedule is often hours late. slot-status keeps the cron's slot
+# anyway, and the ledger (YYYY-MM-DD <slot>, IST) stops a second copy.
+# A dispatch with no slot publishes only inside those IST windows.
 #
 # A scheduled run PUBLISHES. Guards reject unsourced slides, repeated topics,
 # and non-JPEG builds.
@@ -12,18 +15,12 @@ on:
     types: [carousel]
 
   schedule:
-    # morning   ~08:07 IST + catch-up ~08:52
-    - cron: '37 2 * * *'
-    - cron: '22 3 * * *'
-    # midday    ~12:07 IST + catch-up ~12:52
-    - cron: '37 6 * * *'
+    # midday  12:30 IST + catch-up 12:52
+    - cron: '0 7 * * *'
     - cron: '22 7 * * *'
-    # afternoon ~15:07 IST + catch-up ~15:52
-    - cron: '37 9 * * *'
-    - cron: '22 10 * * *'
-    # evening   ~17:07 IST + catch-up ~17:52
-    - cron: '37 11 * * *'
-    - cron: '22 12 * * *'
+    # evening 19:30 IST + catch-up 19:52
+    - cron: '0 14 * * *'
+    - cron: '22 14 * * *'
 
   workflow_dispatch:
     inputs:
@@ -43,10 +40,10 @@ on:
         type: boolean
         default: true
       slot:
-        description: Which of the 4 daily slots
+        description: auto derives the slot from the IST clock, or skips outside the windows
         type: choice
-        options: ['morning', 'midday', 'afternoon', 'evening']
-        default: 'evening'
+        options: ['auto', 'midday', 'evening']
+        default: 'auto'
       publish:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
         type: boolean
@@ -80,6 +77,7 @@ jobs:
       - name: Is this slot still pending?
         id: slot
         env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
           SCHEDULED_CRON: ${{ github.event.schedule }}
           DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
@@ -137,7 +135,7 @@ jobs:
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
             ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
-            ${{ github.event.inputs.slot && format('--slot {0}', github.event.inputs.slot) || (steps.slot.outputs.slot && format('--slot {0}', steps.slot.outputs.slot)) || '' }} \
+            ${{ steps.slot.outputs.slot && format('--slot {0}', steps.slot.outputs.slot) || '' }} \
             ${{ (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true') && '--require-generated' || '' }} \
             2>&1 | tee carousel.log
           {
@@ -166,7 +164,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Any of the 4 slots may publish (not evening-only).
+      # Either finance slot may publish. A story is attached only to the evening post.
       - name: Publish to Instagram
         id: publish
         if: ${{ (steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true' }}

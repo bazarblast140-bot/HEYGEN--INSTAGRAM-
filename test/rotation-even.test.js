@@ -27,14 +27,14 @@ test('the stride walks the whole pool', () => {
   assert.equal(gcd(STRIDE, POOL.length), 1, `stride ${STRIDE} and pool ${POOL.length} share a factor`);
 });
 
-test('over one cycle every general subject gets exactly one morning', () => {
-  const mornings = {};
+test('over one cycle every finance subject gets exactly one midday', () => {
+  const middays = {};
   for (let d = 0; d < POOL.length; d += 1) {
-    const c = categoryFor(day(d), 'morning');
-    mornings[c] = (mornings[c] || 0) + 1;
+    const c = categoryFor(day(d), 'midday');
+    middays[c] = (middays[c] || 0) + 1;
   }
   for (const category of POOL) {
-    assert.equal(mornings[category], 1, `${category} got ${mornings[category] || 0} mornings in a cycle`);
+    assert.equal(middays[category], 1, `${category} got ${middays[category] || 0} middays in a cycle`);
   }
 });
 
@@ -60,33 +60,32 @@ test('every finance subject has a brief, and the news slots are not finance', ()
   }
 });
 
-// Morning and evening both teach finance. Midday is AI and afternoon is the
-// news digest — those two stay off the finance list.
-test('morning and evening are finance, and the other two slots are not', () => {
+// Both remaining slots teach finance. AI news and the general digest are off.
+test('midday and evening are both finance', () => {
   for (let d = 0; d < 40; d += 1) {
-    assert.ok(FINANCE.includes(categoryFor(day(d), 'morning')), `morning of ${day(d)} is not finance`);
+    assert.ok(FINANCE.includes(categoryFor(day(d), 'midday')), `midday of ${day(d)} is not finance`);
     assert.ok(FINANCE.includes(categoryFor(day(d), 'evening')), `evening of ${day(d)} is not finance`);
-    assert.equal(categoryFor(day(d), 'midday'), 'ai-news');
-    assert.equal(categoryFor(day(d), 'afternoon'), 'latest-news');
+    assert.notEqual(categoryFor(day(d), 'midday'), 'ai-news');
+    assert.notEqual(categoryFor(day(d), 'evening'), 'latest-news');
   }
 });
 
 test('a day never runs the same subject twice', () => {
   for (let d = 0; d < POOL.length * 2; d += 1) {
     const date = day(d);
-    assert.notEqual(categoryFor(date, 'morning'), categoryFor(date, 'evening'), `both posts on ${date}`);
+    assert.notEqual(categoryFor(date, 'midday'), categoryFor(date, 'evening'), `both posts on ${date}`);
   }
 });
 
 // The offset used to be 10 against a stride of 5, which made the evening pick
 // the morning pick of two days later. Half the pool does the same thing four
 // days out, so the check is the week itself, plus "the offset actually moves".
-test('the evening pick is not a morning pick from the same week', () => {
+test('the evening pick is not a midday pick from the same week', () => {
   for (let d = 0; d < POOL.length; d += 1) {
     const evening = categoryFor(day(d), 'evening');
     for (let ahead = 1; ahead <= 5; ahead += 1) {
-      assert.notEqual(evening, categoryFor(day(d + ahead), 'morning'),
-        `evening of ${day(d)} repeats as morning of ${day(d + ahead)}`);
+      assert.notEqual(evening, categoryFor(day(d + ahead), 'midday'),
+        `evening of ${day(d)} repeats as midday of ${day(d + ahead)}`);
     }
   }
   assert.notEqual(SLOT_OFFSET % POOL.length, 0, 'a multiple of the pool does not move the evening');

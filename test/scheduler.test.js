@@ -12,8 +12,8 @@ const read = (p) => readFile(new URL(p, import.meta.url), 'utf8');
 const crons = (text) => [...text.matchAll(/["'](\d[^"']*\*[^"']*)["']/g)].map((m) => m[1]);
 
 test('the Worker fires one cron per slot', () => {
-  assert.deepEqual([...new Set(Object.values(SLOTS))].sort(), ['evening', 'midday', 'morning']);
-  assert.equal(Object.keys(SLOTS).length, 3);
+  assert.deepEqual([...new Set(Object.values(SLOTS))].sort(), ['evening', 'midday']);
+  assert.equal(Object.keys(SLOTS).length, 2);
 });
 
 // A cron in wrangler.toml with no entry in SLOTS fires nothing.
@@ -38,12 +38,12 @@ test('the dispatch names its slot in the payload', async () => {
   };
 
   try {
-    const status = await dispatch({ repo: 'owner/repo', token: 'tok', slot: 'morning' });
+    const status = await dispatch({ repo: 'owner/repo', token: 'tok', slot: 'evening' });
     assert.equal(status, 204);
     assert.equal(seen.url, 'https://api.github.com/repos/owner/repo/dispatches');
     assert.equal(seen.init.method, 'POST');
     assert.equal(JSON.parse(seen.init.body).event_type, 'carousel');
-    assert.equal(JSON.parse(seen.init.body).client_payload.slot, 'morning');
+    assert.equal(JSON.parse(seen.init.body).client_payload.slot, 'evening');
     // GitHub rejects a call with no User-Agent, and the error reads like auth.
     assert.ok(seen.init.headers['User-Agent']);
     assert.equal(seen.init.headers.Authorization, 'Bearer tok');
@@ -57,7 +57,7 @@ test('a refused dispatch is an error, not a silent no-op', async () => {
   globalThis.fetch = async () => ({ ok: false, status: 401, text: async () => 'Bad credentials' });
   try {
     await assert.rejects(
-      () => dispatch({ repo: 'owner/repo', token: 'bad', slot: 'morning' }),
+      () => dispatch({ repo: 'owner/repo', token: 'bad', slot: 'evening' }),
       /401.*Bad credentials/s,
     );
   } finally {

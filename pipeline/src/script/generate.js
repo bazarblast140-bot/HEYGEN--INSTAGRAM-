@@ -86,8 +86,14 @@ function validateShape(spec, recentTopics = []) {
   // the words rather than on numbers the model guessed.
   const words = spec.segments.reduce((n, s) => n + String(s.say || '').trim().split(/\s+/).filter(Boolean).length, 0);
 
-  if (words < 55 || words > 115) problems.push(`${words} spoken words is outside 55–115 (about 22–40 seconds)`);
+  if (words < 50 || words > 80) problems.push(`${words} spoken words is outside 50–80 (about 20–30 seconds)`);
   if (!spec.segments.some((s) => s.type === 'hook')) problems.push('no hook beat');
+
+  const opener = spec.segments[0];
+  const opening = `${opener?.say || ''} ${opener?.caption || ''}`;
+  if (/namaste|main rajesh/i.test(opening)) {
+    problems.push('the reel must not open with Namaste or "main Rajesh" — the first frame is a text hook');
+  }
   if (!spec.segments.some((s) => s.type === 'chart')) problems.push('no chart beat');
 
   // The article beat only works if reaching the highlight is a journey.
@@ -151,6 +157,19 @@ function validateShape(spec, recentTopics = []) {
   }
 
   return problems;
+}
+
+/** Same structural checks the generator retries on. Safe to call from tests. */
+export function checkReelShape(spec, recentTopics = []) {
+  return validateShape(spec, recentTopics);
+}
+
+/** A note, not a failure. Instagram still rejects only under 3s and over 90s. */
+export function durationNote(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n)) return null;
+  if (n >= 20 && n <= 30) return null;
+  return `${n}s is outside the 20–30 second target`;
 }
 
 async function callAnthropic({ system, user, model, effort }) {

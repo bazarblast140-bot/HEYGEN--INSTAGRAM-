@@ -182,9 +182,14 @@ export async function waitUntilServed(url, { attempts = 8, waitMs = 1500, onWait
   throw new Error(`${url} is still not being served after ${attempts} tries (${last}). Instagram would reject it.`);
 }
 
-export async function hostVideo({ file, tag = `reel-${new Date().toISOString().slice(0, 10)}` }) {
+export async function hostVideo({ file, cover, tag = `reel-${new Date().toISOString().slice(0, 10)}` }) {
   const { repo, token } = target();
   const release = await ensureRelease({ repo, token, tag });
   const asset = await upload({ repo, token, release, file, name: path.basename(file) });
-  return { url: asset.url, repo, tag, sizeBytes: asset.sizeBytes };
+  let coverUrl = null;
+  if (cover) {
+    const coverAsset = await upload({ repo, token, release, file: cover, name: path.basename(cover) });
+    coverUrl = coverAsset.url;
+  }
+  return { url: asset.url, coverUrl, repo, tag, sizeBytes: asset.sizeBytes };
 }

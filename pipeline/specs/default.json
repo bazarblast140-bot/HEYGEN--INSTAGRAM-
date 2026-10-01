@@ -7,8 +7,8 @@
   "segments": [
     {
       "type": "hook",
-      "say": "Namaste, main Rajesh. Market kholne se pehle aaj teen baatein aapko pata honi chahiye.",
-      "caption": "Namaste, main Rajesh",
+      "say": "Market kholne se pehle aaj teen baatein aapko pata honi chahiye.",
+      "caption": "Teen baatein, market kholne se pehle",
       "power": "TEEN BAATEIN",
       "card": {
         "chips": [
@@ -145,12 +145,7 @@
     "#stockmarketindia",
     "#sharemarket",
     "#intraday",
-    "#nse",
-    "#trading",
-    "#niftyanalysis",
-    "#stockmarketnews",
-    "#investing",
-    "#rajeshtechnicaltraders"
+    "#nse"
   ],
   "disclaimer": "Ye content sirf education ke liye hai. Investment advice nahi hai. Main SEBI registered research analyst nahi hoon. Apna research karo ya registered advisor se baat karo.",
   "topic": "F I I cash market buying streak"

@@ -164,8 +164,12 @@ export function bestPhoto(candidates, { query, used }) {
   // Second choice: a photo the library did not describe at all. Pexels often
   // gives no useful alt text, and a silent photo is not a bad one -- the
   // library ranked it first for this query for some reason.
-  const neutral = scored.find((s) => !FILLER.test(s.c.alt || ''));
-  return neutral ? neutral.c : null;
+  //
+  // A described photo that shares no words with the query is a different
+  // thing. That fallback is how a finance slide picked up an unrelated stock
+  // photo. Leave it out and let the slide use the gradient.
+  const undescribed = scored.filter((s) => !words(s.c.alt).length && !FILLER.test(s.c.alt || ''));
+  return undescribed.length ? undescribed[0].c : null;
 }
 
 async function json(url, opts) {

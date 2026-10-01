@@ -23,10 +23,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } from './render-slides.js';
 import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
-import { generateCarousel, generateNewsCarousel, normalizeSpec } from './src/carousel/generate.js';
-import { slotFor } from './src/carousel/categories.js';
-import { storyFrames } from './src/carousel/story.js';
-import { referralCaptionBlock } from './src/carousel/referrals.js';
+import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
+import { SLOTS, slotFor } from './src/carousel/categories.js';
+import { framesToPost } from './src/carousel/story.js';
+import { shapeCaption } from './src/publish/caption.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,7 +36,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  * a different colour.
  *
  * Brand mark is empty on purpose: the Instagram account is @rajesh_technical_trader.
- * Showing "FACTVIZER" mismatched the handle. Last-slide CTA is just "Follow me".
+ * Showing "FACTVIZER" mismatched the handle. The last slide asks to save and follow.
  */
 const BRAND = { brand: '', ink: '#FFD200', brandInk: '#F2F2F2', tag: '' };
 
@@ -96,17 +96,7 @@ export function balanceSubline(text, limit = SUBLINE_ONE_LINE) {
 
 export function composeCaption(spec, brandTag) {
   const written = reflowHook(expandNewlines(String(spec.caption || '').trim()));
-  const trailing = written.match(/(?:^|\n)[ \t]*(?:#[^\s#]+[ \t]*)+$/);
-  const body = trailing ? written.slice(0, trailing.index).trim() : written;
-  const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
-
-  const seen = new Map();
-  for (const tag of [...inline, ...(spec.hashtags || []), brandTag].filter(Boolean)) {
-    const key = String(tag).toLowerCase();
-    if (!seen.has(key)) seen.set(key, tag);
-  }
-
-  return [body, seen.size ? [...seen.values()].join(' ') : null].filter(Boolean).join('\n\n');
+  return shapeCaption({ caption: written, hashtags: spec.hashtags || [], brandTag });
 }
 
 export function validateSpec(spec) {
@@ -138,18 +128,22 @@ async function main() {
   const specPath = args.spec || path.join(HERE, 'specs', 'carousel-hindi.json');
   const outDir = path.resolve(args.out || path.join(HERE, 'out', 'slides'));
 
-  let slotUsed = args.slot || slotFor(new Date());
+  let slotUsed = args.slot || slotFor(new Date()) || '';
 
   let spec;
   if (args.generate) {
     console.log('Writing today\'s carousel');
     const slot = args.slot || slotFor(new Date());
-    slotUsed = slot;
-    const write = slot === 'midday' ? generateNewsCarousel : generateCarousel;
-
-    try {
-      const written = await write({
-        ...(slot === 'midday' ? { onNote: note } : { slot }),
+    slotUsed = slot || '';
+    if (!slot || !SLOTS.includes(slot)) {
+      if (args['require-generated']) {
+        console.error('\nNo finance slot for this run, and --require-generated is set, so nothing was built.');
+        process.exit(1);
+      }
+      note('outside the posting windows — using the checked-in spec');
+    } else try {
+      const written = await generateCarousel({
+        slot,
         onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
         onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
       });
@@ -193,7 +187,7 @@ async function main() {
   // return two covers; that used to reject the whole day after generation spent
   // three attempts. Repair is cheaper than silence.
   spec = normalizeSpec(spec);
-  note('shape normalized (exactly one cover, last slide Follow me)');
+  note('shape normalized (exactly one cover, last slide save and follow)');
 
   const problems = validateSpec(spec);
   if (problems.length) {
@@ -244,8 +238,10 @@ async function main() {
   process.stdout.write('\n');
 
   let stories = [];
-  try {
-    const frames = storyFrames(ready);
+  const frames = framesToPost(ready, { slot: slotUsed });
+  if (!frames.length) {
+    console.log('story    none — one Story a day, only with the evening post');
+  } else try {
     const { files: storyFiles } = await renderSlides({
       spec: { ...ready, slides: frames },
       outDir: path.join(path.dirname(outDir), 'story'),
@@ -263,15 +259,7 @@ async function main() {
     console.log(`story    not built — ${err.message.slice(0, 120)}`);
   }
 
-  const referralBlock = referralCaptionBlock({
-    date: new Date().toISOString().slice(0, 10),
-    slot: slotUsed,
-    category: spec.category,
-  });
-  const caption = composeCaption({
-    ...spec,
-    caption: `${spec.caption || ''}${referralBlock}`,
-  }, BRAND.tag);
+  const caption = composeCaption(spec, BRAND.tag);
 
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
 

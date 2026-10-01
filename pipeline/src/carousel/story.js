@@ -61,3 +61,15 @@ export function storyFrames(spec, { handle } = {}) {
 
   return frames;
 }
+
+/**
+ * What actually gets posted.
+ *
+ * storyFrames still describes the cover plus the best fact, which is what a
+ * story used to be. The account now posts at most one Story a day, and only
+ * with the main evening carousel, so the feed gets the cover frame alone.
+ */
+export function framesToPost(spec, { slot } = {}) {
+  if (slot !== 'evening') return [];
+  return storyFrames(spec).slice(0, 1);
+}

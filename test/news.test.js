@@ -64,17 +64,16 @@ test('stories come back sorted by points, not by recency', async () => {
   } finally { globalThis.fetch = original; }
 });
 
-// Midday is a real post (today's AI), but it must not take a step of the
-// finance walk. If it did, morning and evening would share an index whenever
-// the offset wraps the pool.
-test('midday is a fixed topic and does not step the finance rotation', () => {
-  assert.equal(slotFor(new Date('2026-08-31T07:37:00Z')), 'midday');
-  assert.equal(categoryFor('2026-08-31', 'midday'), 'ai-news');
-  assert.equal(categoryFor('2026-09-01', 'midday'), 'ai-news');
-  const morning = categoryFor('2026-08-31', 'morning');
+// Midday is a finance post now, not an AI digest, and it must not land on the
+// same category as the evening post.
+test('midday is finance and does not collapse onto the evening post', () => {
+  assert.equal(slotFor(new Date('2026-08-31T07:00:00Z')), 'midday');
+  const midday = categoryFor('2026-08-31', 'midday');
   const evening = categoryFor('2026-08-31', 'evening');
-  assert.notEqual(morning, evening);
-  assert.equal(POOL.indexOf(evening), (POOL.indexOf(morning) + SLOT_OFFSET) % POOL.length);
+  assert.notEqual(midday, 'ai-news');
+  assert.ok(POOL.includes(midday));
+  assert.notEqual(midday, evening);
+  assert.equal(POOL.indexOf(evening), (POOL.indexOf(midday) + SLOT_OFFSET) % POOL.length);
 });
 
 // From the first live technology build: the model wrote the query "linux
