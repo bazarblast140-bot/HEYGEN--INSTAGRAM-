@@ -25,8 +25,10 @@ on:
   # ALWAYS ON — Paise ki Pathshala Instagram reel
   # User request 2026-09-28: keep reel pipeline running permanently.
   # 07:00 IST daily (Actions cron is UTC; IST = UTC+5:30 → 01:30 UTC)
+  # GitHub can be hours late. Catch-up mirrors carousel (~22 min later).
   schedule:
     - cron: '30 1 * * *'
+    - cron: '52 1 * * *'
 
 permissions:
   contents: write
@@ -49,19 +51,31 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Same IST day already in topic-history.json → pending=false. Scheduled
+      # and publish runs then skip the build. A manual run that is not publishing
+      # still proceeds, and a preview never records, so it cannot block the day.
+      - name: Is today's reel already recorded?
+        id: day
+        run: node pipeline/reel-status.js | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Install ffmpeg
+        if: ${{ steps.day.outputs.pending == 'true' || (github.event_name != 'schedule' && github.event.inputs.publish != 'true') }}
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
 
-      - run: npm ci
+      - name: Install dependencies
+        if: ${{ steps.day.outputs.pending == 'true' || (github.event_name != 'schedule' && github.event.inputs.publish != 'true') }}
+        run: npm ci
 
       - name: Run the unit tests
+        if: ${{ steps.day.outputs.pending == 'true' || (github.event_name != 'schedule' && github.event.inputs.publish != 'true') }}
         run: npm test
 
       - name: Install Chromium for Playwright
+        if: ${{ steps.day.outputs.pending == 'true' || (github.event_name != 'schedule' && github.event.inputs.publish != 'true') }}
         run: npx playwright install --with-deps chromium
 
       - name: Check the Instagram token
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
+        if: ${{ steps.day.outputs.pending == 'true' && github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -69,6 +83,7 @@ jobs:
         run: node pipeline/publish-reel.js --whoami
 
       - name: Build the reel
+        if: ${{ steps.day.outputs.pending == 'true' || (github.event_name != 'schedule' && github.event.inputs.publish != 'true') }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -127,7 +142,7 @@ jobs:
       - name: Remember today's topic
         # The ledger is what stops the reel telling the same story twice. It only
         # works if it outlives the runner, so it is committed back to the branch.
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.generate != 'false') }}
+        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.generate != 'false') && (steps.day.outputs.pending == 'true' || (github.event_name != 'schedule' && github.event.inputs.publish != 'true')) }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -144,7 +159,7 @@ jobs:
 
       - name: Host the video where Instagram can fetch it
         id: host
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
+        if: ${{ steps.day.outputs.pending == 'true' && github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MEDIA_REPO: ${{ vars.MEDIA_REPO }}
@@ -155,7 +170,7 @@ jobs:
           node pipeline/host-video.js --file pipeline/out/reel-final.mp4 $COVER
 
       - name: Publish to Instagram
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
+        if: ${{ steps.day.outputs.pending == 'true' && github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}

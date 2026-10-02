@@ -164,3 +164,33 @@ export async function recordStories({ keys = [], date, file = LEDGER }) {
 export function findRepeat(topic, entries) {
   return entries.find((e) => tooSimilar(topic, e.topic)) || null;
 }
+
+/**
+ * Calendar day in India, YYYY-MM-DD.
+ *
+ * IST is a fixed UTC+5:30 offset (no daylight saving). The same conversion
+ * dates carousel slots; the reel has one post a day, so only the date is kept.
+ */
+export function istDate(now = new Date()) {
+  const when = now instanceof Date ? now : new Date(now);
+  if (Number.isNaN(when.getTime())) return '';
+  return new Date(when.getTime() + (5.5 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+}
+
+/**
+ * Whether today's reel is already in the ledger.
+ *
+ * One reel a day. A catch-up cron — or the same schedule arriving hours late —
+ * must not build or publish a second copy once an entry exists for this IST
+ * date. `recordTopic` stores that date as YYYY-MM-DD; a longer stamp still
+ * counts, because only the day is compared.
+ *
+ * `pending: false` means skip the build and the publish. An empty ledger, or
+ * an entry from another IST day, is still due.
+ */
+export function resolveReelDay({ now = new Date(), entries = [] } = {}) {
+  const date = istDate(now);
+  const posted = (entries || []).find((entry) => String(entry?.date || '').slice(0, 10) === date) || null;
+  if (posted) return { date, pending: false, reason: 'duplicate', posted };
+  return { date, pending: true, reason: 'due', posted: null };
+}
