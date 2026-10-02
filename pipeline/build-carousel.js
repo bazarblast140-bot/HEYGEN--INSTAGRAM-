@@ -28,6 +28,7 @@ import { ALL_SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
 import { generateSourcedCarousel } from './src/carousel/sourced.js';
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS, ENABLE_CAROUSEL_STORY } from './src/publish/flags.js';
 import { ACCOUNT_BRAND } from './src/publish/allow.js';
+import { reviewContent } from './src/quality/review.js';
 import { framesToPost } from './src/carousel/story.js';
 import { shapeCaption } from './src/publish/caption.js';
 
@@ -201,6 +202,7 @@ async function main() {
         ...written.spec, category: written.category, fallback: false, reviewed: false,
       };
       generated = true;
+      spec.quality = written.quality || null;
       note(`"${written.spec.topic}" — ${written.category}/${written.slot}, ${written.provider} in ${written.attempts} attempt(s)`);
       if (written.stories) {
         const by = written.stories.reduce((acc, st) => ({ ...acc, [st.from]: (acc[st.from] || 0) + 1 }), {});
@@ -323,6 +325,9 @@ async function main() {
 
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
 
+  const quality = spec.quality || reviewContent({ kind: 'carousel', spec });
+  if (!quality.pass) notes.push(`quality ${quality.score} below ${quality.threshold}: ${quality.problems.join('; ')}`);
+
   const report = {
     spec: path.relative(process.cwd(), specPath),
     slides: files.length,
@@ -338,9 +343,10 @@ async function main() {
     reviewed: !generated && spec.reviewed === true && FINANCE.includes(spec.category),
     verifiedSource,
     sourceFresh,
-    publishable: (generated && FINANCE.includes(spec.category))
+    publishable: quality.pass && ((generated && FINANCE.includes(spec.category))
       || (generated && verifiedSource && sourceFresh && flagOn(ENABLE_AI_NEWS_CAROUSELS)
-        && (spec.category === 'ai-news' || spec.category === 'latest-news')),
+        && (spec.category === 'ai-news' || spec.category === 'latest-news'))),
+    quality,
     stories,
     lines: (ready.slides || []).map((s, i) => ({
       n: i + 1,

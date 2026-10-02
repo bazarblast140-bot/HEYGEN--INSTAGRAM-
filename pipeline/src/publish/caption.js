@@ -4,7 +4,7 @@
 // comment prompt, then a single "link in bio" line. Hashtags stay at five.
 // Referral URLs do not belong in the caption.
 
-export const ENGAGEMENT = 'Save karo, share karo, comment mein apna sawal likho.';
+export const ENGAGEMENT = 'Aaj wala number aapko sahi laga ya galat? Comment mein ek line likho.';
 export const LINK_IN_BIO = 'Link in bio.';
 export const MAX_HASHTAGS = 5;
 

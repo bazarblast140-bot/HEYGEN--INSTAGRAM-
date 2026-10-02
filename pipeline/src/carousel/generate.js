@@ -26,6 +26,7 @@ import { checkEcho } from './echo.js';
 import { checkMoneySources } from './money.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
+import { loadTrends, nextQualityStep, reviewContent } from '../quality/review.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LEDGER = path.resolve(HERE, '..', '..', 'carousel-history.json');
@@ -315,10 +316,12 @@ export async function generateCarousel({
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   const recentTopics = await readHistory(LEDGER);
+  const trendSnapshot = loadTrends();
 
   let lastProblems = [];
   let lastOutput = null;
   let lastUsed = chosenModel;
+  let qualityFails = 0;
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     let userPrompt = buildUserPrompt({ category, date, recentTopics });
@@ -344,8 +347,18 @@ export async function generateCarousel({
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        if (record) await recordTopic({ topic: shaped.topic, angle: shaped.category, date: `${date} ${slot}`, file: LEDGER });
-        return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category, slot };
+        const review = reviewContent({ kind: 'carousel', spec: shaped, trends: trendSnapshot, now: date });
+        const step = nextQualityStep({ review, fails: qualityFails, attempt });
+        if (step.action === 'retry') {
+          qualityFails = step.fails;
+          lastProblems = review.problems;
+          onReject?.(attempt, lastProblems);
+        } else {
+          if (step.action === 'accept' && record) {
+            await recordTopic({ topic: shaped.topic, angle: shaped.category, date: `${date} ${slot}`, file: LEDGER });
+          }
+          return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category, slot, quality: review };
+        }
       }
     } catch (err) {
       console.log(`  attempt ${attempt} failed: ${err.message}`);
@@ -368,8 +381,11 @@ export async function generateCarousel({
       !p.includes('repeats') && !p.includes('no year'),
     );
     if (!hard.length) {
-      if (record) await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
-      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category, slot };
+      const review = reviewContent({ kind: 'carousel', spec: salvaged, trends: trendSnapshot, now: date });
+      if (record && review.pass) {
+        await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
+      }
+      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category, slot, quality: review };
     }
   }
 
@@ -406,10 +422,12 @@ export async function generateNewsCarousel({
 
   const sites = new Set(found.map((s) => s.site.toLowerCase()));
   const recentTopics = await readHistory(LEDGER);
+  const trendSnapshot = loadTrends();
 
   let lastProblems = [];
   let lastOutput = null;
   let lastUsed = chosenModel;
+  let qualityFails = 0;
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     let userPrompt = buildNewsPrompt({ stories: found, date, recentTopics });
@@ -435,9 +453,19 @@ export async function generateNewsCarousel({
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        await recordTopic({ topic: shaped.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
-        await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
-        return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found };
+        const review = reviewContent({ kind: 'carousel', spec: shaped, trends: trendSnapshot, now: date });
+        const step = nextQualityStep({ review, fails: qualityFails, attempt });
+        if (step.action === 'retry') {
+          qualityFails = step.fails;
+          lastProblems = review.problems;
+          onReject?.(attempt, lastProblems);
+        } else {
+          if (step.action === 'accept') {
+            await recordTopic({ topic: shaped.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
+            await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
+          }
+          return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category: 'technology', slot: 'midday', stories: found, quality: review };
+        }
       }
     } catch (err) {
       if (!shouldRetryProviderError(err)) throw err;
@@ -454,9 +482,12 @@ export async function generateNewsCarousel({
     const salvaged = normalizeSpec(lastOutput);
     const hard = validateShape(salvaged, recentTopics).filter((p) => !p.includes('repeats'));
     if (!hard.length) {
-      await recordTopic({ topic: salvaged.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
-      await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
-      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category: 'technology', slot: 'midday', stories: found };
+      const review = reviewContent({ kind: 'carousel', spec: salvaged, trends: trendSnapshot, now: date });
+      if (review.pass) {
+        await recordTopic({ topic: salvaged.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
+        await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
+      }
+      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category: 'technology', slot: 'midday', stories: found, quality: review };
     }
   }
 

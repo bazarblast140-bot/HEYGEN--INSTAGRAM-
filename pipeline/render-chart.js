@@ -8,6 +8,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchCandles, summarise } from './src/harvest/yahoo.js';
+import { chartCredit } from './src/render/chart-credit.js';
 import { syntheticSeries } from './src/harvest/fixture.js';
 import { captureScene } from './src/render/capture.js';
 import { encodeFrames, probe } from './src/assemble/encode.js';
@@ -47,7 +48,13 @@ async function main() {
   const summary = summarise(series);
   const layout = args.layout || 'full';
   if (!['full', 'panel'].includes(layout)) { console.error(`--layout must be full or panel`); process.exit(1); }
-  const data = { ...series, summary, layout, verdict: args.verdict || verdictFor(summary) };
+  const data = {
+    ...series,
+    summary,
+    layout,
+    verdict: args.verdict || verdictFor(summary),
+    credit: chartCredit(series, summary),
+  };
 
   console.log(`${data.name}  ${data.candles.length} bars  ${summary.last.toFixed(2)}  ${summary.changePct >= 0 ? '+' : ''}${summary.changePct.toFixed(2)}%${data.synthetic ? '   [SAMPLE DATA]' : ''}`);
 

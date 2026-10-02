@@ -25,6 +25,8 @@ import { burnCaptions } from './src/assemble/captions.js';
 import { renderNarration, alignBeats } from './src/presenter/narration.js';
 import { fetchStock } from './src/stock/index.js';
 import { generateSpec, durationNote } from './src/script/generate.js';
+import { reviewContent } from './src/quality/review.js';
+import { chartCredit } from './src/render/chart-credit.js';
 import { shapeCaption } from './src/publish/caption.js';
 import { coverTimestamp } from './src/render/reveal.js';
 import { fitPlan, REEL_MIN_SECONDS, REEL_MAX_SECONDS } from './src/assemble/fit.js';
@@ -171,7 +173,7 @@ async function main() {
         onAttempt: (n, model) => console.log(`  ${model}, attempt ${n}`),
       });
       // Keep the parts of the checked-in spec that are staging, not content.
-      spec = { ...spec, ...written.spec, disclaimer: spec.disclaimer, music: spec.music };
+      spec = { ...spec, ...written.spec, disclaimer: spec.disclaimer, music: spec.music, quality: written.quality || null };
       freshScript = true;
       note(`script written by ${written.model} in ${written.attempts} attempt(s)`);
       await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
@@ -185,7 +187,7 @@ async function main() {
     }
   }
 
-  const chartData = { ...series, summary, verdict: spec.verdict || '' };
+  const chartData = { ...series, summary, verdict: spec.verdict || '', credit: chartCredit(series, summary) };
   console.log(`  ${chartData.name}  ${chartData.summary.last.toFixed(2)}  ${chartData.summary.changePct >= 0 ? '+' : ''}${chartData.summary.changePct.toFixed(2)}%`);
 
   // --no-voice is only for an offline picture check. A real build speaks, and
@@ -454,6 +456,9 @@ async function main() {
     process.exit(1);
   }
 
+  const quality = spec.quality || reviewContent({ kind: 'reel', spec });
+  if (!quality.pass) notes.push(`quality ${quality.score} below ${quality.threshold}: ${quality.problems.join('; ')}`);
+
   const report = {
     out,
     cover,
@@ -466,7 +471,8 @@ async function main() {
     voiceSource: narration?.provider || null,
     synthetic: Boolean(series.synthetic),
     fresh: freshScript,
-    publishable: freshScript && narrated && !series.synthetic && lengthOk,
+    publishable: freshScript && narrated && !series.synthetic && lengthOk && quality.pass,
+    quality,
     notes,
   };
   await fs.writeFile(path.join(path.dirname(out), 'run-report.json'), JSON.stringify(report, null, 2));

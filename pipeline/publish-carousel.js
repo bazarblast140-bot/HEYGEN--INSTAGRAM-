@@ -77,6 +77,10 @@ async function main() {
     console.error(`Refusing to publish: ${decision.reasons.join('; ')}`);
     if (args.yes) process.exit(1);
   }
+  if (report.quality && report.quality.pass === false) {
+    console.error(`Refusing to publish: quality ${report.quality.score} below ${report.quality.threshold}`);
+    if (args.yes) process.exit(1);
+  }
 
   console.log(`Carousel  ${files.length} slides  ${report.width}x${report.height}  ${dim(report.topic || '')}`);
 

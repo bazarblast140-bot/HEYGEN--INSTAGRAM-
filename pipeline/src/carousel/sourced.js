@@ -10,6 +10,7 @@ import {
   LEDGER, normalizeSpec, validateShape, softProblems, checkSources, sourcedCarouselSchema,
 } from './generate.js';
 import { SYSTEM, buildSourcedPrompt } from './sourced-prompt.js';
+import { loadTrends, nextQualityStep, reviewContent } from '../quality/review.js';
 
 export const MAX_SOURCE_AGE_MS = 48 * 60 * 60 * 1000;
 
@@ -136,10 +137,12 @@ export async function generateSourcedCarousel({
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   const recentTopics = await readHistory(LEDGER);
+  const trendSnapshot = loadTrends();
   const sites = new Set(found.map((item) => item.site.toLowerCase()));
   let lastProblems = [];
   let lastOutput = null;
   let lastUsed = chosenModel;
+  let qualityFails = 0;
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     let userPrompt = buildSourcedPrompt({ kind, stories: found, date, recentTopics });
@@ -165,18 +168,29 @@ export async function generateSourcedCarousel({
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        if (record) await recordTopic({ topic: shaped.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
-        return {
-          spec: shaped,
-          provider: provider.name,
-          model: used,
-          attempts: attempt,
-          category,
-          slot,
-          stories: found,
-          verifiedSource: true,
-          sourceFresh: true,
-        };
+        const review = reviewContent({ kind: 'carousel', spec: shaped, trends: trendSnapshot, now: date });
+        const step = nextQualityStep({ review, fails: qualityFails, attempt });
+        if (step.action === 'retry') {
+          qualityFails = step.fails;
+          lastProblems = review.problems;
+          onReject?.(attempt, lastProblems);
+        } else {
+          if (step.action === 'accept' && record) {
+            await recordTopic({ topic: shaped.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
+          }
+          return {
+            spec: shaped,
+            provider: provider.name,
+            model: used,
+            attempts: attempt,
+            category,
+            slot,
+            stories: found,
+            verifiedSource: true,
+            sourceFresh: true,
+            quality: review,
+          };
+        }
       }
     } catch (err) {
       if (!shouldRetryProviderError(err)) throw err;
@@ -196,7 +210,10 @@ export async function generateSourcedCarousel({
       ...checkSources(salvaged, sites),
     ];
     if (!hard.length) {
-      if (record) await recordTopic({ topic: salvaged.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
+      const review = reviewContent({ kind: 'carousel', spec: salvaged, trends: trendSnapshot, now: date });
+      if (record && review.pass) {
+        await recordTopic({ topic: salvaged.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
+      }
       return {
         spec: salvaged,
         provider: provider.name,
@@ -207,6 +224,7 @@ export async function generateSourcedCarousel({
         stories: found,
         verifiedSource: true,
         sourceFresh: true,
+        quality: review,
       };
     }
   }
