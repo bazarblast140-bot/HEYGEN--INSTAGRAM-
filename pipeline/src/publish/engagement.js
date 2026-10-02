@@ -13,7 +13,7 @@
 import { call } from './instagram.js';
 import { slotFor } from '../carousel/categories.js';
 
-/** The posting windows are 12:00–13:45 and 19:00–20:45 IST. Anything else is not a slot. */
+/** Finance posts belong to the midday or evening window. A timestamp well outside both is not a slot. */
 export function slotOfPost(timestamp) {
   const t = new Date(timestamp);
   if (Number.isNaN(t.getTime())) return null;

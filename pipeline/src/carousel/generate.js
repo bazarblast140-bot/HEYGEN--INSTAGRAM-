@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from '../script/providers.js';
+import { MAX_MODEL_ATTEMPTS } from '../script/attempts.js';
 import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } from '../script/topics.js';
 import { categoryFor, slotFor, SLIDES } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
@@ -320,7 +321,8 @@ export async function generateCarousel({
   let lastOutput = null;
   let lastUsed = chosenModel;
 
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  const maxAttempts = MAX_MODEL_ATTEMPTS;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildUserPrompt({ category, date, recentTopics });
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर fact slide पर source with year.`;
@@ -337,10 +339,10 @@ export async function generateCarousel({
       lastUsed = used;
 
       // Soft checks only on early attempts; on later attempts normalize + accept.
-      const shaped = attempt >= 4 ? normalizeSpec(output) : output;
+      const shaped = attempt === maxAttempts ? normalizeSpec(output) : output;
       lastProblems = [
         ...validateShape(shaped, recentTopics),
-        ...(attempt < 4 ? softProblems(shaped) : []),
+        ...(attempt < maxAttempts ? softProblems(shaped) : []),
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
@@ -350,9 +352,9 @@ export async function generateCarousel({
     } catch (err) {
       console.log(`  attempt ${attempt} failed: ${err.message}`);
       if (!shouldRetryProviderError(err)) throw err;
-      if (!err.schemaIssues || attempt === 5) {
+      if (!err.schemaIssues || attempt === maxAttempts) {
         // Last-chance: if we have any prior output, normalize and try to ship it.
-        if (lastOutput && attempt === 5) break;
+        if (lastOutput && attempt === maxAttempts) break;
         throw err;
       }
       lastProblems = err.schemaIssues;
@@ -369,11 +371,11 @@ export async function generateCarousel({
     );
     if (!hard.length) {
       if (record) await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
-      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category, slot };
+      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: maxAttempts, category, slot };
     }
   }
 
-  throw new Error(`Carousel spec still invalid after 5 attempts: ${lastProblems.join('; ')}`);
+  throw new Error(`Carousel spec still invalid after ${maxAttempts} attempts: ${lastProblems.join('; ')}`);
 }
 
 export async function generateNewsCarousel({
@@ -411,7 +413,8 @@ export async function generateNewsCarousel({
   let lastOutput = null;
   let lastUsed = chosenModel;
 
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  const maxAttempts = MAX_MODEL_ATTEMPTS;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildNewsPrompt({ stories: found, date, recentTopics });
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.`;
@@ -427,11 +430,11 @@ export async function generateNewsCarousel({
       lastOutput = output;
       lastUsed = used;
 
-      const shaped = attempt >= 4 ? normalizeSpec(output) : output;
+      const shaped = attempt === maxAttempts ? normalizeSpec(output) : output;
       lastProblems = [
         ...validateShape(shaped, recentTopics),
         ...checkSources(shaped, sites),
-        ...(attempt < 4 ? softProblems(shaped) : []),
+        ...(attempt < maxAttempts ? softProblems(shaped) : []),
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
@@ -441,8 +444,8 @@ export async function generateNewsCarousel({
       }
     } catch (err) {
       if (!shouldRetryProviderError(err)) throw err;
-      if (!err.schemaIssues || attempt === 5) {
-        if (lastOutput && attempt === 5) break;
+      if (!err.schemaIssues || attempt === maxAttempts) {
+        if (lastOutput && attempt === maxAttempts) break;
         throw err;
       }
       lastProblems = err.schemaIssues;
@@ -456,11 +459,11 @@ export async function generateNewsCarousel({
     if (!hard.length) {
       await recordTopic({ topic: salvaged.topic, angle: 'technology', date: `${date} midday`, file: LEDGER });
       await recordStories({ keys: found.map(storyKey), date, file: LEDGER });
-      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: 5, category: 'technology', slot: 'midday', stories: found };
+      return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: maxAttempts, category: 'technology', slot: 'midday', stories: found };
     }
   }
 
-  throw new Error(`News carousel still invalid after 5 attempts: ${lastProblems.join('; ')}`);
+  throw new Error(`News carousel still invalid after ${maxAttempts} attempts: ${lastProblems.join('; ')}`);
 }
 
 export function checkSources(spec, sites) {

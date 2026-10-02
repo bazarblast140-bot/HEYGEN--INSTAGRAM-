@@ -11,6 +11,7 @@ import { env } from '../../../src/config.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from './providers.js';
 import { readHistory, findRepeat, recordTopic } from './topics.js';
+import { MAX_MODEL_ATTEMPTS } from './attempts.js';
 import { FAMILY_NAMES } from './families.js';
 import { shortenReelScript, spokenWordCount, wordCountProblem, retryNoteFor } from './length.js';
 
@@ -335,7 +336,7 @@ export async function generateSpec({
   let lastProblems = [];
   // Schema slips from an empty body get more than one retry. An auth or
   // balance error will not change on the next call, so those stop at once.
-  const maxAttempts = 5;
+  const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildUserPrompt({ market, news, date, recentTopics });
 

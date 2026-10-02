@@ -5,6 +5,7 @@
 
 import { parseRss } from './news.js';
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError } from '../script/providers.js';
+import { MAX_MODEL_ATTEMPTS } from '../script/attempts.js';
 import { readHistory, recordTopic } from '../script/topics.js';
 import {
   LEDGER, normalizeSpec, validateShape, softProblems, checkSources, sourcedCarouselSchema,
@@ -141,7 +142,8 @@ export async function generateSourcedCarousel({
   let lastOutput = null;
   let lastUsed = chosenModel;
 
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  const maxAttempts = MAX_MODEL_ATTEMPTS;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildSourcedPrompt({ kind, stories: found, date, recentTopics });
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो. संख्या मत जोड़ो.`;
@@ -155,13 +157,13 @@ export async function generateSourcedCarousel({
       lastOutput = output;
       lastUsed = used;
       const shaped = applySourceCitation(
-        attempt >= 4 ? normalizeSpec(output, { sourced: true }) : output,
+        attempt === maxAttempts ? normalizeSpec(output, { sourced: true }) : output,
         found[0],
       );
       lastProblems = [
         ...validateShape(shaped, recentTopics),
         ...checkSources(shaped, sites),
-        ...(attempt < 4 ? softProblems(shaped) : []),
+        ...(attempt < maxAttempts ? softProblems(shaped) : []),
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
@@ -180,8 +182,8 @@ export async function generateSourcedCarousel({
       }
     } catch (err) {
       if (!shouldRetryProviderError(err)) throw err;
-      if (!err.schemaIssues || attempt === 5) {
-        if (lastOutput && attempt === 5) break;
+      if (!err.schemaIssues || attempt === maxAttempts) {
+        if (lastOutput && attempt === maxAttempts) break;
         throw err;
       }
       lastProblems = err.schemaIssues;
@@ -201,7 +203,7 @@ export async function generateSourcedCarousel({
         spec: salvaged,
         provider: provider.name,
         model: lastUsed,
-        attempts: 5,
+          attempts: maxAttempts,
         category,
         slot,
         stories: found,
@@ -211,5 +213,5 @@ export async function generateSourcedCarousel({
     }
   }
 
-  throw new Error(`Sourced carousel still invalid after 5 attempts: ${lastProblems.join('; ')}`);
+  throw new Error(`Sourced carousel still invalid after ${maxAttempts} attempts: ${lastProblems.join('; ')}`);
 }

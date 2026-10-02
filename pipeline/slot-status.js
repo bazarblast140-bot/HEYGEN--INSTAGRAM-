@@ -10,27 +10,51 @@ import fs from 'node:fs/promises';
 import { readHistory } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
 import { resolveRun } from './src/carousel/categories.js';
+import {
+  clock, truthy, loadReelMedia, carouselOnInstagram,
+} from './src/publish/same-day.js';
 
 const entries = await readHistory(LEDGER);
-const decision = resolveRun({
+const now = clock();
+let decision = resolveRun({
   event: process.env.GITHUB_EVENT_NAME || '',
   dispatchSlot: process.env.DISPATCH_SLOT || '',
   cron: process.env.SCHEDULED_CRON || '',
-  now: new Date(),
+  now,
   entries,
 });
 
+const force = truthy(process.env.FORCE);
+if (force && decision.reason === 'duplicate' && decision.slot) {
+  decision = { ...decision, pending: true, reason: 'forced', posted: decision.posted };
+} else if (decision.pending && decision.slot) {
+  const listed = await loadReelMedia();
+  const ig = carouselOnInstagram({ media: listed.items, slot: decision.slot, now });
+  if (ig) {
+    decision = {
+      ...decision,
+      pending: false,
+      reason: 'duplicate',
+      posted: { date: decision.key, topic: 'instagram media' },
+    };
+  } else if (!listed.ok && listed.reason !== 'no-token') {
+    console.log('instagram media list unavailable — ledger only');
+  }
+}
+
 const label = decision.key || decision.date;
 if (decision.reason === 'duplicate') {
-  console.log(`${label} — already posted: "${decision.posted.topic}". Nothing to do.`);
+  console.log(`soft skip — ${label} — already posted: "${decision.posted.topic}". Nothing to do.`);
 } else if (decision.reason === 'unknown') {
-  console.log(`${label} — unknown slot "${decision.slot}". Skipping.`);
+  console.log(`soft skip — ${label} — unknown slot "${decision.slot}". Skipping.`);
 } else if (decision.reason === 'wrong-time') {
-  console.log(`${label} — ${decision.slot} is outside its IST window. Skipping.`);
+  console.log(`soft skip — ${label} — ${decision.slot} is outside its IST window. Skipping.`);
 } else if (decision.reason === 'outside') {
-  console.log(`${label} — no slot, and the clock is outside both posting windows. Skipping.`);
+  console.log(`soft skip — ${label} — no slot, and the clock is outside both posting windows. Skipping.`);
 } else if (decision.reason === 'disabled') {
-  console.log(`${label} — ${decision.slot} is off until ENABLE_AI_NEWS_CAROUSELS is true. Skipping.`);
+  console.log(`soft skip — ${label} — ${decision.slot} is off until ENABLE_AI_NEWS_CAROUSELS is true. Skipping.`);
+} else if (decision.reason === 'forced') {
+  console.log(`${label} — force=true, building this slot again.`);
 } else {
   console.log(`${label} — not posted yet.`);
 }

@@ -22,11 +22,23 @@ on:
         description: Build the mp4, cover, and caption for review. Never publishes, and does not use the posting queue.
         type: boolean
         default: false
+      force:
+        description: Build and publish even if a Reel already went out today
+        type: boolean
+        default: false
   # ALWAYS ON — Paise ki Pathshala Instagram reel
   # User request 2026-09-28: keep reel pipeline running permanently.
-  # 07:00 IST daily (Actions cron is UTC; IST = UTC+5:30 → 01:30 UTC)
+  # 07:00 IST daily stays at 01:30 UTC. Catch-ups are later odd minutes, outside
+  # the busy 22:30–01:30 UTC band, so a dropped schedule still gets a same-day post.
+  #   07:00 IST  30 1   publish time
+  #   07:07 IST  37 1
+  #   07:23 IST  53 1
+  #   07:41 IST  11 2
   schedule:
     - cron: '30 1 * * *'
+    - cron: '37 1 * * *'
+    - cron: '53 1 * * *'
+    - cron: '11 2 * * *'
 
 permissions:
   contents: write
@@ -49,19 +61,36 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Publish ledger or Instagram media — not the topic file. Run 36965276637
+      # recorded a topic and then failed hosting, so a topic check would skip
+      # the retry. This step is before npm ci, Chromium, DeepSeek, and ElevenLabs.
+      - name: Already published today?
+        id: day
+        env:
+          FORCE: ${{ github.event.inputs.force }}
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: node pipeline/reel-status.js | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Install ffmpeg
+        if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
 
-      - run: npm ci
+      - name: Install dependencies
+        if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
+        run: npm ci
 
       - name: Run the unit tests
+        if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         run: npm test
 
       - name: Install Chromium for Playwright
+        if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         run: npx playwright install --with-deps chromium
 
       - name: Check the Instagram token
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
+        if: ${{ steps.day.outputs.pending == 'true' && github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -69,6 +98,7 @@ jobs:
         run: node pipeline/publish-reel.js --whoami
 
       - name: Build the reel
+        if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -124,27 +154,9 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Remember today's topic
-        # The ledger is what stops the reel telling the same story twice. It only
-        # works if it outlives the runner, so it is committed back to the branch.
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.generate != 'false') }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pipeline/topic-history.json
-          git diff --cached --quiet && { echo "No new topic to record."; exit 0; }
-          git commit -m "Record $(date -u +%Y-%m-%d) topic"
-          # A concurrent run may have recorded its own topic first; take theirs
-          # and replay ours on top rather than clobbering the ledger.
-          for attempt in 1 2 3; do
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
-            sleep $((attempt * 3))
-          done
-          echo "Could not record the topic — the next run may repeat it." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Host the video where Instagram can fetch it
         id: host
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
+        if: ${{ steps.day.outputs.pending == 'true' && github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true' || github.event.inputs.force == 'true') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MEDIA_REPO: ${{ vars.MEDIA_REPO }}
@@ -155,7 +167,8 @@ jobs:
           node pipeline/host-video.js --file pipeline/out/reel-final.mp4 $COVER
 
       - name: Publish to Instagram
-        if: ${{ github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true') }}
+        id: publish
+        if: ${{ steps.day.outputs.pending == 'true' && github.event.inputs.preview != 'true' && (github.event_name == 'schedule' || github.event.inputs.publish == 'true' || github.event.inputs.force == 'true') }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -167,13 +180,28 @@ jobs:
             echo "Preview never publishes."
             exit 1
           fi
+          set -o pipefail
           COVER=""
           if [ -n "${{ steps.host.outputs.cover_url }}" ]; then COVER="--cover ${{ steps.host.outputs.cover_url }}"; fi
           node pipeline/publish-reel.js \
             --url "${{ steps.host.outputs.url }}" \
             --report pipeline/out/run-report.json \
             --caption-file pipeline/out/caption.txt \
-            $COVER
+            $COVER \
+            2>&1 | tee publish.log
+          # Topic and media id are recorded only after this publish succeeds.
+          # A hosting failure never reaches this line, so it cannot block the retry.
+          node pipeline/record-reel-publish.js --log publish.log
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/topic-history.json pipeline/reel-publish-history.json
+          git diff --cached --quiet && { echo "No published reel to record."; exit 0; }
+          git commit -m "Record $(date -u +%Y-%m-%d) published reel"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the published reel — the next run may repeat it." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()

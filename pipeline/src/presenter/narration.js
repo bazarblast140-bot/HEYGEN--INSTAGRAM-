@@ -18,11 +18,12 @@ async function toNarrationWav(input, out) {
 /**
  * Speech only, in the cloned voice. No avatar credits are spent here.
  */
-async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote }) {
+async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote, local }) {
   const speech = await synthesise({
     text: script,
     voiceId,
     speed,
+    local,
   });
 
   onNote?.(`voice by ${speech.provider}`);
@@ -51,9 +52,9 @@ async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote }) {
  * @param {string}   opts.script     every spoken word in the reel, in order
  * @param {function} opts.onNote     called with the provider name
  */
-export async function renderNarration({ script, workDir, onNote, speed = 1, voiceId } = {}) {
+export async function renderNarration({ script, workDir, onNote, speed = 1, voiceId, local = false } = {}) {
   await fs.mkdir(workDir, { recursive: true });
-  return recordVoiceOnly({ script, workDir, speed, voiceId, onNote });
+  return recordVoiceOnly({ script, workDir, speed, voiceId, onNote, local });
 }
 
 /**

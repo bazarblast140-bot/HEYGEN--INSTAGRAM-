@@ -1,15 +1,17 @@
 name: Build carousel
 
-# Two finance carousels a day stay on.
-#   midday   optional, 12:30 IST (catch-up 12:52)
-#   evening  the main post, 19:30 IST (catch-up 19:52), plus one Story
+# Two finance carousels a day stay on. Publish times do not move.
+#   midday   optional, 12:30 IST
+#   evening  the main post, 19:30 IST, plus one Story
 # Two more slots exist and no-op unless the repository variable
 # ENABLE_AI_NEWS_CAROUSELS is true:
-#   ai       latest AI update, 09:30 IST (catch-up 09:52)
-#   news     latest big news, 16:30 IST (catch-up 16:52)
-# GitHub's schedule is often hours late. slot-status keeps the cron's slot
-# anyway, and the ledger (YYYY-MM-DD <slot>, IST) stops a second copy.
-# A dispatch with no slot publishes only inside those IST windows.
+#   ai       latest AI update, 09:30 IST
+#   news     latest big news, 16:30 IST
+# Each slot has the publish cron plus three catch-ups (odd minutes, never
+# :00/:30, outside the 22:30–01:30 UTC band). slot-status keeps the cron's
+# slot even when GitHub is late, and the ledger (YYYY-MM-DD <slot>, IST)
+# stops a second copy. A dispatch with no slot, or outside every window,
+# is a soft skip (exit 0). It does not call the script model.
 #
 # A scheduled run PUBLISHES. Guards reject unsourced slides, repeated topics,
 # and non-JPEG builds.
@@ -19,18 +21,26 @@ on:
     types: [carousel]
 
   schedule:
-    # midday  12:30 IST + catch-up 12:52
+    # midday 12:30 IST, then 12:37, 12:52, 13:11
     - cron: '0 7 * * *'
+    - cron: '7 7 * * *'
     - cron: '22 7 * * *'
-    # evening 19:30 IST + catch-up 19:52
+    - cron: '41 7 * * *'
+    # evening 19:30 IST, then 19:37, 19:52, 20:11
     - cron: '0 14 * * *'
+    - cron: '7 14 * * *'
     - cron: '22 14 * * *'
-    # ai 09:30 IST + catch-up 09:52 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
+    - cron: '41 14 * * *'
+    # ai 09:30 IST, then 09:37, 09:52, 10:11 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
     - cron: '0 4 * * *'
+    - cron: '7 4 * * *'
     - cron: '22 4 * * *'
-    # news 16:30 IST + catch-up 16:52 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
+    - cron: '41 4 * * *'
+    # news 16:30 IST, then 16:37, 16:52, 17:11 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
     - cron: '0 11 * * *'
+    - cron: '7 11 * * *'
     - cron: '22 11 * * *'
+    - cron: '41 11 * * *'
 
   workflow_dispatch:
     inputs:
@@ -98,9 +108,14 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           SCHEDULED_CRON: ${{ github.event.schedule }}
           DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
+          FORCE: ${{ github.event.inputs.force }}
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Check the script-writing keys
+        if: ${{ steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -133,12 +148,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Chromium for Playwright
-        if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
+        if: ${{ steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         run: npx playwright install --with-deps chromium
 
       - name: Build the carousel
         id: build
-        if: ${{ env.AUTOMATED != 'true' || steps.slot.outputs.pending == 'true' }}
+        if: ${{ steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
