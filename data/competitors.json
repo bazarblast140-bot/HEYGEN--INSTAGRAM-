@@ -1,0 +1,12 @@
+{
+  "note": "Seed list of public Hindi finance, AI, and news accounts. status to-verify means the handle was not confirmed by the owner. The research job still tries each one and skips any handle the Graph API cannot resolve.",
+  "accounts": [
+    { "username": "pranjalkamra", "niche": "hindi-finance", "status": "to-verify" },
+    { "username": "ca_rachana_ranade", "niche": "hindi-finance", "status": "to-verify" },
+    { "username": "warikoo", "niche": "hindi-finance", "status": "to-verify" },
+    { "username": "sharanhegde", "niche": "hindi-finance", "status": "to-verify" },
+    { "username": "marketfeed", "niche": "markets", "status": "to-verify" },
+    { "username": "finshots", "niche": "news", "status": "to-verify" }
+  ],
+  "hashtags": ["nifty50", "banknifty", "sensex", "intradaytrading", "sebi"]
+}

@@ -27,6 +27,7 @@ import { checkEcho } from './echo.js';
 import { checkMoneySources } from './money.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
+import { readTrendPrompt } from '../research/load.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LEDGER = path.resolve(HERE, '..', '..', 'carousel-history.json');
@@ -316,6 +317,7 @@ export async function generateCarousel({
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   const recentTopics = await readHistory(LEDGER);
+  const trendNote = await readTrendPrompt();
 
   let lastProblems = [];
   let lastOutput = null;
@@ -324,6 +326,7 @@ export async function generateCarousel({
   const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildUserPrompt({ category, date, recentTopics });
+    if (trendNote) userPrompt += `\n\n${trendNote}`;
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर fact slide पर source with year.`;
     }
@@ -408,6 +411,7 @@ export async function generateNewsCarousel({
 
   const sites = new Set(found.map((s) => s.site.toLowerCase()));
   const recentTopics = await readHistory(LEDGER);
+  const trendNote = await readTrendPrompt();
 
   let lastProblems = [];
   let lastOutput = null;
@@ -416,6 +420,7 @@ export async function generateNewsCarousel({
   const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildNewsPrompt({ stories: found, date, recentTopics });
+    if (trendNote) userPrompt += `\n\n${trendNote}`;
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.`;
     }

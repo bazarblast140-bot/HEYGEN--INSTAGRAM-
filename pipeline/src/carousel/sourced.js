@@ -11,6 +11,7 @@ import {
   LEDGER, normalizeSpec, validateShape, softProblems, checkSources, sourcedCarouselSchema,
 } from './generate.js';
 import { SYSTEM, buildSourcedPrompt } from './sourced-prompt.js';
+import { readTrendPrompt } from '../research/load.js';
 
 export const MAX_SOURCE_AGE_MS = 48 * 60 * 60 * 1000;
 
@@ -137,6 +138,7 @@ export async function generateSourcedCarousel({
   if (!chosenModel) throw new Error(`${provider.name}: no model chosen. Set the SCRIPT_MODEL variable.`);
 
   const recentTopics = await readHistory(LEDGER);
+  const trendNote = await readTrendPrompt();
   const sites = new Set(found.map((item) => item.site.toLowerCase()));
   let lastProblems = [];
   let lastOutput = null;
@@ -145,6 +147,7 @@ export async function generateSourcedCarousel({
   const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildSourcedPrompt({ kind, stories: found, date, recentTopics });
+    if (trendNote) userPrompt += `\n\n${trendNote}`;
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो. संख्या मत जोड़ो.`;
     }
