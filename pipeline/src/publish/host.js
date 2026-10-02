@@ -158,6 +158,18 @@ async function upload({ repo, token, release, file, name }) {
  * evidence: a JPEG starts FF D8 FF, and nothing else does.
  */
 const JPEG_MAGIC = [0xff, 0xd8, 0xff];
+// An MP4/MOV starts with a box size (4 bytes) then 'ftyp'. A Reel is hosted
+// through the same check, and checking it for JPEG bytes rejected a good
+// video eight times (2 Oct 2026) and lost the day's Reel.
+const FTYP = [0x66, 0x74, 0x79, 0x70];
+
+export function expectedKind(url) {
+  const clean = String(url).split(/[?#]/)[0].toLowerCase();
+  if (/\.(mp4|mov|m4v)$/.test(clean)) {
+    return { label: 'an MP4 video', matches: (h) => FTYP.every((b, i) => h[i + 4] === b) };
+  }
+  return { label: 'a JPEG', matches: (h) => JPEG_MAGIC.every((b, i) => h[i] === b) };
+}
 
 export async function waitUntilServed(url, { attempts = 8, waitMs = 1500, onWait } = {}) {
   let last = 'never asked';
@@ -167,9 +179,10 @@ export async function waitUntilServed(url, { attempts = 8, waitMs = 1500, onWait
       // makes, because that is the fetch Instagram makes.
       const res = await fetch(url, { redirect: 'follow' });
       if (res.ok) {
-        const head = new Uint8Array((await res.arrayBuffer()).slice(0, 3));
-        if (JPEG_MAGIC.every((b, i) => head[i] === b)) return { attempts: attempt };
-        last = `${res.status} but the first bytes are not a JPEG`;
+        const head = new Uint8Array((await res.arrayBuffer()).slice(0, 12));
+        const kind = expectedKind(url);
+        if (kind.matches(head)) return { attempts: attempt };
+        last = `${res.status} but the first bytes are not ${kind.label}`;
       } else {
         last = String(res.status);
       }

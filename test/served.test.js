@@ -80,3 +80,27 @@ test('a network error is survived, not thrown', async () => {
   const { attempts } = await waitUntilServed('https://example.com/01.jpg', fast);
   assert.equal(attempts, 2);
 });
+
+const MP4 = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]).buffer;
+
+test('a Reel mp4 is served when its bytes say ftyp, not JPEG', async () => {
+  const calls = serving(0, { body: MP4 });
+  await waitUntilServed('https://example.com/reel-final.mp4', fast);
+  assert.equal(calls(), 1);
+});
+
+test('a 200 carrying a web page instead of the mp4 does not count as served', async () => {
+  serving(0, { body: HTML });
+  await assert.rejects(
+    () => waitUntilServed('https://example.com/reel-final.mp4', { ...fast, attempts: 2 }),
+    (err) => /not an MP4 video/.test(err.message),
+  );
+});
+
+test('a JPEG URL still needs JPEG bytes, even if an mp4 is served', async () => {
+  serving(0, { body: MP4 });
+  await assert.rejects(
+    () => waitUntilServed('https://example.com/01.jpg', { ...fast, attempts: 2 }),
+    (err) => /not a JPEG/.test(err.message),
+  );
+});
