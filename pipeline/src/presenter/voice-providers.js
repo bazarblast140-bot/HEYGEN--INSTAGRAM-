@@ -172,6 +172,50 @@ const elevenlabs = {
   },
 };
 
+/**
+ * Silent WAV sized from the script. Used for previews and tests so those
+ * runs do not call ElevenLabs. A live publish does not set `local`.
+ */
+export function localSpeech({ text } = {}) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const slice = 0.35;
+  let cursor = 0;
+  const timed = (words.length ? words : [' ']).map((word) => {
+    const start = cursor;
+    cursor += slice;
+    return { word, start, end: cursor };
+  });
+  const duration = Math.max(slice, cursor);
+  const sampleRate = 8000;
+  const samples = Math.max(1, Math.ceil(duration * sampleRate));
+  const data = Buffer.alloc(samples * 2);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(data.length, 40);
+  return {
+    audio: Buffer.concat([header, data]),
+    format: 'wav',
+    duration,
+    words: timed,
+    provider: 'local',
+  };
+}
+
+export function wantsLocalVoice(options = {}, env = process.env) {
+  return options.local === true || env.LOCAL_TTS === '1';
+}
+
 export const VOICE_PROVIDERS = [elevenlabs];
 
 /**
@@ -192,8 +236,9 @@ export function resolveVoiceProvider(preferred = env('VOICE_PROVIDER')) {
   return chosen;
 }
 
-/** Synthesise with ElevenLabs. A failure is returned to the caller; nothing else speaks. */
-export async function synthesise(options) {
+/** Synthesise with ElevenLabs. Previews and tests pass `local` and never call out. */
+export async function synthesise(options = {}) {
+  if (wantsLocalVoice(options)) return localSpeech(options);
   const provider = resolveVoiceProvider();
   const result = await provider.synth(options);
   return { ...result, provider: provider.name };

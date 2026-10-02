@@ -25,6 +25,7 @@ import { burnCaptions } from './src/assemble/captions.js';
 import { renderNarration, alignBeats } from './src/presenter/narration.js';
 import { fetchStock } from './src/stock/index.js';
 import { generateSpec, durationNote } from './src/script/generate.js';
+import { clock, decideReelDay, truthy } from './src/publish/same-day.js';
 import { shapeCaption } from './src/publish/caption.js';
 import { coverTimestamp } from './src/render/reveal.js';
 import { fitPlan, REEL_MIN_SECONDS, REEL_MAX_SECONDS } from './src/assemble/fit.js';
@@ -99,6 +100,18 @@ function dedupeCard(card) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const localVoice = Boolean(args.preview || args['local-voice'] || process.env.LOCAL_TTS === '1');
+  // Slot and publish checks before any DeepSeek or ElevenLabs call. A topic
+  // row is not a publish: hosting can fail after the script is written.
+  // Preview is a review build: it uses local speech and does not publish.
+  if (!args.preview && !truthy(args.force) && !truthy(process.env.FORCE)) {
+    const decision = await decideReelDay({ now: clock() });
+    if (!decision.pending) {
+      console.log(`soft skip — reel already published today (${decision.date}) via ${decision.via}. Nothing will be published.`);
+      process.exit(0);
+    }
+  }
+
   const specPath = args.spec || path.join(HERE, 'specs', 'default.json');
   let spec = JSON.parse(await fs.readFile(specPath, 'utf8'));
 
@@ -167,7 +180,8 @@ async function main() {
           summary, recent: series.candles.slice(-10),
         },
         news: spec.news,
-        record: !args.preview,
+        // The topic is recorded only after Instagram accepts the Reel.
+        record: false,
         onAttempt: (n, model) => console.log(`  ${model}, attempt ${n}`),
       });
       // Keep the parts of the checked-in spec that are staging, not content.
@@ -204,8 +218,9 @@ async function main() {
         script: fullScript,
         workDir: path.join(workDir, 'narration'),
         onNote: note,
+        local: localVoice,
       });
-      console.log(`  ${narration.duration.toFixed(1)}s via ElevenLabs (${narration.provider})`);
+      console.log(`  ${narration.duration.toFixed(1)}s via ${narration.provider}`);
     } catch (err) {
       const status = err.status ? `HTTP ${err.status}` : 'HTTP n/a';
       console.error(`ElevenLabs narration failed (${status}): ${err.message}`);

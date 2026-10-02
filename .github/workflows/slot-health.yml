@@ -1,0 +1,51 @@
+name: Slot health
+
+# 30 minutes after each enabled slot, open or update one issue labelled
+# health-alert if that slot has no successful publish today (IST). Close the
+# issue once the publish is recorded. This workflow does not build or publish.
+#
+# Times are UTC. IST is UTC+5:30. Minutes stay off :00 and :30.
+#   Reel    07:00 IST → check 07:37 IST (02:07 UTC)
+#   AI      09:30 IST → check 10:07 IST (04:37 UTC)   only if the flag is on
+#   Midday  12:30 IST → check 13:07 IST (07:37 UTC)
+#   News    16:30 IST → check 17:07 IST (11:37 UTC)   only if the flag is on
+#   Evening 19:30 IST → check 20:07 IST (14:37 UTC)
+# The 17:07 IST run is a check only. It must not dispatch a carousel.
+
+on:
+  schedule:
+    - cron: '7 2 * * *'
+    - cron: '37 4 * * *'
+    - cron: '37 7 * * *'
+    - cron: '37 11 * * *'
+    - cron: '37 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: slot-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Alert when a slot has not published
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ENABLE_AI_NEWS_CAROUSELS: ${{ vars.ENABLE_AI_NEWS_CAROUSELS }}
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: node pipeline/slot-health.js

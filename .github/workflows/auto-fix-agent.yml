@@ -131,6 +131,11 @@ jobs:
           printf '### Classification: `%s`\n' "$KIND" >> "$GITHUB_STEP_SUMMARY"
           echo "preview=$PREVIEW rerun=$RERUN reason=$WHY" | tee -a "$GITHUB_STEP_SUMMARY"
 
+          if [ "$KIND" = "soft_skip" ] || [ "$WHY" = "soft-skip" ]; then
+            echo "Soft skip — not a failure and not a rerun." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           if [ "$PREVIEW" = "true" ]; then
             echo "Preview run — not rerunning." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -159,12 +164,6 @@ jobs:
               notify "🔑 HEYGEN auto-fix: Instagram/HeyGen token issue. Secrets/vars refresh karo. $FAILED_URL"
               ;;
             *)
-              if [ "$RERUN" = "true" ]; then
-                sleep 30
-                gh run rerun "$FAILED_RUN_ID" --repo "$REPO" --failed || true
-                notify "🔄 HEYGEN auto-fix: $FAILED_NAME unknown fail — 1 retry try. $FAILED_URL"
-              else
-                notify "❓ HEYGEN auto-fix: $FAILED_NAME unknown after retries. $FAILED_URL\n\n$SNIP"
-              fi
+              notify "❓ HEYGEN auto-fix: $FAILED_NAME ($KIND) — not rerunning. $FAILED_URL\n\n$SNIP"
               ;;
           esac

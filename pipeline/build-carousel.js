@@ -25,6 +25,7 @@ import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
 import { attachFixed, fillGaps } from './src/render/pictures.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
 import { ALL_SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
+import { clock } from './src/publish/same-day.js';
 import { generateSourcedCarousel } from './src/carousel/sourced.js';
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS, ENABLE_CAROUSEL_STORY } from './src/publish/flags.js';
 import { ACCOUNT_BRAND } from './src/publish/allow.js';
@@ -140,17 +141,15 @@ async function main() {
   let spec;
   if (args.generate || args.preview) {
     console.log(args.preview ? 'Preview — writing a carousel without posting' : 'Writing today\'s carousel');
+    const now = clock();
     const requested = args.preview
       ? ((!args.slot || args.slot === 'auto') ? 'evening' : args.slot)
-      : (args.slot || slotFor(new Date()));
+      : (args.slot || slotFor(now));
     const slot = requested;
     slotUsed = slot || '';
     if (!slot || !ALL_SLOTS.includes(slot)) {
-      if (args['require-generated'] || args.preview) {
-        console.error('\nNo finance slot for this run, so nothing was built and nothing will be published.');
-        process.exit(1);
-      }
-      note('outside the posting windows — checked-in spec is not publishable');
+      console.log('soft skip — No finance slot for this run, so nothing was built and nothing will be published.');
+      process.exit(0);
     } else if ((slot === 'ai' || slot === 'news') && !args.preview && !flagOn(ENABLE_AI_NEWS_CAROUSELS)) {
       console.log(`${slot} skipped — ENABLE_AI_NEWS_CAROUSELS is off. Nothing will be published.`);
       process.exit(0);

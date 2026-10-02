@@ -160,26 +160,32 @@ export function dayNumber(date = new Date()) {
   return Math.floor(Date.parse(iso + 'T00:00:00Z') / 86400000);
 };
 
-// Main fire + one catch-up per slot. Times are UTC; IST is UTC+5:30.
-// midday  12:30 / 12:52 IST → 07:00 / 07:22 UTC
-// evening 19:30 / 19:52 IST → 14:00 / 14:22 UTC
-// ai      09:30 / 09:52 IST → 04:00 / 04:22 UTC   (no-op unless the flag is on)
-// news    16:30 / 16:52 IST → 11:00 / 11:22 UTC   (no-op unless the flag is on)
+// Publish time, then catch-ups. Times are UTC; IST is UTC+5:30.
+// The :00 entries are the publish times and stay put. Later entries are
+// retries for when GitHub drops a schedule. New retries use minutes other
+// than :00 and :30, and none of them sit in the 22:30–01:30 UTC band.
+//   midday  12:30, 12:37, 12:52, 13:11 IST → 07:00, 07:07, 07:22, 07:41 UTC
+//   evening 19:30, 19:37, 19:52, 20:11 IST → 14:00, 14:07, 14:22, 14:41 UTC
+//   ai      09:30, 09:37, 09:52, 10:11 IST → 04:00, 04:07, 04:22, 04:41 UTC
+//   news    16:30, 16:37, 16:52, 17:11 IST → 11:00, 11:07, 11:22, 11:41 UTC
+// ai and news no-op unless ENABLE_AI_NEWS_CAROUSELS is on.
 export const CRON_SLOTS = {
-  '0 7 * * *': 'midday', '22 7 * * *': 'midday',
-  '0 14 * * *': 'evening', '22 14 * * *': 'evening',
-  '0 4 * * *': 'ai', '22 4 * * *': 'ai',
-  '0 11 * * *': 'news', '22 11 * * *': 'news',
+  '0 7 * * *': 'midday', '7 7 * * *': 'midday', '22 7 * * *': 'midday', '41 7 * * *': 'midday',
+  '0 14 * * *': 'evening', '7 14 * * *': 'evening', '22 14 * * *': 'evening', '41 14 * * *': 'evening',
+  '0 4 * * *': 'ai', '7 4 * * *': 'ai', '22 4 * * *': 'ai', '41 4 * * *': 'ai',
+  '0 11 * * *': 'news', '7 11 * * *': 'news', '22 11 * * *': 'news', '41 11 * * *': 'news',
 };
 
 // Posting windows in minutes from midnight IST. A run that does not name a
-// slot may post only inside one of these. 06:07, 17:07 and the other old
-// triggers fall outside both, so they do not publish.
+// slot, and an explicit slot, may post only inside one of these. Ends are
+// exclusive. Each window now runs past the catch-up times so a late clock
+// still fills that slot, without swallowing the gap before the next one:
+// 15:00 IST is not midday, 06:07 IST is before AI, and 17:07 IST is not evening.
 export const WINDOWS = {
-  midday: { start: 12 * 60, end: 13 * 60 + 45 },
-  evening: { start: 19 * 60, end: 20 * 60 + 45 },
-  ai: { start: 9 * 60, end: 10 * 60 + 45 },
-  news: { start: 16 * 60, end: 17 * 60 + 45 },
+  midday: { start: 12 * 60, end: 14 * 60 + 30 },
+  evening: { start: 19 * 60, end: 22 * 60 },
+  ai: { start: 9 * 60, end: 11 * 60 + 45 },
+  news: { start: 16 * 60, end: 18 * 60 + 45 },
 };
 
 export function istParts(date = new Date()) {

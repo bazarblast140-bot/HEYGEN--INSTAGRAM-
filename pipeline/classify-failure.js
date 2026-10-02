@@ -9,8 +9,19 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+/** A slot skip is not a broken build. Auto-fix must not rerun it. */
+export function isSoftSkip(log) {
+  const text = String(log || '');
+  return /\bsoft skip\b/i.test(text)
+    || /No finance slot for this run/i.test(text)
+    || /outside both posting windows/i.test(text)
+    || /already published today/i.test(text);
+}
+
 export function classifyFailure(log) {
   const text = String(log || '');
+  const hard = /\bHTTP [45]\d\d\b/.test(text) || /SyntaxError|Unexpected token/.test(text);
+  if (!hard && isSoftSkip(text)) return 'soft_skip';
   const http4xx = text.match(/\bHTTP (4\d\d)\b/g) || [];
   const permanent4xx = http4xx.some((hit) => !/\bHTTP 429\b/.test(hit));
   if (permanent4xx || /\brequest problem\b/i.test(text) || /\binvalid\b/i.test(text) || /\bmust contain\b/i.test(text)) {
@@ -42,6 +53,7 @@ const TRANSIENT = new Set(['transient_ig_9007', 'transient_network', 'transient_
 
 export function rerunDecision({ kind, preview = false, log = '', attempt = 1, max = 2 } = {}) {
   if (preview) return { rerun: false, reason: 'preview' };
+  if (kind === 'soft_skip') return { rerun: false, reason: 'soft-skip' };
   if (alreadyPublished(log)) return { rerun: false, reason: 'already-published' };
   if (kind === 'code_or_request' || kind === 'code_syntax' || kind === 'spec_validation' || kind === 'auth_token') {
     return { rerun: false, reason: kind };
@@ -50,7 +62,10 @@ export function rerunDecision({ kind, preview = false, log = '', attempt = 1, ma
   if (TRANSIENT.has(kind)) {
     return n < max ? { rerun: true, reason: kind } : { rerun: false, reason: 'exhausted' };
   }
-  return n <= 1 ? { rerun: true, reason: 'unknown' } : { rerun: false, reason: 'unknown' };
+  if (isSoftSkip(log)) return { rerun: false, reason: 'soft-skip' };
+  // Unknown failures are not retried. A second automatic run is how a skip
+  // or a bad request spends another paid build.
+  return { rerun: false, reason: 'unknown' };
 }
 
 function arg(name, argv) {
