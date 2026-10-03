@@ -1,0 +1,110 @@
+name: SBI EMI repost (one-off)
+
+# One-off repost of the fixed 3 Oct 12:30 SBI home-loan EMI carousel, which
+# replaces IG media 18089688200678070 (instagram.com/p/DeBiubHGK9S). Manual
+# only — no schedule.
+#
+#   mode=check    (default) prints OLD POST DELETED: yes/no, the package sha and
+#                 the ledger state. Posts nothing.
+#   mode=publish  refuses unless the old post is deleted, the package sha
+#                 matches the reviewed build and pipeline/repost-ledger.json has
+#                 no entry for it. It claims the ledger entry (committed and
+#                 pushed) BEFORE posting, then posts exactly the 10 committed
+#                 slides with the committed caption.txt, plus the Story and the
+#                 Facebook Page copy, and records the media id. Once only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check (default, posts nothing) or publish"
+        type: choice
+        options: [check, publish]
+        default: check
+
+concurrency:
+  group: sbi-repost
+  cancel-in-progress: false
+
+env:
+  KEY: sbi-2026-10-03
+  PKG: pipeline/specs/repost/sbi-2026-10-03
+
+jobs:
+  repost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      IG_USER_ID: ${{ vars.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      IG_SURFACE: ${{ vars.IG_SURFACE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check (old post deleted? package sha? already posted?)
+        id: check
+        run: |
+          set -o pipefail
+          node pipeline/repost.js --key "$KEY" --mode "${{ inputs.mode }}" 2>&1 | tee check.log
+          { echo '## SBI repost check'; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # The claim is pushed before anything is posted: a second run (or a re-run)
+      # finds it and refuses, even if this run dies after posting.
+      - name: Claim the repost in the ledger
+        if: ${{ inputs.mode == 'publish' && steps.check.outputs.ready == 'true' }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          node pipeline/repost.js --key "$KEY" --mode publish --claim
+          git add pipeline/repost-ledger.json
+          git commit -m "Claim one-off repost $KEY (run ${GITHUB_RUN_ID})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Publish to Instagram
+        id: publish
+        if: ${{ inputs.mode == 'publish' && steps.check.outputs.ready == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          node pipeline/publish-carousel.js --report "$PKG/carousel-report.json" --caption-file "$PKG/caption.txt" --yes 2>&1 | tee publish.log
+          { echo '## Published'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' publish.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Copy to the Facebook Page
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json" 2>/dev/null || true)
+          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" \
+            --hosted "$PKG/hosted.json" --caption-file "$PKG/caption.txt" 2>&1 | tee fb.log
+          sed -e 's/\x1b\[[0-9;]*m//g' fb.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the repost
+        if: ${{ always() && steps.publish.outcome == 'success' }}
+        run: |
+          ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json")
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node pipeline/repost.js --key "$KEY" --record "$ID"
+          git add pipeline/repost-ledger.json pipeline/fb-crosspost-history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record one-off repost $KEY: media $ID"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the repost (the claim is already pushed, so it still cannot post twice)." >> "$GITHUB_STEP_SUMMARY"
