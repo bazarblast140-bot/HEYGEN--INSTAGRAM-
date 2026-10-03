@@ -13,11 +13,12 @@
         "at": "2026-10-03T12:14:53.855Z"
       },
       "fb": {
-        "state": "failed",
-        "tries": 1,
-        "stage": "upload",
-        "error": "Facebook reel upload failed: Unable to fetch media from URL, got status code: 403 First-party Meta-hosted URLs are not permitted",
-        "at": "2026-10-03T12:08:50.825Z"
+        "state": "done",
+        "id": "1142669294775771",
+        "url": "https://www.facebook.com/reel/1142669294775771",
+        "from": "pinned",
+        "tries": 2,
+        "at": "2026-10-03T12:14:53.855Z"
       }
     }
   ]
