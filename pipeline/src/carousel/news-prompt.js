@@ -84,11 +84,13 @@ Image repeat मत करो.
 </last_slide>
 
 <output_format>
+Cover photo: "coverPhoto" में असली company/product/event की English searches दो (logo, screenshot, document नहीं). Code check करेगा; न मिले तो chart cover.
 सिर्फ़ JSON. कोई markdown fence नहीं.
 
 {
   "topic": "आज का विषय 3 से 7 शब्दों में",
   "category": "technology",
+  "coverPhoto": {"queries": ["the actual company / product / event, in English"], "mustHave": ["its name"], "avoid": ["logo", "screenshot", "document"]},
   "slides": [
     {
       "band": "center",

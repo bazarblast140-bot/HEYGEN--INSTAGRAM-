@@ -47,6 +47,11 @@ ONE WORKED EXAMPLE — पूरे carousel का एक ही उदाह�
 - compare में सिर्फ़ वो values जो code ने निकाली (जैसे Contribution 40 vs Operating profit 10). अपनी कोई नई संख्या (15%, 50%, "leverage 3") compare में मत डालो.
 - अलग-अलग slides पर अलग-अलग numbers (एक जगह 20% → 50%, दूसरी जगह 10% → 40%) = BLOCK.
 
+COVER PHOTO — सिर्फ़ slide 1 पर एक photo (code ढूँढेगा और check करेगा; न मिले तो chart cover)
+- Top-level "coverPhoto": {"queries":[2–3 English searches],"mustHave":[2–5 English words],"avoid":[words]}.
+- Indian context: Indian rupee notes, Indian bank या घर, Indian family home, NSE/BSE/Dalal Street, Indian office/people. Queries में "India"/"Indian" हो.
+- कभी नहीं: tax form, invoice, document, paper, screen, chart, calculator, foreign money/forms (dollar, IRS, 1040). Photo में text या numbers न हों.
+
 LANGUAGE — simple Hinglish
 - Hindi देवनागरी में, लेकिन आम English finance words Roman में ही लिखो: EMI, interest, loan, tenure, SIP, return, tax, principal, inflation, premium, stop-loss.
 - भारी/किताबी शब्द मना हैं (code इन्हें block करता है): ${heavyWordPrompt()}.
@@ -86,6 +91,7 @@ personal-finance → EMI/SIP/inflation/lumpsum, market-history → drawdown/CAGR
   "topic": "3–8 शब्दों में specific topic",
   "category": "${category}",
   "example": {"type":"emi","principal":5000000,"rate":8.5,"years":20},
+  "coverPhoto": {"queries":["Indian family new home India","apartment building Mumbai India"],"mustHave":["india","indian","home","apartment","house"],"avoid":["form","document","tax","dollar"]},
   "slides": [
     {"band":"center","headline":"₹50 लाख का home loan, interest कितना?","subline":null,"source":null,"cta":false,"calc":null},
     {"band":"bottom","headline":"EMI का बड़ा हिस्सा interest","subline":"₹50 लाख, 8.5%, 20 साल का loan","source":null,"cta":false,"calc":{"type":"emi","principal":5000000,"rate":8.5,"years":20,"view":"split"}},

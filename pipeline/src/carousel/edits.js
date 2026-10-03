@@ -10,7 +10,8 @@
 //   { "edits": [
 //       { "op": "calc", "slide": 8, "calc": { "type": "contribution_split", ... } },
 //       { "op": "text", "slide": 3, "field": "headline", "value": "..." },
-//       { "op": "caption_replace", "from": "उछला", "to": "बढ़ गया" } ] }
+//       { "op": "caption_replace", "from": "उछला", "to": "बढ़ गया" },
+//       { "op": "cover_photo", "queries": [...], "mustHave": [...], "avoid": [...] } ] }
 
 const FIELDS = new Set(['headline', 'subline']);
 
@@ -45,8 +46,13 @@ export function applyEdits(spec, edits = []) {
       if (!e.from || !cap.includes(e.from)) throw new Error(`caption does not contain "${e.from}"`);
       out = { ...out, caption: cap.split(e.from).join(String(e.to ?? '')) };
       applied.push(`caption: "${e.from}" → "${e.to}"`);
+    } else if (e?.op === 'cover_photo') {
+      const queries = (Array.isArray(e.queries) ? e.queries : []).filter((q) => typeof q === 'string' && q.trim());
+      if (!queries.length) throw new Error('cover_photo edit needs at least one query');
+      out = { ...out, coverPhoto: { queries, mustHave: e.mustHave || [], avoid: e.avoid || [] } };
+      applied.push(`cover photo: search ${queries.map((q) => `"${q}"`).join(', ')}`);
     } else {
-      throw new Error(`unknown edit op "${e?.op}" — use calc, text or caption_replace`);
+      throw new Error(`unknown edit op "${e?.op}" — use calc, text, caption_replace or cover_photo`);
     }
   }
   return { spec: out, applied };

@@ -60,6 +60,7 @@ Headline 8 शब्द तक, subline 14 शब्द तक. ज़्या�
 </structure>
 
 <output_format>
+Cover photo: "coverPhoto" में असली company/product/event की English searches दो (logo, screenshot, document नहीं). Code check करेगा; न मिले तो chart cover.
 सिर्फ़ एक JSON object भेजो. ऊपर कोई wrapper मत रखो: carousel, data, items, beats मत बनाओ.
 हर slide में headline ज़रूरी है. "calc" या तो ऊपर वाले format में हो या null.
 title मत लिखो, headline लिखो. body या text मत लिखो, subline लिखो.
@@ -68,6 +69,7 @@ caption और hashtags ऊपर के level पर ज़रूरी है�
 {
   "topic": "3 से 7 शब्दों में विषय",
   "category": "${kind === 'ai' ? 'ai-news' : 'latest-news'}",
+  "coverPhoto": {"queries": ["the actual company / product / event, in English"], "mustHave": ["its name"], "avoid": ["logo", "screenshot", "document"]},
   "slides": [
     {
       "band": "center",
