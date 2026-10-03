@@ -197,6 +197,27 @@ const TYPES = {
       note: 'Calculation: operating leverage = contribution ÷ operating profit; profit change = sales change × leverage',
     };
   },
+  // Where the contribution goes: fixed cost first, operating profit is what is
+  // left. contribution = sales − variable cost; profit = contribution − fixed.
+  contribution_split(c) {
+    need(c, 'sales', 'variableCost', 'fixedCost');
+    const S = num(c.sales); const V = num(c.variableCost); const F = num(c.fixedCost);
+    if (!(S > 0) || !(V >= 0) || !(F >= 0)) throw new Error('contribution_split needs sales > 0, costs >= 0');
+    const C = S - V; const E = C - F;
+    if (!(C > 0)) throw new Error('contribution_split needs contribution (sales − variable cost) > 0');
+    if (!(E >= 0)) throw new Error('contribution_split needs operating profit (contribution − fixed cost) >= 0');
+    const unit = c.unit === 'INR' ? UNITS.INR : UNITS.NUM;
+    const val = (k, l, v) => (unit === UNITS.INR ? inr(k, l, v) : plain(k, l, v, UNITS.NUM, trim(v, 2)));
+    return {
+      inputs: [val('sales', 'Sales', S), val('variableCost', 'Variable cost', V), val('fixedCost', 'Fixed cost', F)],
+      figures: [val('contribution', 'Contribution', C), val('ebit', 'Operating profit', E),
+        pct('fixedSharePct', 'Fixed cost share', (F / C) * 100), pct('profitSharePct', 'Profit share', (E / C) * 100)],
+      highlight: ['contribution', 'fixedCost', 'ebit'],
+      chart: { kind: 'stackbars', title: 'Where contribution goes', unit: unit === UNITS.INR ? 'INR' : 'NUM', labels: ['Contribution'],
+        stacks: [{ name: 'Fixed cost', color: 'red', values: [F] }, { name: 'Operating profit', color: 'green', values: [E] }] },
+      note: 'Calculation: contribution = sales − variable cost; operating profit = contribution − fixed cost',
+    };
+  },
   margin(c) {
     need(c, 'revenue', 'cost');
     const Rv = num(c.revenue); const Co = num(c.cost);
@@ -374,7 +395,7 @@ const TYPES = {
       figures: [mk('gap', 'Gap', max - min), ...(min > 0 ? [plain('ratio', 'Ratio', max / min, UNITS.NUM, `${trim(max / min, 2)}x`), pct('gapPct', 'Gap %', ((max - min) / min) * 100)] : [])],
       highlight: ['item0', 'item1', 'gap'],
       chart: { kind: 'bars', title: c.title || 'Comparison', unit: unit === UNITS.INR ? 'INR' : unit === UNITS.PCT ? 'PCT' : 'NUM',
-        labels: items.map((it, i) => String(it.label || `#${i + 1}`).slice(0, 14)), values: vals,
+        labels: items.map((it, i) => String(it.label || `#${i + 1}`).slice(0, 28)), values: vals,
         colors: vals.map((v) => (v === max ? 'yellow' : 'blue')) },
       note: COMPARE_NOTE,
     };

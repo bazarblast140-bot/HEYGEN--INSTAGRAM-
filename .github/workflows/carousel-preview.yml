@@ -19,6 +19,12 @@ on:
         type: choice
         options: ['evening', 'midday', 'news', 'ai']
         default: 'evening'
+      spec_from_run:
+        description: "Re-render the spec of this earlier preview run id with the edits below — NO model call. Empty = generate a new one."
+        default: ''
+      edits:
+        description: "Reviewer edits file under pipeline/specs/edits/ (used with spec_from_run)"
+        default: ''
 
 concurrency:
   group: carousel-preview-${{ github.event.inputs.slot }}
@@ -26,6 +32,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read   # download the reviewed run's artifact for spec_from_run
 
 jobs:
   preview:
@@ -44,7 +51,37 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
+      # ---- re-render a reviewed preview: its spec + reviewer edits, no model ----
+      - name: Download the reviewed spec
+        if: ${{ github.event.inputs.spec_from_run != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: carousel
+          path: source
+          run-id: ${{ github.event.inputs.spec_from_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-render with reviewer edits (no model call)
+        if: ${{ github.event.inputs.spec_from_run != '' }}
+        # No DeepSeek key here: this step cannot call a model.
+        env:
+          FROM_RUN: ${{ github.event.inputs.spec_from_run }}
+          EDITS: ${{ github.event.inputs.edits }}
+          SLOT: ${{ github.event.inputs.slot }}
+        run: |
+          set -o pipefail
+          case "$FROM_RUN" in (*[!0-9]*|'') echo "spec_from_run must be a run id"; exit 1;; esac
+          EDIT_ARGS=()
+          if [ -n "$EDITS" ]; then
+            case "$EDITS" in (pipeline/specs/edits/*.json) ;; (*) echo "edits must be a file under pipeline/specs/edits/"; exit 1;; esac
+            case "$EDITS" in (*..*) echo "edits path may not contain .."; exit 1;; esac
+            EDIT_ARGS=(--edits "$EDITS")
+          fi
+          node pipeline/build-carousel.js --rerender source/spec-generated.json --source-report source/carousel-report.json \
+            --from-run "$FROM_RUN" --slot "$SLOT" "${EDIT_ARGS[@]}" 2>&1 | tee carousel.log
+
       - name: Build the preview
+        if: ${{ github.event.inputs.spec_from_run == '' }}
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           SCRIPT_PROVIDER: deepseek
@@ -52,8 +89,11 @@ jobs:
         run: |
           set -o pipefail
           node pipeline/build-carousel.js --preview --require-generated --slot "${{ github.event.inputs.slot }}" 2>&1 | tee carousel.log
+
+      - name: Contact sheet and summary
+        run: |
           node pipeline/contact-sheet.js --dir pipeline/out/slides --out pipeline/out/contact-sheet.png \
-            --title "${{ github.event.inputs.slot }} preview · run ${{ github.run_id }}"
+            --title "${{ github.event.inputs.slot }} preview · run ${{ github.run_id }}${{ github.event.inputs.spec_from_run != '' && format(' · re-render of {0}', github.event.inputs.spec_from_run) || '' }}"
           {
             echo '## Carousel preview — nothing was published'
             echo '```'

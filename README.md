@@ -82,3 +82,17 @@ scripts/generate.js  CLI: generate → poll → download
 - Instagram caps Reels at 90 seconds; the API rejects scripts over 220 words (~90s at
   150 wpm) before spending HeyGen credits.
 - `.env` is gitignored. Never commit the API key.
+
+### Re-render a reviewed preview with edits (no model call)
+
+When a reviewer wants small exact changes to a preview, commit an edits file
+under `pipeline/specs/edits/` (ops: `calc`, `text`, `caption_replace`; every
+edit must hit its target or the run stops) and dispatch
+
+    gh workflow run carousel-preview.yml -f slot=evening -f spec_from_run=<preview run id> -f edits=pipeline/specs/edits/<file>.json
+
+The run downloads that preview's `spec-generated.json`, applies the edits,
+renders, runs the full quality gate and uploads the same `carousel` artifact
+(report carries `rerender.fromRun`, the source spec sha256 and the edit list).
+That step has no model key. Publish it, like any preview, with
+`carousel.yml approve_build=<the re-render's run id>`.

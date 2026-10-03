@@ -1,0 +1,7 @@
+{
+  "review": "Reviewed preview run 37119847614 (evening, 2026-10-03). Slide 8 repeated slide 3's 40 vs 10 compare; show contribution 40 as a stack of fixed cost 30 and operating profit 10 instead. Caption wording.",
+  "edits": [
+    { "op": "calc", "slide": 8, "calc": { "type": "contribution_split", "sales": 100, "variableCost": 60, "fixedCost": 30, "unit": "num" } },
+    { "op": "caption_replace", "from": "उछला", "to": "बढ़ गया" }
+  ]
+}
