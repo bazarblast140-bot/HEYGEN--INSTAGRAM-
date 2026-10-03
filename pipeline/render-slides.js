@@ -87,7 +87,7 @@ export const STORY_INSET = 260;      // Instagram's own UI sits over the bottom
 
 export async function renderSlides({
   spec, outDir, onProgress, format = FORMAT, quality = QUALITY,
-  width = WIDTH, height = HEIGHT, bottomInset = 0,
+  width = WIDTH, height = HEIGHT, bottomInset = 0, tight = false,
 }) {
   if (!['jpeg', 'png'].includes(format)) throw new Error(`Unknown format "${format}" — jpeg or png.`);
   const slides = spec.slides || [];
@@ -103,6 +103,7 @@ export async function renderSlides({
   });
 
   const files = [];
+  const measures = [];
   try {
     const page = await browser.newPage({
       viewport: { width, height },
@@ -140,6 +141,7 @@ export async function renderSlides({
         brandInk: spec.brandInk,
         ...slide,
         bottomInset,
+        tight,
         callout: slide.callout || '',
         background: toUrl(slide.background),
         logo: toUrl(slide.logo || spec.logo),
@@ -149,6 +151,8 @@ export async function renderSlides({
       await page.evaluate((d) => window.__slide.load(d), payload);
       await page.waitForFunction(() => document.body.dataset.ready === '1');
       await page.evaluate(() => document.fonts.ready);
+      // Rendered text boxes, for the pre-publish safe-area check.
+      measures.push(await page.evaluate(() => window.__slide.measure()));
 
       const file = path.join(outDir, `${String(i + 1).padStart(2, '0')}.${format === 'jpeg' ? 'jpg' : 'png'}`);
       await page.screenshot({
@@ -162,7 +166,7 @@ export async function renderSlides({
     await browser.close();
   }
 
-  return { files, width, height, format };
+  return { files, width, height, format, measures };
 }
 
 async function main() {

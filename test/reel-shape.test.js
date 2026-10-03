@@ -79,7 +79,7 @@ test('the first frame is a card and a cover image is extracted', async () => {
   assert.match(text, /scene: 'card\.html'/);
   assert.match(text, /reel-cover\.jpg/);
   const workflow = await readFile(new URL('../.github/workflows/build-reel.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /cron: '30 1 \* \* \*'/);
+  assert.match(workflow, /cron: '17 16 \* \* \*'/);
   assert.match(workflow, /--cover/);
 });
 
@@ -101,6 +101,6 @@ test('a reel caption ends with a prompt and five tags', () => {
   });
   assert.match(caption, /^Nifty flat band\./);
   assert.match(caption, /Save karo, share karo, comment mein apna sawal likho\./);
-  assert.match(caption, /Link in bio\./);
+  assert.match(caption, /link in bio\.$/);
   assert.equal((caption.match(/#/g) || []).length, 5);
 });

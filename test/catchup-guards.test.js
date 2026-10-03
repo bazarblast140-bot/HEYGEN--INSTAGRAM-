@@ -66,13 +66,18 @@ test('each carousel slot has at least three crons, and new ones avoid :00 and :3
   assert.equal(CRON_SLOTS['0 11 * * *'], 'news');
 });
 
-test('the Reel keeps 07:00 IST and adds catch-ups outside the busy band', async () => {
+test('the Reel is an evening fallback at 21:47 IST with catch-ups before 23:00 IST', async () => {
   const text = await readFile(new URL('../.github/workflows/build-reel.yml', import.meta.url), 'utf8');
   const crons = cronsIn(text);
-  assert.ok(crons.includes('30 1 * * *'));
-  assert.ok(crons.length >= 3, crons.join(', '));
+  assert.ok(crons.includes('17 16 * * *'));
+  assert.ok(crons.length >= 2 && crons.length <= 3, crons.join(', '));
+  for (const morning of ['30 1 * * *', '37 1 * * *', '53 1 * * *', '11 2 * * *']) {
+    assert.equal(crons.includes(morning), false, morning);
+  }
   for (const cron of crons) {
-    if (cron === '30 1 * * *') continue;
+    const [m, h] = cron.split(' ').map(Number);
+    const ist = (h * 60 + m + 330) % 1440;
+    assert.ok(ist >= 21 * 60 + 30 && ist < 23 * 60, `${cron} is ${Math.floor(ist / 60)}:${ist % 60} IST`);
     const minute = Number(cron.split(' ')[0]);
     assert.equal(minute === 0 || minute === 30, false, cron);
     assert.equal(inBusyBand(cron), false, cron);
@@ -317,17 +322,26 @@ test('model retries are capped at 3', async () => {
 });
 
 test('a missed slot opens, updates, and closes one health-alert issue', async () => {
-  const morning = new Date('2026-10-02T02:07:00Z');
+  const late = new Date('2026-10-02T17:37:00Z'); // 23:07 IST, after the fallback window
+  const done = [{ date: '2026-10-02 midday' }, { date: '2026-10-02 evening' }];
   assert.deepEqual(missedSlots({
-    now: morning,
+    now: late,
+    env: {},
+    reelPublishEntries: [],
+    carouselEntries: done,
+  }), ['reel']);
+  assert.deepEqual(missedSlots({
+    now: late,
+    env: {},
+    reelPublishEntries: [{ date: '2026-10-02', mediaId: '1784140000123' }],
+    carouselEntries: done,
+  }), []);
+  // The morning check no longer reports the Reel: it is not due until 23:05 IST.
+  assert.deepEqual(missedSlots({
+    now: new Date('2026-10-02T02:07:00Z'),
     env: {},
     reelPublishEntries: [],
     carouselEntries: [],
-  }), ['reel']);
-  assert.deepEqual(missedSlots({
-    now: morning,
-    env: {},
-    reelPublishEntries: [{ date: '2026-10-02', mediaId: '1784140000123' }],
   }), []);
 
   const midmorning = new Date('2026-10-02T04:37:00Z');

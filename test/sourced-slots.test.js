@@ -225,7 +225,7 @@ test('workflows keep finance live, leave the new paths disabled, and accept ai a
   assert.equal(carousel.includes('ENABLE_AI_NEWS_CAROUSELS: "true"'), false);
 
   const reel = await readFile('.github/workflows/build-reel.yml', 'utf8');
-  assert.match(reel, /cron: '30 1 \* \* \*'/);
+  assert.match(reel, /cron: '17 16 \* \* \*'/);
   assert.match(reel, /ENABLE_REEL_STORY/);
   assert.match(reel, /reel-story-preview\.jpg/);
   assert.equal(reel.includes("ENABLE_REEL_STORY: 'true'"), false);

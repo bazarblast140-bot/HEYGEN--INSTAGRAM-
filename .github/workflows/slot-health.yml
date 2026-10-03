@@ -1,24 +1,26 @@
 name: Slot health
 
-# 30 minutes after each enabled slot, open or update one issue labelled
-# health-alert if that slot has no successful publish today (IST). Close the
-# issue once the publish is recorded. This workflow does not build or publish.
+# After each enabled slot, open or update one issue labelled health-alert if
+# that slot has no successful publish today (IST). Close the issue once the
+# publish is recorded. This workflow does not build or publish.
 #
 # Times are UTC. IST is UTC+5:30. Minutes stay off :00 and :30.
-#   Reel    07:00 IST → check 07:37 IST (02:07 UTC)
 #   AI      09:30 IST → check 10:07 IST (04:37 UTC)   only if the flag is on
 #   Midday  12:30 IST → check 13:07 IST (07:37 UTC)
 #   News    16:30 IST → check 17:07 IST (11:37 UTC)   only if the flag is on
 #   Evening 19:30 IST → check 20:07 IST (14:37 UTC)
+#   Reel    any Reel on Instagram today (Paise Ki Pathshala or the own 21:47 IST
+#           fallback) → checked at 23:07 IST (17:37 UTC), after the fallback's
+#           last catch-up (22:41 IST). Earlier checks never report the Reel.
 # The 17:07 IST run is a check only. It must not dispatch a carousel.
 
 on:
   schedule:
-    - cron: '7 2 * * *'
     - cron: '37 4 * * *'
     - cron: '37 7 * * *'
     - cron: '37 11 * * *'
     - cron: '37 14 * * *'
+    - cron: '37 17 * * *'
   workflow_dispatch:
 
 permissions:

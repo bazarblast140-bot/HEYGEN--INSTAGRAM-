@@ -31,6 +31,9 @@ import { flagOn, ENABLE_AI_NEWS_CAROUSELS, ENABLE_CAROUSEL_STORY } from './src/p
 import { ACCOUNT_BRAND } from './src/publish/allow.js';
 import { framesToPost } from './src/carousel/story.js';
 import { shapeCaption } from './src/publish/caption.js';
+import {
+  dropPaddedPanels, layoutProblems, hardQualityProblems, hindiShare, UNCHECKED,
+} from './src/carousel/quality.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -137,6 +140,7 @@ async function main() {
   let verifiedSource = false;
   let sourceFresh = false;
   let sourcedSlot = false;
+  let fetchedStories = null;
 
   let spec;
   if (args.generate || args.preview) {
@@ -193,6 +197,7 @@ async function main() {
         console.log('Skipping this post. Nothing will be published.');
         process.exit(0);
       }
+      if (sourcedSlot && Array.isArray(written.stories)) fetchedStories = written.stories;
       verifiedSource = written.verifiedSource === true;
       sourceFresh = written.sourceFresh === true;
       spec = {
@@ -250,6 +255,13 @@ async function main() {
     process.exit(1);
   }
 
+  // Quality repair before render: padded / empty panels are dropped, not shipped.
+  const padded = dropPaddedPanels(spec);
+  if (padded.dropped) {
+    spec = padded.spec;
+    note(`quality: dropped ${padded.dropped} padded/empty panel(s)`);
+  }
+
   const withFootnotes = {
     ...spec,
     slides: spec.slides.map((s) => ({
@@ -285,12 +297,25 @@ async function main() {
   }
 
   console.log('Rendering');
-  const { files, format } = await renderSlides({
-    spec: ready, outDir,
+  const renderFeed = (tight) => renderSlides({
+    spec: ready, outDir, tight,
     ...(args.format ? { format: args.format } : {}),
     onProgress: (n, total) => process.stdout.write(`\r  ${n}/${total}`),
   });
+  let rendered = await renderFeed(false);
   process.stdout.write('\n');
+  // Rendered text must sit inside the 6% safe inset. One free re-render with
+  // tighter type; no model call is repeated for layout.
+  let layout = layoutProblems(rendered.measures, { width: WIDTH, height: HEIGHT });
+  if (layout.length) {
+    layout.forEach((p) => note(`layout: ${p}`));
+    console.log('Re-rendering with tighter type');
+    rendered = await renderFeed(true);
+    process.stdout.write('\n');
+    layout = layoutProblems(rendered.measures, { width: WIDTH, height: HEIGHT });
+    note(layout.length ? `layout still fails after the tight re-render (${layout.length})` : 'layout fixed by the tight re-render');
+  }
+  const { files, format } = rendered;
 
   let stories = [];
   const frames = framesToPost(ready, {
@@ -301,12 +326,18 @@ async function main() {
   if (!frames.length) {
     console.log('story    none — one Story a day, only with the evening post');
   } else try {
-    const { files: storyFiles } = await renderSlides({
+    const renderStory = (tight) => renderSlides({
       spec: { ...ready, slides: frames },
       outDir: path.join(path.dirname(outDir), 'story'),
-      width: STORY_WIDTH, height: STORY_HEIGHT, bottomInset: STORY_INSET,
+      width: STORY_WIDTH, height: STORY_HEIGHT, bottomInset: STORY_INSET, tight,
       ...(args.format ? { format: args.format } : {}),
     });
+    const storyArea = { width: STORY_WIDTH, height: STORY_HEIGHT, story: true, bottomInset: STORY_INSET };
+    let storyRender = await renderStory(false);
+    if (layoutProblems(storyRender.measures, storyArea).length) storyRender = await renderStory(true);
+    const storyLayout = layoutProblems(storyRender.measures, storyArea);
+    if (storyLayout.length) throw new Error(`story text outside the safe area: ${storyLayout[0]}`);
+    const { files: storyFiles } = storyRender;
     stories = [];
     for (const [i, file] of storyFiles.entries()) {
       const named = path.join(path.dirname(file), `story-${i + 1}${path.extname(file)}`);
@@ -319,6 +350,21 @@ async function main() {
   }
 
   const caption = composeCaption(spec, BRAND.tag);
+
+  // Final pre-publish gate. Any hard problem keeps this carousel off the feed.
+  const gate = [...hardQualityProblems(ready, { stories: fetchedStories, caption }), ...layout];
+  const quality = {
+    ok: gate.length === 0,
+    problems: gate,
+    hindiShare: Number(hindiShare(ready).toFixed(2)),
+    safeInset: 0.06,
+    unchecked: UNCHECKED,
+  };
+  if (gate.length) {
+    console.log(`quality gate REFUSED — this carousel will not be published:\n  ${gate.join('\n  ')}`);
+  } else {
+    console.log(`quality gate passed (Hindi ${Math.round(quality.hindiShare * 100)}%, text inside the 6% safe area)`);
+  }
 
   await fs.writeFile(path.join(path.dirname(outDir), 'caption.txt'), caption);
 
@@ -337,9 +383,10 @@ async function main() {
     reviewed: !generated && spec.reviewed === true && FINANCE.includes(spec.category),
     verifiedSource,
     sourceFresh,
-    publishable: (generated && FINANCE.includes(spec.category))
+    publishable: quality.ok && ((generated && FINANCE.includes(spec.category))
       || (generated && verifiedSource && sourceFresh && flagOn(ENABLE_AI_NEWS_CAROUSELS)
-        && (spec.category === 'ai-news' || spec.category === 'latest-news')),
+        && (spec.category === 'ai-news' || spec.category === 'latest-news'))),
+    quality,
     stories,
     lines: (ready.slides || []).map((s, i) => ({
       n: i + 1,

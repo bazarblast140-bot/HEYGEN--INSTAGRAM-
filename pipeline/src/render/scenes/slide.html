@@ -104,13 +104,16 @@
     white-space: nowrap;
   }
 
-  #copy { position: absolute; left: 44px; right: 44px; text-align: center; }
+  /* 72px = 6.7% of 1080: the copy box sits inside the 6% safe inset (which also
+     covers Instagram's 3:4 grid crop of a 4:5 post). render-slides measures the
+     rendered glyphs against that inset before anything is published. */
+  #copy { position: absolute; left: 72px; right: 72px; text-align: center; }
 
   /* Story: solid black lower panel. Image clean on top, all text readable on black. */
   #copy.story-mode {
     left: 0; right: 0;
     background: #000;
-    padding: 48px 40px 36px;
+    padding: 48px 72px 36px;
   }
   #copy.story-mode #headline {
     text-shadow: none;
@@ -216,6 +219,7 @@
         band = 'bottom',
         bottomInset = 0,
         callout = '',
+        tight = false,
       } = data;
 
       if (ink) document.documentElement.style.setProperty('--ink', ink);
@@ -272,9 +276,12 @@
       c.classList.toggle('hidden', !callout);
 
       const cover = band === 'center';
-      fitText(h, cover ? { max: 136, min: 74, maxHeight: 470, maxLines: 3 }
-                       : { max: 118, min: 66, maxHeight: 250, maxLines: 2 });
-      if (subline) fitText(s, { max: 92, min: 56, maxHeight: 300, maxLines: 2 });
+      // tight: the one free re-render after a slide failed the safe-area check.
+      const k = tight ? 0.84 : 1;
+      const fit = (o) => ({ ...o, max: Math.round(o.max * k), min: Math.round(o.min * k) });
+      fitText(h, fit(cover ? { max: 136, min: 74, maxHeight: 470, maxLines: 3 }
+                           : { max: 118, min: 66, maxHeight: 250, maxLines: 2 }));
+      if (subline) fitText(s, fit({ max: 92, min: 56, maxHeight: 300, maxLines: 2 }));
 
       const copy = $('copy');
       if (bottomInset) {
@@ -293,6 +300,38 @@
       }
 
       document.body.dataset.ready = '1';
+    },
+
+    /**
+     * Where the rendered text actually is: the union of every glyph line box
+     * (DOM Range rects), per visible text element, in stage pixels. `clipped`
+     * lists elements whose content is wider than their own box.
+     */
+    measure() {
+      const out = { boxes: [], clipped: [] };
+      const ids = ['headline', 'subline', 'footnote', 'callout'];
+      const add = (id, el) => {
+        if (!el || el.classList.contains('hidden') || !el.textContent.trim()) return;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+        if (!rects.length) return;
+        out.boxes.push({
+          id,
+          left: Math.min(...rects.map((r) => r.left)),
+          top: Math.min(...rects.map((r) => r.top)),
+          right: Math.max(...rects.map((r) => r.right)),
+          bottom: Math.max(...rects.map((r) => r.bottom)),
+          text: el.textContent.slice(0, 40),
+        });
+        if (el.scrollWidth > el.clientWidth + 2) out.clipped.push(id);
+      };
+      for (const id of ids) add(id, $(id));
+      const mark = $('brand');
+      if (!mark.classList.contains('hidden')) add('brand', mark.querySelector('.mark'));
+      return out;
     },
   };
 })();

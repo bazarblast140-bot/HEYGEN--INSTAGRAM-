@@ -106,7 +106,7 @@ test('the reel build does not call HeyGen, and a voice failure stops the run', a
 
 test('Build reel preview uploads the film and cannot publish', async () => {
   const reel = await readFile('.github/workflows/build-reel.yml', 'utf8');
-  assert.match(reel, /cron: '30 1 \* \* \*'/);
+  assert.match(reel, /cron: '17 16 \* \* \*'/);
   assert.match(reel, /preview:/);
   assert.match(reel, /build-reel-preview/);
   assert.match(reel, /pipeline\/out\/reel-final\.mp4/);

@@ -163,7 +163,7 @@ export async function generateSourcedCarousel({
       lastProblems = [
         ...validateShape(shaped, recentTopics),
         ...checkSources(shaped, sites),
-        ...(attempt < maxAttempts ? softProblems(shaped) : []),
+        ...(attempt < maxAttempts ? softProblems(shaped, { stories: found }) : []),
       ];
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
