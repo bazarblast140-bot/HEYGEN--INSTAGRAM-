@@ -16,7 +16,7 @@ async function toNarrationWav(input, out) {
 }
 
 /**
- * Speech only, in the cloned voice. No avatar credits are spent here.
+ * Speech only, in the reel voice (Rudra, ElevenLabs). No avatar credits are spent here.
  */
 async function recordVoiceOnly({ script, workDir, speed, voiceId, onNote, local }) {
   const speech = await synthesise({

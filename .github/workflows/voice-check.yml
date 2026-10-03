@@ -1,0 +1,114 @@
+name: Reel voice check
+
+# Is the reel voice "Rudra" (ElevenLabs library voice ypnkIsDASPgHZuanrF0q) in
+# this account's My Voices? Prints its name and category. If it is missing,
+# finds it in the shared voice library and adds it to My Voices (adding a
+# library voice is free). Reads otherwise; synthesises nothing; prints no secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      add_if_missing:
+        description: Add Rudra to My Voices from the voice library if it is missing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      VOICE_ID: ${{ vars.REEL_VOICE_ID || 'ypnkIsDASPgHZuanrF0q' }}
+      VOICE_NAME: Rudra
+      ADD: ${{ github.event.inputs.add_if_missing != 'false' }}
+      API: https://api.elevenlabs.io
+    steps:
+      - name: Check, and add if missing
+        run: |
+          set -u
+          [ -n "$ELEVENLABS_API_KEY" ] || { echo "::error::ELEVENLABS_API_KEY is not set."; exit 1; }
+          echo "Key: ${#ELEVENLABS_API_KEY} chars (value not printed)"
+          echo "Repository variable ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID || '(unset)' }}"
+
+          get() { # path -> writes out.json, echoes status
+            curl -sS -o out.json -w '%{http_code}' --max-time 20 -H "xi-api-key: $ELEVENLABS_API_KEY" "$API$1" || true
+          }
+
+          show_voice() {
+            CODE=$(get "/v1/voices/$VOICE_ID")
+            echo "GET /v1/voices/$VOICE_ID -> HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              jq -r '"  name: \(.name)\n  category: \(.category)\n  labels: \(.labels // {} | tostring)\n  sharing: \(.sharing.status // "n/a")"' out.json
+            else
+              echo "  $(head -c 300 out.json | tr -d '\n')"
+            fi
+          }
+
+          in_my_voices() {
+            CODE=$(get "/v1/voices")
+            if [ "$CODE" != "200" ]; then
+              echo "GET /v1/voices -> HTTP $CODE: $(head -c 300 out.json | tr -d '\n')" >&2
+              return 2
+            fi
+            jq -e --arg id "$VOICE_ID" '[.voices[] | select(.voice_id == $id)] | length > 0' out.json >/dev/null
+          }
+
+          echo "## Reel voice check" >> "$GITHUB_STEP_SUMMARY"
+          show_voice | tee -a "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          in_my_voices; MINE=$?
+          set -e
+          if [ "$MINE" = "0" ]; then
+            echo "In My Voices: yes — nothing to add." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$MINE" = "2" ]; then
+            echo "::error::Could not list My Voices (see above)."
+            exit 1
+          fi
+          echo "In My Voices: NO" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          # Find the voice's public owner in the shared library.
+          OWNER=""
+          for q in "search=$VOICE_NAME&page_size=100" "search=$VOICE_NAME&language=hi&page_size=100" "search=$VOICE_ID&page_size=100"; do
+            CODE=$(get "/v1/shared-voices?$q")
+            echo "GET /v1/shared-voices?$q -> HTTP $CODE"
+            [ "$CODE" = "200" ] || { echo "  $(head -c 300 out.json | tr -d '\n')"; continue; }
+            OWNER=$(jq -r --arg id "$VOICE_ID" '[.voices[] | select(.voice_id == $id)][0].public_owner_id // ""' out.json)
+            if [ -n "$OWNER" ]; then
+              jq -r --arg id "$VOICE_ID" '.voices[] | select(.voice_id == $id) | "  library: \(.name) (\(.category)), \(.language // "?") \(.accent // ""), \(.descriptive // ""), \(.use_case // ""), free_users_allowed=\(.free_users_allowed)"' out.json | tee -a "$GITHUB_STEP_SUMMARY"
+              break
+            fi
+          done
+          if [ -z "$OWNER" ]; then
+            echo "::error::Voice $VOICE_ID was not found in the shared voice library."
+            exit 1
+          fi
+
+          if [ "$ADD" != "true" ]; then
+            echo "::warning::Not adding (add_if_missing=false)."
+            exit 1
+          fi
+
+          CODE=$(curl -sS -o out.json -w '%{http_code}' --max-time 30 -X POST \
+            -H "xi-api-key: $ELEVENLABS_API_KEY" -H 'Content-Type: application/json' \
+            -d "{\"new_name\":\"$VOICE_NAME\"}" \
+            "$API/v1/voices/add/$OWNER/$VOICE_ID") || CODE=000
+          echo "POST /v1/voices/add/<owner>/$VOICE_ID -> HTTP $CODE: $(head -c 300 out.json | tr -d '\n')" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$CODE" = "200" ] || { echo "::error::Adding the voice failed."; exit 1; }
+
+          show_voice | tee -a "$GITHUB_STEP_SUMMARY"
+          set +e
+          in_my_voices; MINE=$?
+          set -e
+          if [ "$MINE" = "0" ]; then
+            echo "In My Voices after adding: yes" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Voice still not in My Voices after adding."
+            exit 1
+          fi

@@ -14,7 +14,7 @@
 
 import { heygenRequest, findAvatarLook, listAvatars, getQuota } from '../src/heygen.js';
 import { config, env, PRESENTER } from '../src/config.js';
-import { discoverElevenVoice, synthesise } from './src/presenter/voice-providers.js';
+import { reelVoice, synthesise } from './src/presenter/voice-providers.js';
 import { searchStock } from './src/stock/index.js';
 
 const ok = (s) => `\x1b[32m${s}\x1b[0m`;
@@ -208,12 +208,9 @@ async function main() {
       console.log(`  ${bad('err')}   /v1/user ${dim(String(err.message).slice(0, 200))}`);
     }
 
-    const voice = await attempt('find a cloned voice', discoverElevenVoice);
+    const voice = await attempt('check the reel voice (Rudra) is configured', async () => reelVoice());
     if (voice) {
       console.log(`        ${dim(`${voice.name || voice.id} (${voice.category})`)}`);
-      if (voice.category === 'premade') {
-        console.log(`  ${bad('That is a stock ElevenLabs voice, not Rajesh.')}`);
-      }
       const spoken = await attempt('synthesise a line with word timings', () =>
         synthesise({ text: 'Namaste doston, aaj ka market update.', speed: 1 }));
       if (spoken) {
@@ -222,7 +219,7 @@ async function main() {
           const last = spoken.words[spoken.words.length - 1];
           console.log(`        ${dim(`last word "${last.word}" ends at ${last.end?.toFixed?.(2)}s`)}`);
         }
-        console.log(`  ${ok('The reel can be narrated in Rajesh\'s voice, without HeyGen.')}`);
+        console.log(`  ${ok('The reel can be narrated in the Rudra voice, without HeyGen.')}`);
       }
     }
   }

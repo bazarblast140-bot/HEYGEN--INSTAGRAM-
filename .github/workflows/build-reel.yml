@@ -73,6 +73,43 @@ jobs:
           IG_SURFACE: ${{ vars.IG_SURFACE }}
         run: node pipeline/reel-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # The reel speaks only in the ElevenLabs library voice "Rudra". Checked here,
+      # after the same-day guard (so a skip day costs nothing) and before npm ci,
+      # DeepSeek and ElevenLabs synthesis. One read-only GET; spends no credit.
+      - name: Check the reel voice (Rudra)
+        if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          REEL_VOICE_ID: ${{ vars.REEL_VOICE_ID || 'ypnkIsDASPgHZuanrF0q' }}
+          REEL_VOICE_NAME: ${{ vars.REEL_VOICE_NAME || 'Rudra' }}
+        run: |
+          set -u
+          if [ -z "$ELEVENLABS_API_KEY" ]; then
+            echo "::error::ELEVENLABS_API_KEY is not set — the reel cannot be voiced."
+            exit 1
+          fi
+          VOICE="$(echo "${ELEVENLABS_VOICE_ID:-}" | tr -d '[:space:]')"
+          if [ -n "$VOICE" ] && [ "$VOICE" != "$REEL_VOICE_ID" ]; then
+            echo "::error::Repository variable ELEVENLABS_VOICE_ID is '$VOICE', not the reel voice $REEL_VOICE_ID ($REEL_VOICE_NAME). Fix the variable; nothing was synthesised."
+            exit 1
+          fi
+          CODE=$(curl -sS -o voice.json -w '%{http_code}' --max-time 20 \
+            -H "xi-api-key: $ELEVENLABS_API_KEY" \
+            "https://api.elevenlabs.io/v1/voices/$REEL_VOICE_ID") || CODE=000
+          if [ "$CODE" != "200" ]; then
+            DETAIL=$(head -c 300 voice.json 2>/dev/null | tr -d '\n' || true)
+            echo "::error::Reel voice $REEL_VOICE_ID ($REEL_VOICE_NAME) is not accessible on this ElevenLabs account (HTTP $CODE): $DETAIL — add it to My Voices (run the 'Reel voice check' workflow) or give the key voices_read."
+            exit 1
+          fi
+          NAME=$(jq -r '.name // ""' voice.json)
+          CATEGORY=$(jq -r '.category // ""' voice.json)
+          if ! printf '%s' "$NAME" | grep -qi -- "$REEL_VOICE_NAME"; then
+            echo "::error::ElevenLabs voice $REEL_VOICE_ID is named '$NAME', which does not contain '$REEL_VOICE_NAME'. Refusing to build with an unexpected voice."
+            exit 1
+          fi
+          echo "Reel voice OK: $NAME ($CATEGORY) $REEL_VOICE_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Install ffmpeg
         if: ${{ steps.day.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
@@ -111,11 +148,16 @@ jobs:
           SCRIPT_PROVIDER: ${{ vars.SCRIPT_PROVIDER }}
           SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          # Optional. Leave unset to use src/config.js ELEVEN
-          # (voice dqdRKSzyiQodrYo9UFzG, model eleven_multilingual_v2).
-          # Set repository variables ELEVENLABS_VOICE_ID and ELEVENLABS_MODEL to override.
+          # Defaults live in src/config.js ELEVEN: voice Rudra ypnkIsDASPgHZuanrF0q,
+          # model eleven_multilingual_v2, stability 0.5, style 0.25, speed 0.9.
+          # Repository variables override them. Synthesis refuses any voice that
+          # is not REEL_VOICE_ID (Rudra unless that variable is set).
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
           ELEVENLABS_MODEL: ${{ vars.ELEVENLABS_MODEL }}
+          ELEVENLABS_STABILITY: ${{ vars.ELEVENLABS_STABILITY }}
+          ELEVENLABS_STYLE: ${{ vars.ELEVENLABS_STYLE }}
+          ELEVENLABS_SPEED: ${{ vars.ELEVENLABS_SPEED }}
+          REEL_VOICE_ID: ${{ vars.REEL_VOICE_ID }}
           TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
           ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}

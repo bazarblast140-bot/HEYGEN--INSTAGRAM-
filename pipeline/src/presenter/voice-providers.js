@@ -5,7 +5,9 @@
 //
 // Word timings put a beat boundary in a pause instead of in the middle of a word.
 
-import { env, ELEVEN as ELEVEN_DEFAULTS } from '../../../src/config.js';
+import {
+  env, ELEVEN as ELEVEN_DEFAULTS, ELEVEN_SPEED_RANGE, REEL_VOICE_ID,
+} from '../../../src/config.js';
 
 function publicError(detail) {
   const clean = String(detail || 'no detail')
@@ -56,65 +58,88 @@ function elevenHeaders(extra = {}) {
 }
 
 /**
- * Find the cloned voice on the account, so nobody has to copy an id by hand.
- *
- * ELEVENLABS_VOICE_ID still wins when set. Without it, the account is asked:
- * a voice the user cloned or had professionally cloned is what we want, and
- * ElevenLabs marks those with a category. The stock "premade" voices are
- * explicitly not what this reel is for — the whole complaint that started this
- * was that a generic voice ruins it — so they are chosen only as a last resort,
- * and the caller is told when that happens.
+ * A numeric voice setting from a repository variable. Blank keeps the default;
+ * anything else must be a number inside the range ElevenLabs accepts, or the
+ * run stops here — a typo in a variable must not quietly change the voice.
  */
-let discoveredVoice = null;
+function numberSetting(name, fallback, min, max) {
+  const raw = env(name);
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw Object.assign(
+      new Error(`${name}="${raw}" is not a number between ${min} and ${max}. Fix or clear the repository variable.`),
+      { voiceConfig: true },
+    );
+  }
+  return value;
+}
 
 /**
- * Voice and model used for synthesis.
- * Repository variables ELEVENLABS_VOICE_ID and ELEVENLABS_MODEL override these.
+ * Voice, model and voice settings used for synthesis.
+ * Repository variables ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL,
+ * ELEVENLABS_STABILITY, ELEVENLABS_STYLE and ELEVENLABS_SPEED override these.
  * A blank variable (the repo var is unset) keeps the built-in defaults.
+ *
+ * `expectedVoiceId` is the only voice the reel may use (REEL_VOICE_ID in
+ * src/config.js, overridable only by the REEL_VOICE_ID repository variable).
  */
 export function elevenSettings() {
   return {
     voiceId: env('ELEVENLABS_VOICE_ID') || ELEVEN_DEFAULTS.voiceId,
+    expectedVoiceId: env('REEL_VOICE_ID') || REEL_VOICE_ID,
     model: env('ELEVENLABS_MODEL') || ELEVEN_DEFAULTS.model,
+    stability: numberSetting('ELEVENLABS_STABILITY', ELEVEN_DEFAULTS.stability, 0, 1),
+    similarityBoost: ELEVEN_DEFAULTS.similarityBoost,
+    style: numberSetting('ELEVENLABS_STYLE', ELEVEN_DEFAULTS.style, 0, 1),
+    speed: numberSetting('ELEVENLABS_SPEED', ELEVEN_DEFAULTS.speed, ELEVEN_SPEED_RANGE.min, ELEVEN_SPEED_RANGE.max),
+    useSpeakerBoost: ELEVEN_DEFAULTS.useSpeakerBoost,
   };
 }
 
-export async function discoverElevenVoice() {
-  const configured = elevenSettings().voiceId;
-  if (configured) return { id: configured, name: null, category: 'configured' };
-  if (discoveredVoice) return discoveredVoice;
+/**
+ * The speed sent to ElevenLabs: the base pace times the caller's relative
+ * factor (1 = as is), clamped to what the API accepts.
+ */
+export function effectiveSpeed(base, factor = 1) {
+  const f = Number.isFinite(Number(factor)) && Number(factor) > 0 ? Number(factor) : 1;
+  const raw = Number(base) * f;
+  const clamped = Math.min(ELEVEN_SPEED_RANGE.max, Math.max(ELEVEN_SPEED_RANGE.min, raw));
+  return Math.round(clamped * 1000) / 1000;
+}
 
-  const res = await fetch(`${ELEVEN}/voices`, { headers: elevenHeaders() });
-  if (!res.ok) {
-    const detail = (await res.text()).slice(0, 300);
-    // A restricted key is the common case and looks exactly like a wrong key
-    // from the outside. Say which switch to flip rather than "unauthorized".
-    if (/missing_permissions|permission/i.test(detail)) {
-      throw Object.assign(new Error(
-        'The ElevenLabs key is valid but restricted: it lacks the "voices_read" permission. ' +
-        'Either enable Voices > Read on the key, or set ELEVENLABS_VOICE_ID so the voice ' +
-        'never has to be looked up. Synthesis additionally needs "text_to_speech".',
-      ), { status: res.status, permissions: true });
-    }
-    throw Object.assign(new Error(`ElevenLabs /voices returned ${res.status}: ${detail}`), { status: res.status });
-  }
-
-  const voices = (await res.json())?.voices || [];
-  if (!voices.length) throw new Error('The ElevenLabs account has no voices at all.');
-
-  const byCategory = (want) => voices.find((v) => String(v.category || '').toLowerCase() === want);
-  const cloned = byCategory('professional') || byCategory('cloned') || byCategory('generated');
-
-  if (!cloned) {
+/**
+ * Hard stop if the voice about to be used is not the reel's voice. Runs before
+ * any request, so a drifted variable or a stray voiceId costs nothing.
+ * There is deliberately no "find a voice on the account" fallback: that path
+ * once picked the owner's own clone, and must never pick anything again.
+ */
+export function assertReelVoice(voiceId, expected = elevenSettings().expectedVoiceId) {
+  if (!voiceId || voiceId !== expected) {
     throw Object.assign(new Error(
-      `No cloned voice on the ElevenLabs account — found only ${voices.map((v) => v.category).join(', ')}. ` +
-      'Clone Rajesh\'s voice at elevenlabs.io (Voices -> Add voice -> Instant voice clone) ' +
-      'and it will be picked up automatically, or set ELEVENLABS_VOICE_ID.',
-    ), { noClonedVoice: true });
+      `Refusing to synthesise: the reel voice must be ${expected} (Rudra) but resolved to "${voiceId || '(none)'}". ` +
+      'Check the ELEVENLABS_VOICE_ID repository variable. No ElevenLabs credit was spent.',
+    ), { wrongVoice: true });
   }
+  return voiceId;
+}
 
-  discoveredVoice = { id: cloned.voice_id, name: cloned.name, category: cloned.category };
-  return discoveredVoice;
+/** The reel's voice, checked. No account lookup, no fallback. */
+export function reelVoice() {
+  const settings = elevenSettings();
+  const id = assertReelVoice(settings.voiceId, settings.expectedVoiceId);
+  return { id, name: ELEVEN_DEFAULTS.voiceName, category: 'configured' };
+}
+
+/** The voice_settings body for a synthesis call, for a relative speed factor. */
+export function elevenVoiceSettings(settings, speedFactor = 1) {
+  return {
+    stability: settings.stability,
+    similarity_boost: settings.similarityBoost,
+    style: settings.style,
+    use_speaker_boost: settings.useSpeakerBoost,
+    speed: effectiveSpeed(settings.speed, speedFactor),
+  };
 }
 
 const elevenlabs = {
@@ -122,7 +147,8 @@ const elevenlabs = {
   configured: () => Boolean(env('ELEVENLABS_API_KEY')),
   async synth({ text, speed, voiceId }) {
     const settings = elevenSettings();
-    const voice = voiceId || settings.voiceId || (await discoverElevenVoice()).id;
+    // Guard first: a wrong voice stops here, before the request is built.
+    const voice = assertReelVoice(voiceId || settings.voiceId, settings.expectedVoiceId);
     const model = settings.model;
 
     // The with-timestamps variant costs the same and returns the alignment that
@@ -137,7 +163,7 @@ const elevenlabs = {
           model_id: model,
           // Hinglish is Hindi script-switched into Latin letters; the multilingual
           // model handles it, but only if it is not told the text is English.
-          voice_settings: { stability: 0.45, similarity_boost: 0.85, speed },
+          voice_settings: elevenVoiceSettings(settings, speed),
         }),
       },
     );

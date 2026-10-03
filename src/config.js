@@ -41,20 +41,46 @@ export const PRESENTER = {
 };
 
 /**
- * The ElevenLabs voice, for the days HeyGen's plan will not synthesise.
+ * The one voice the Instagram Reel is allowed to speak in: "Rudra", a voice from
+ * the ElevenLabs library (energetic Hindi finance narration, the same voice and
+ * settings the Paise Ki Pathshala channel uses).
+ *
+ * Owner's decision, 3 Oct 2026: the reel no longer uses Rajesh's own cloned
+ * voice. The synthesiser refuses any other voice id before a single ElevenLabs
+ * credit is spent, and the build workflow checks the voice on the account
+ * before the build starts. Override only with the REEL_VOICE_ID repository
+ * variable, deliberately, together with ELEVENLABS_VOICE_ID.
+ */
+export const REEL_VOICE_ID = 'ypnkIsDASPgHZuanrF0q';
+export const REEL_VOICE_NAME = 'Rudra';
+
+/**
+ * ElevenLabs synthesis defaults for the reel.
  *
  * A voice id is not a credential — it names a voice on the account and is
  * useless without the API key — so it lives here for the same reason the HeyGen
  * ids do: a repository variable is one more place for a stray newline to hide,
  * and that has already cost this project a morning.
  *
- * Setting this also removes the need for the key to carry "voices_read": the
- * voice never has to be looked up, so the key needs only "text_to_speech".
+ * Repository variables override: ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL,
+ * ELEVENLABS_STABILITY, ELEVENLABS_STYLE, ELEVENLABS_SPEED.
+ *
+ * `speed` is the base pace. Callers pass a relative factor (1 = as is); the
+ * request carries speed x factor, clamped to ElevenLabs' allowed 0.7–1.2.
  */
 export const ELEVEN = {
-  voiceId: 'dqdRKSzyiQodrYo9UFzG',
+  voiceId: REEL_VOICE_ID,
+  voiceName: REEL_VOICE_NAME,
   model: 'eleven_multilingual_v2',
+  stability: 0.5,
+  similarityBoost: 0.85,
+  style: 0.25,
+  speed: 0.9,
+  useSpeakerBoost: true,
 };
+
+/** ElevenLabs rejects voice_settings.speed outside this range. */
+export const ELEVEN_SPEED_RANGE = { min: 0.7, max: 1.2 };
 
 export const config = {
   apiKey: env('HEYGEN_API_KEY'),
