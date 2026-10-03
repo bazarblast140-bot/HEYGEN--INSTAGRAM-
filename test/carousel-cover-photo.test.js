@@ -107,3 +107,75 @@ test('a cover_photo edit asks for a photo on a re-render (no model call)', () =>
   assert.match(applied[0], /cover photo: search "Indian factory workers India"/);
   assert.throws(() => applyEdits(FIN, [{ op: 'cover_photo', queries: [] }]), /needs at least one query/);
 });
+
+// Rajesh, 3 Oct: a named person / company / brand topic shows THAT subject;
+// a general topic takes any on-topic photo; the photo never blocks a post.
+const SBI = { ...FIN, topic: 'SBI का नया home loan rate', coverPhoto: { subject: ['SBI', 'State Bank of India'], queries: ['SBI branch', 'bank branch'], mustHave: ['bank'], avoid: [] } };
+const MUSK = { category: 'ai-news', topic: 'Elon Musk की xAI', coverPhoto: { subject: 'Elon Musk', queries: ['Elon Musk'], mustHave: [], avoid: ['screenshot'] }, slides: [] };
+
+test('named subject: required must-have, searched first, India not forced on it', () => {
+  const r = photoRequest(SBI);
+  assert.deepEqual(r.subject, ['sbi', 'state bank of india']);
+  assert.ok(r.mustHave.includes('sbi'));
+  assert.deepEqual(r.queries, ['SBI branch', 'bank branch India']);
+  const tesla = photoRequest({ ...FIN, coverPhoto: { subject: 'Tesla', queries: ['electric car'] } });
+  assert.equal(tesla.queries[0], 'Tesla', 'the subject is searched first, without "India"');
+  assert.equal(photoRequest(FIN).subject.length, 0);
+});
+
+test('named subject: the person / logo / building / store passes; another subject does not', () => {
+  const r = photoRequest(SBI);
+  assert.equal(rejectReason(cand('State Bank of India main branch building, Mumbai'), r), null);
+  assert.equal(rejectReason(cand('SBI logo on a branch signage'), r), null, 'the company logo and store sign are the company');
+  assert.match(rejectReason(cand('HDFC Bank branch, Mumbai, India'), r), /not a photo of sbi/);
+  assert.match(rejectReason(cand('SBI account opening form document'), r), /document/, 'still never a form');
+  const m = photoRequest(MUSK);
+  assert.equal(rejectReason(cand('Elon Musk at the Tesla factory in California, portrait of the CEO'), m), null, 'named person allowed, foreign rules off');
+  const muskOnFinance = photoRequest({ ...FIN, coverPhoto: { subject: 'Elon Musk', queries: ['Elon Musk'] } });
+  assert.equal(rejectReason(cand('Elon Musk meets the Prime Minister in New York'), muskOnFinance), null, 'the finance people/foreign filter does not apply to the subject');
+  assert.match(rejectReason(cand('Elon Musk meets the Prime Minister in New York'), photoRequest(FIN), 'related'), /foreign|people|Indian/, 'but still applies on a general finance topic');
+  assert.match(rejectReason(cand('Elon Musk portrait', { licenceOk: false, licence: 'CC BY-SA 4.0' }), m), /licence/, 'licence rules unchanged');
+});
+
+test('general topic: any on-topic photo passes (relaxed must-have), Indian context kept for finance', () => {
+  const r = photoRequest(FIN);
+  assert.equal(rejectReason(cand('New apartment building in Pune, India'), r), null);
+  assert.equal(rejectReason(cand('Family in front of their new building, Pune, India'), r), null, 'shares "family"/"new" with the search — no must-have needed');
+  assert.match(rejectReason(cand('Mumbai street food stall India'), r), /off-topic/, '"India" alone does not make it on-topic');
+  assert.match(rejectReason(cand('New apartment building in Florida'), r), /foreign/);
+});
+
+test('visible text: the subject\'s own name is allowed, numbers never', () => {
+  assert.equal(visibleTextReason({ words: ['STATE', 'BANK', 'INDIA'], numbers: [] }, { subject: ['state bank of india'] }), null);
+  assert.match(visibleTextReason({ words: ['STATE', 'BANK', 'INDIA'], numbers: [] }), /text in the photo/);
+  assert.match(visibleTextReason({ words: ['SBI'], numbers: ['8.50%'] }, { subject: ['sbi'] }) || '', /numbers/);
+});
+
+test('named subject not found: closest related photo, then the chart cover — never blocks', async () => {
+  const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cover-subj-'));
+  const fetchFile = async (url, dest) => { await fs.writeFile(dest, 'jpg'); return dest; };
+  const clear = async () => ({ words: [], numbers: [] });
+  const order = [];
+  const search = (commonsHits, pexelsHits = []) => ({
+    commons: async (q) => { order.push(`commons:${q}`); return commonsHits; },
+    pexels: async (q) => { order.push(`pexels:${q}`); return pexelsHits; },
+  });
+  const exact = await attachCoverPhoto(SBI, { outDir, key: 'k', search: search([cand('State Bank of India branch, Kolkata'), cand('Bank branch interior, Pune, India')]), fetchFile, readText: clear });
+  assert.equal(exact.photo.used, true);
+  assert.match(exact.photo.alt, /State Bank of India/);
+  assert.equal(exact.photo.match, 'photo of sbi');
+  assert.match(order[0], /^commons:/, 'Commons is searched first for a named subject');
+
+  const related = await attachCoverPhoto(SBI, { outDir, key: 'k', search: search([cand('Bank branch interior, Pune, India')]), fetchFile, readText: clear });
+  assert.equal(related.photo.used, true, 'no SBI photo: the closest related photo');
+  assert.match(related.photo.match, /closest related/);
+
+  const none = await attachCoverPhoto(SBI, { outDir, key: 'k', search: search([cand('1040 U.S. tax form'), cand('Wall Street sign, New York')]), fetchFile, readText: clear });
+  assert.equal(none.photo.used, false, 'only wrong photos: chart cover');
+  assert.equal(none.spec, SBI);
+});
+
+test('cover_photo edit carries the subject', () => {
+  const { spec } = applyEdits(FIN, [{ op: 'cover_photo', subject: ['SBI'], queries: ['SBI branch'] }]);
+  assert.deepEqual(spec.coverPhoto.subject, ['SBI']);
+});

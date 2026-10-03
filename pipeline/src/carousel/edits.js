@@ -49,7 +49,7 @@ export function applyEdits(spec, edits = []) {
     } else if (e?.op === 'cover_photo') {
       const queries = (Array.isArray(e.queries) ? e.queries : []).filter((q) => typeof q === 'string' && q.trim());
       if (!queries.length) throw new Error('cover_photo edit needs at least one query');
-      out = { ...out, coverPhoto: { queries, mustHave: e.mustHave || [], avoid: e.avoid || [] } };
+      out = { ...out, coverPhoto: { ...(e.subject ? { subject: e.subject } : {}), queries, mustHave: e.mustHave || [], avoid: e.avoid || [] } };
       applied.push(`cover photo: search ${queries.map((q) => `"${q}"`).join(', ')}`);
     } else {
       throw new Error(`unknown edit op "${e?.op}" — use calc, text, caption_replace or cover_photo`);
