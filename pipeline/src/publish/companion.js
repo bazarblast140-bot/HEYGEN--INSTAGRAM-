@@ -219,6 +219,21 @@ export function fbCaption(igCaption) {
 
 // ---------------------------------------------------------------- real API
 
+async function companionRelease({ repo, token, create, fetchImpl = globalThis.fetch }) {
+  if (!repo) return null;
+  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'reel-companion', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  const res = await fetchImpl(`https://api.github.com/repos/${repo}/releases/tags/companion-media`, { headers, signal: AbortSignal.timeout(20000) });
+  if (res.ok) return res.json();
+  if (!create || !token) return null;
+  const made = await fetchImpl(`https://api.github.com/repos/${repo}/releases`, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag_name: 'companion-media', name: 'companion-media', body: 'Video copies used by the Reel companion (Story + FB).', prerelease: true }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!made.ok) throw new Error(`release create ${made.status}`);
+  return made.json();
+}
+
 export function realApi({ fetchImpl = globalThis.fetch } = {}) {
   return {
     async listMedia({ igUserId, token, surface = 'facebook' }) {
@@ -288,6 +303,34 @@ export function realApi({ fetchImpl = globalThis.fetch } = {}) {
     },
 
     /** Video Story. onStage('publish') fires right before the final, non-retryable call. */
+    /** A video pinned for one IG media id: release companion-media, asset ig-<id>.mp4. */
+    async pinnedVideo({ repo, token, id }) {
+      const rel = await companionRelease({ repo, token, create: false });
+      const a = (rel?.assets || []).find((x) => x.name === `ig-${id}.mp4`);
+      return a?.browser_download_url || '';
+    },
+
+    /** Download media_url in the runner and upload it to companion-media. */
+    async rehostVideo({ repo, token, id, sourceUrl }) {
+      if (!repo || !token) return '';
+      const src = await fetchImpl(sourceUrl, { signal: AbortSignal.timeout(60000) });
+      if (!src.ok) throw new Error(`media_url download ${src.status}`);
+      const buf = Buffer.from(await src.arrayBuffer());
+      if (buf.length < 10000) throw new Error('media_url download too small');
+      const rel = await companionRelease({ repo, token, create: true });
+      const name = `ig-${id}.mp4`;
+      const have = (rel.assets || []).find((x) => x.name === name);
+      if (have) return have.browser_download_url;
+      const up = await fetchImpl(`https://uploads.github.com/repos/${repo}/releases/${rel.id}/assets?name=${name}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'video/mp4', Accept: 'application/vnd.github+json', 'User-Agent': 'reel-companion' },
+        body: buf,
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!up.ok) throw new Error(`asset upload ${up.status}`);
+      return (await up.json()).browser_download_url || '';
+    },
+
     async postStory({ igUserId, token, surface = 'facebook', videoUrl, onStage }) {
       onStage?.('container');
       const { id: containerId } = await call(`${igUserId}/media`, {
@@ -449,15 +492,25 @@ export async function runCompanion({
       let video = null;
       const resolveVideo = async () => {
         if (video) return video;
-        if (p.item.media_url && await api.probeVideo(p.item.media_url)) {
-          video = { url: p.item.media_url, from: 'media_url' };
-        } else {
+        // Meta refuses its own CDN URLs ("First-party Meta-hosted URLs are not
+        // permitted"), so never hand media_url to Graph directly. Order:
+        // 1) companion-media/ig-<id>.mp4 on this repo, 2) Paise's release mp4,
+        // 3) re-host media_url bytes onto companion-media and use that.
+        const repo = env.GITHUB_REPOSITORY;
+        const token = env.GITHUB_TOKEN;
+        const pinned = api.pinnedVideo ? await api.pinnedVideo({ repo, token, id: p.item.id }).catch(() => '') : '';
+        if (pinned && await api.probeVideo(pinned)) video = { url: pinned, from: 'pinned' };
+        if (!video) {
           const url = await api.releaseVideo({
-            repo: env.PAISE_MEDIA_REPO || env.GITHUB_REPOSITORY,
-            token: env.GITHUB_TOKEN,
+            repo: env.PAISE_MEDIA_REPO || repo,
+            token,
             timestamp: p.item.timestamp,
           }).catch(() => '');
           if (url && await api.probeVideo(url)) video = { url, from: 'release' };
+        }
+        if (!video && p.item.media_url && api.rehostVideo) {
+          const url = await api.rehostVideo({ repo, token, id: p.item.id, sourceUrl: p.item.media_url }).catch((e) => { say(`  ${p.item.id}: re-host failed: ${String(e?.message || e).slice(0, 160)}`); return ''; });
+          if (url && await api.probeVideo(url)) video = { url, from: 'rehost' };
         }
         return video;
       };

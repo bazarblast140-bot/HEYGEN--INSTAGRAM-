@@ -71,6 +71,7 @@ function fakeApi({ media = [PAISE], storyFails = null, fbFails = null, probe = (
       async listMedia() { return { ok: true, items: media, reason: 'ok' }; },
       async probeVideo(url) { calls.probe.push(url); return probe(url); },
       async releaseVideo() { calls.release += 1; return release; },
+      async rehostVideo({ sourceUrl }) { calls.rehost = (calls.rehost || 0) + 1; return sourceUrl ? `https://github.com/x/y/releases/download/companion-media/ig.mp4` : ''; },
       async postStory({ videoUrl, onStage }) {
         calls.story.push(videoUrl);
         if (storyFails) { onStage?.(storyFails.stage || 'container'); throw storyFails.error; }
@@ -97,7 +98,7 @@ test('a Paise Reel gets one Story and one Facebook Reel, recorded on both ledger
   const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
   assert.equal(calls.story.length, 1);
   assert.equal(calls.fb.length, 1);
-  assert.equal(calls.story[0], PAISE.media_url);
+  assert.match(calls.story[0], /github.com/.*companion-media/); // re-hosted, never the Meta CDN url
   assert.equal(out.stories[0].igMediaId, PAISE.id);
   const entry = readCompanion(files.companion).find((e) => e.igMediaId === PAISE.id);
   assert.equal(entry.story.state, 'done');
@@ -290,4 +291,14 @@ test('the workflow serialises runs, never cancels one, and offers a dry run', ()
     const after = ist.filter((t) => t - slot >= 20 && t - slot <= 90);
     assert.ok(after.length >= 1, `no run after ${slot}`);
   }
+});
+
+test('never hands a Meta CDN media_url to Graph: pinned, then release, then re-host', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  api.pinnedVideo = async () => 'https://github.com/x/y/releases/download/companion-media/ig-pinned.mp4';
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.story.length, 1);
+  assert.ok( calls.story.every((u) => u.includes('ig-pinned.mp4')));
+  assert.ok(calls.fb.every((c) => c.videoUrl.includes('ig-pinned.mp4')));
 });
