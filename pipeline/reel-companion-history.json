@@ -12,7 +12,13 @@
         "error": "Instagram rejected the video (ERROR): Error: Media upload has failed with error code 2207076",
         "at": "2026-10-03T12:08:50.825Z"
       },
-      "fb": null
+      "fb": {
+        "state": "failed",
+        "tries": 1,
+        "stage": "upload",
+        "error": "Facebook reel upload failed: Unable to fetch media from URL, got status code: 403 First-party Meta-hosted URLs are not permitted",
+        "at": "2026-10-03T12:08:50.825Z"
+      }
     }
   ]
 }
