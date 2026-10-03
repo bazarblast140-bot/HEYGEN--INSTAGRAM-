@@ -1,0 +1,21 @@
+name: FB delete post
+on:
+  workflow_dispatch:
+    inputs:
+      object_id:
+        description: "FB video/reel id on the Page to delete"
+        required: true
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete
+        env:
+          TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          ID: ${{ inputs.object_id }}
+        run: |
+          [[ "$ID" =~ ^[0-9]+$ ]] || { echo "bad id"; exit 1; }
+          curl -sS -X DELETE "https://graph.facebook.com/v21.0/${ID}?access_token=${TOKEN}" | tee r.json
+          grep -q '"success":true' r.json
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://graph.facebook.com/v21.0/${ID}?fields=id&access_token=${TOKEN}")
+          echo "GET after delete: $code"
