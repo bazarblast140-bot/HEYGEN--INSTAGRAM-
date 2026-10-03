@@ -112,5 +112,5 @@ test('the auto-fix workflow does not treat the classification echo as a command'
   assert.match(yml, /Preview run — not rerunning/);
   assert.equal(/429\|503\|502\|fetch failed\|network/.test(yml), false);
   const reel = await readFile('.github/workflows/build-reel.yml', 'utf8');
-  assert.match(reel, /cron: '30 1 \* \* \*'/);
+  assert.match(reel, /cron: '17 16 \* \* \*'/);
 });

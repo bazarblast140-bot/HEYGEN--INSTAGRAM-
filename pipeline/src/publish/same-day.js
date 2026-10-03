@@ -160,9 +160,43 @@ export async function decideReelDay({
 } = {}) {
   const entries = publishEntries || await readReelPublishes(publishFile);
   let items = media;
+  let listed = { ok: Boolean(media), reason: media ? 'given' : 'not-checked' };
   if (!items && !force) {
-    const listed = await loadReelMedia({ env, fetcher });
+    listed = await loadReelMedia({ env, fetcher });
     items = listed.items;
   }
-  return resolveReelPublish({ now, publishEntries: entries, media: items || [], force });
+  return {
+    ...resolveReelPublish({ now, publishEntries: entries, media: items || [], force }),
+    listed: { ok: listed.ok, reason: listed.reason },
+  };
+}
+
+/**
+ * The own Reel is the evening FALLBACK: it goes out only when no Reel at all
+ * (Paise Ki Pathshala's or ours) is on the account today (IST). This runs
+ * before DeepSeek, ElevenLabs and every other paid step.
+ *
+ * Fail closed: when the Instagram media list cannot be read (after one retry),
+ * there is no way to know whether today already has a Reel, so the run is a
+ * soft skip rather than a possible second Reel. force=true still builds.
+ */
+export async function decideFallbackReel({
+  now = new Date(),
+  force = false,
+  env = process.env,
+  fetcher,
+  publishFile,
+  retryMs = 5000,
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+} = {}) {
+  let decision = await decideReelDay({ now, force, env, fetcher, ...(publishFile ? { publishFile } : {}) });
+  if (!decision.pending || force) return decision;
+  if (!decision.listed?.ok) {
+    await sleep(retryMs);
+    decision = await decideReelDay({ now, force, env, fetcher, ...(publishFile ? { publishFile } : {}) });
+    if (decision.pending && !decision.listed?.ok) {
+      return { ...decision, pending: false, reason: 'unverified', via: `instagram media list unavailable (${decision.listed?.reason || 'unknown'})` };
+    }
+  }
+  return decision;
 }

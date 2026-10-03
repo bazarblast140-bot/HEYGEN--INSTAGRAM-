@@ -25,6 +25,7 @@ import { categoryFor, slotFor, SLIDES } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
 import { checkEcho } from './echo.js';
 import { checkMoneySources } from './money.js';
+import { softQualityProblems } from './quality.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
@@ -258,8 +259,13 @@ export function slideTextProblems(spec) {
   return problems;
 }
 
-export function softProblems(spec) {
-  return [...checkEcho(spec), ...checkMoneySources(spec), ...slideTextProblems(spec)];
+export function softProblems(spec, { stories = null } = {}) {
+  return [
+    ...checkEcho(spec), ...checkMoneySources(spec), ...slideTextProblems(spec),
+    // Hindi, sourced numbers, leaked labels, empty panels — sent back to the
+    // model inside the same attempt cap; the final gate is in build-carousel.
+    ...softQualityProblems(spec, { stories }),
+  ];
 }
 
 export function validateShape(spec, recentTopics) {

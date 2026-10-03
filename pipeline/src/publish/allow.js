@@ -56,9 +56,16 @@ export function publishDecision({
   verifiedSource = false,
   sourceFresh = false,
   aiNewsEnabled = flagOn(ENABLE_AI_NEWS_CAROUSELS),
+  quality = null,
 } = {}) {
   const niche = offNicheReasons(spec);
   if (niche.length) return { ok: false, reasons: niche };
+  // The build's pre-publish quality gate (Hindi, sourced numbers, safe area,
+  // empty panels, leaked labels). A failed gate is never published.
+  if (quality && quality.ok === false) {
+    const listed = (quality.problems || []).slice(0, 6).join('; ') || 'see carousel-report.json';
+    return { ok: false, reasons: [`quality gate REFUSED: ${listed}`] };
+  }
 
   const finance = FINANCE.includes(category);
   if (generated && finance && !fallback) return { ok: true, reasons: [] };

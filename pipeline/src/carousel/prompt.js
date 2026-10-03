@@ -20,7 +20,9 @@ FACT RULES
 6. अगर किसी claim की पुष्टि नहीं हो सकती तो दूसरा topic चुनो.
 
 LANGUAGE & STYLE
-- Hindi Devanagari + common English finance terms: EPS, ROE, ROCE, P/E, IV, Delta, VWAP, EBITDA आदि.
+- Slide text हिंदी (देवनागरी) में: ज़्यादातर शब्द देवनागरी में हों. English सिर्फ़ tickers/abbreviations के लिए (EPS, ROE, ROCE, P/E, IV, VWAP, NIFTY). बाकी English शब्द देवनागरी में लिखो (रिटर्न, प्राइस, स्टॉक, बोनस).
+- हर संख्या उसी slide के source से हो; जिस fact slide पर संख्या है उस पर असली source + साल ज़रूर हो. Cover की संख्या किसी sourced slide पर भी हो.
+- Text में placeholder, "label:", "null", "undefined", "{{ }}" या JSON keys कभी मत लिखो. कोई slide खाली न हो.
 - Tone: confident, crisp, intelligent, curiosity-driven; sensational नहीं.
 - Cover: एक bold line, 4–8 words. Subline छोटा हो या बिलकुल न हो. यही slide hook है और cover भी.
 - Fact slides: headline max 8 words; subline max 16 words. एक slide में एक मुख्य idea. Text कम रखो.

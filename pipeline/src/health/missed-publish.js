@@ -9,8 +9,12 @@ import { istDate, isCarouselMedia, resolveReelPublish } from '../publish/same-da
 export const GRACE_MINUTES = 30;
 export const ALERT_LABEL = 'health-alert';
 
+// The Reel is the evening fallback (21:47 IST, catch-ups until 22:41 IST), and
+// any Reel on the account today — Paise Ki Pathshala's or ours — satisfies it.
+// It is checked only once that whole window has passed (23:05 IST), so a
+// morning or evening check never reports it missing early.
 export const SLOT_TIMES = {
-  reel: { label: 'Reel', ist: '07:00', minute: 7 * 60 },
+  reel: { label: 'Reel (any Reel today; own fallback 21:47 IST)', ist: '21:47', minute: 21 * 60 + 47, grace: 78 },
   ai: { label: 'AI carousel', ist: '09:30', minute: 9 * 60 + 30 },
   midday: { label: 'Midday carousel', ist: '12:30', minute: 12 * 60 + 30 },
   news: { label: 'News carousel', ist: '16:30', minute: 16 * 60 + 30 },
@@ -49,7 +53,7 @@ export function missedSlots({
   const { date, minutes } = istParts(now);
   const missed = [];
   for (const slot of enabledPublishSlots(env)) {
-    if (minutes < SLOT_TIMES[slot].minute + GRACE_MINUTES) continue;
+    if (minutes < SLOT_TIMES[slot].minute + (SLOT_TIMES[slot].grace ?? GRACE_MINUTES)) continue;
     if (slot === 'reel') {
       const decision = resolveReelPublish({ now, publishEntries: reelPublishEntries, media });
       if (!decision.pending) continue;
@@ -64,7 +68,7 @@ export function missedSlots({
 export function alertBody(date, missed) {
   const lines = missed.map((slot) => `- ${SLOT_TIMES[slot].label} (${SLOT_TIMES[slot].ist} IST)`);
   return [
-    `No successful publish by 30 minutes after the slot time on ${date} (IST).`,
+    `No successful publish by the end of the slot's window on ${date} (IST).`,
     '',
     ...lines,
     '',

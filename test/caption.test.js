@@ -6,6 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { composeCaption, reflowHook } from '../pipeline/build-carousel.js';
+import { BROKER_CTA } from '../pipeline/src/publish/cta.js';
+
+const CTA_RE = new RegExp(BROKER_CTA.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
 
 test('hashtags the model wrote into the caption are not printed twice', () => {
   const caption = composeCaption({
@@ -21,20 +24,20 @@ test('hashtags the model wrote into the caption are not printed twice', () => {
     '',
     'Save karo, share karo, comment mein apna sawal likho.',
     '',
-    'Link in bio.',
-    '',
     '#विज्ञान #जानवर #turtle #animals #factvizer',
+    '',
+    BROKER_CTA,
   ].join('\n'));
 });
 
 // Instagram treats these as one tag. A reader sees two.
 test('the same tag in two cases is one tag', () => {
   const caption = composeCaption({ caption: 'text', hashtags: ['#Venus', '#venus'] }, '#factvizer');
-  assert.equal(caption, 'text\n\nSave karo, share karo, comment mein apna sawal likho.\n\nLink in bio.\n\n#Venus #factvizer');
+  assert.equal(caption, `text\n\nSave karo, share karo, comment mein apna sawal likho.\n\n#Venus #factvizer\n\n${BROKER_CTA}`);
 });
 
 test('the brand tag is always there, exactly once', () => {
-  assert.match(composeCaption({ caption: 'text', hashtags: [] }, '#factvizer'), /#factvizer$/);
+  assert.match(composeCaption({ caption: 'text', hashtags: [] }, '#factvizer'), /#factvizer\n\n.*link in bio\.$/);
   const already = composeCaption({ caption: 'text\n\n#factvizer', hashtags: ['#factvizer'] }, '#factvizer');
   assert.equal(already.match(/#factvizer/g).length, 1);
 });
@@ -79,7 +82,7 @@ test('a caption drops referral links and keeps at most five tags', () => {
 
   assert.match(caption, /^ROCE गिर रहा है।/);
   assert.match(caption, /Save karo, share karo, comment mein apna sawal likho\./);
-  assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
+  assert.equal((caption.match(CTA_RE) || []).length, 1);
   assert.equal(caption.includes('http'), false);
   assert.equal(caption.includes('Zerodha'), false);
   assert.equal(caption.includes('#stocks'), false);
@@ -104,7 +107,7 @@ test('a model save/follow line is not printed again, and broad tags are dropped'
   assert.equal(caption.includes('सेव करें'), false);
   assert.equal(caption.includes('फॉलो करें'), false);
   assert.equal((caption.match(/Save karo, share karo, comment mein apna sawal likho\./g) || []).length, 1);
-  assert.equal((caption.match(/Link in bio\./g) || []).length, 1);
+  assert.equal((caption.match(CTA_RE) || []).length, 1);
   assert.equal(caption.includes('#stockmarket'), false);
   assert.equal(caption.includes('#finance'), false);
   assert.equal(caption.includes('#investing'), false);

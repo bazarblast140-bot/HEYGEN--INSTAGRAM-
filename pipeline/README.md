@@ -208,8 +208,25 @@ a real voiceover.
 ## GitHub Actions
 
 `.github/workflows/build-reel.yml` runs the whole thing on a runner, where the APIs
-this pipeline needs are actually reachable. Weekdays at 07:00 IST (`30 1 * * 1-5`,
-since Actions cron is UTC), or on demand from the Actions tab.
+this pipeline needs are actually reachable. It is the **evening fallback** Reel:
+21:47 IST (`17 16 * * *`, Actions cron is UTC) with catch-ups at 22:13 and 22:41
+IST, or on demand from the Actions tab. Before any paid step it checks Instagram
+and soft-skips when any Reel (Paise Ki Pathshala's or ours) is already up today
+(IST), or when the media list cannot be read.
+
+`.github/workflows/reel-companion.yml` (**Reel companion**) adds an Instagram
+Story and a Facebook Page Reel for every Paise Ki Pathshala Reel (any Reel not
+in `reel-publish-history.json`), about 25–85 minutes after each Paise slot. It is
+off unless `ENABLE_REEL_COMPANION=true`; the Facebook half also needs
+`FB_CROSSPOST=true`. Keyed on the IG media id in `reel-companion-history.json`
+and `fb-crosspost-history.json`, so one Reel never gets two Stories or two
+Facebook posts. A manual run defaults to `dry-run`, which only prints the plan.
+
+Carousels pass a pre-publish quality gate (`src/carousel/quality.js`): Hindi
+(Devanagari) text, a real dated source line on every number-bearing slide (and,
+for AI/news slots, numbers that appear in the fetched items), rendered text
+inside a 6% safe inset, no empty panels and no leaked placeholders/labels. A
+failed gate keeps the carousel off the feed.
 
 Repository **secrets**: `HEYGEN_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`.
 Repository **variables** (not secret): `HEYGEN_AVATAR_ID`, `HEYGEN_VOICE_ID`.

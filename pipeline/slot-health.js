@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// 30 minutes after each enabled slot, open or update one health-alert issue
+// After each enabled slot's window, open or update one health-alert issue
 // if that slot has not published today (IST). Close it when the publish lands.
 //
-// Reel, midday, and evening are always checked. AI and news are checked only
+// Reel (any Reel on IG today, checked after the 21:47 IST fallback window), midday, and evening are always checked. AI and news are checked only
 // when ENABLE_AI_NEWS_CAROUSELS is on. This does not dispatch a build.
 
 import fs from 'node:fs/promises';

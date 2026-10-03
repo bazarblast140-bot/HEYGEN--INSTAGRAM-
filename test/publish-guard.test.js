@@ -121,7 +121,7 @@ test('preview does not share the publish queue, and a failed script does not pub
   assert.match(carousel, /--require-generated/);
 
   const reel = await readFile('.github/workflows/build-reel.yml', 'utf8');
-  assert.match(reel, /cron: '30 1 \* \* \*'/);
+  assert.match(reel, /cron: '17 16 \* \* \*'/);
   assert.match(reel, /build-reel-preview/);
   assert.match(reel, /--require-generated/);
   assert.match(reel, /pipeline\/out\/caption\.txt/);

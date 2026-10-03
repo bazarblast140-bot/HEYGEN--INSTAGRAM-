@@ -1,0 +1,104 @@
+name: Reel companion
+
+# Paise Ki Pathshala (another repo) posts each public YouTube Short to this
+# Instagram account as a Reel, and nothing else. This job adds what it does not:
+# an Instagram Story of that Reel and a copy on the Facebook Page. It never
+# touches the Reel itself or its caption, never handles this repo's own Reels
+# (reel-publish-history.json), and never posts twice for one media id
+# (reel-companion-history.json + fb-crosspost-history.json, keyed on the IG
+# media id, re-read and merged with origin before every post).
+#
+# Off unless the repository variable ENABLE_REEL_COMPANION is true. The
+# Facebook half also needs FB_CROSSPOST=true. Any error is logged to the
+# summary and the job still succeeds.
+#
+# Paise publishes at 08:30, 16:00 and 21:00 IST. Runs ~25–85 minutes later
+# (UTC crons, minutes off :00/:30):
+#   08:53 IST  23 3      09:53 IST  23 4
+#   16:23 IST  53 10     17:23 IST  53 11
+#   21:23 IST  53 15     22:23 IST  53 16
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+    - cron: '23 4 * * *'
+    - cron: '53 10 * * *'
+    - cron: '53 11 * * *'
+    - cron: '53 15 * * *'
+    - cron: '53 16 * * *'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Only print what would be posted (no Story, no Facebook, no ledger change)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reel-companion
+  cancel-in-progress: false
+
+jobs:
+  companion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --omit=dev --ignore-scripts
+
+      - name: Story and Facebook copy for Paise Reels
+        continue-on-error: true
+        env:
+          ENABLE_REEL_COMPANION: ${{ vars.ENABLE_REEL_COMPANION }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] != 'false' }}
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          # Paise hosts its mp4s on THIS repo's releases (ig-reel-<UTC date>).
+          PAISE_MEDIA_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node pipeline/reel-companion.js --commit --branch "${GITHUB_REF_NAME}" 2>&1 | tee companion.log
+          {
+            echo '## Reel companion'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' companion.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Belt and braces: the script pushes after every post. Anything it could
+      # not push is committed here with the same pull --rebase retries.
+      - name: Record the ledgers
+        if: always()
+        continue-on-error: true
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/reel-companion-history.json pipeline/fb-crosspost-history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record $(date -u +'%Y-%m-%d %H:%M') reel companion"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the reel companion ledger." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reel-companion
+          path: pipeline/out/reel-companion.json
+          retention-days: 14
+          if-no-files-found: ignore

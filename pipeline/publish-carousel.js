@@ -65,6 +65,7 @@ async function main() {
     allowReviewed: args['allow-reviewed-fallback'] === true,
     verifiedSource: report.verifiedSource === true,
     sourceFresh: report.sourceFresh === true,
+    quality: report.quality || null,
     spec: {
       brand: report.brand,
       topic: report.topic,

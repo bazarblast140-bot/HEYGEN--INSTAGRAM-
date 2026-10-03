@@ -1,11 +1,15 @@
 // One caption shape for carousels and Reels.
 //
 // The first line is the hook the model wrote. The close is a save / share /
-// comment prompt, then a single "link in bio" line. Hashtags stay at five.
-// Referral URLs do not belong in the caption.
+// comment prompt, the hashtags (five at most), and then the caption ENDS with
+// one "link in bio" line for the broker referral links. Referral URLs do not
+// belong in the caption; any "link in bio" line the model wrote is dropped so
+// the CTA appears exactly once.
+
+import { BROKER_CTA, isBioCtaLine } from './cta.js';
 
 export const ENGAGEMENT = 'Save karo, share karo, comment mein apna sawal likho.';
-export const LINK_IN_BIO = 'Link in bio.';
+export const LINK_IN_BIO = BROKER_CTA;
 export const MAX_HASHTAGS = 5;
 
 // English generics that showed up on the finance account (#stockmarket #finance).
@@ -58,7 +62,7 @@ export function isModelCtaLine(line) {
   const t = String(line || '').trim();
   if (!t) return false;
   if (t === ENGAGEMENT) return true;
-  if (/^link in bio\.?$/i.test(t)) return true;
+  if (/^link in bio\.?$/i.test(t) || isBioCtaLine(t)) return true;
   const hits = ctaHits(t);
   if (hits >= 2) return true;
   return hits === 1 && t.length < 140 && !/\d/.test(t);
@@ -128,7 +132,13 @@ export function stripReferrals(text) {
 }
 
 export function shapeCaption({ caption = '', hashtags = [], brandTag, limit = MAX_HASHTAGS } = {}) {
-  const cleaned = stripReferrals(caption);
+  // A bio line the model (or an earlier shaping) put after its hashtags would
+  // hide the tag row; drop those lines first, the CTA is re-added once below.
+  const cleaned = stripReferrals(caption)
+    .split('\n')
+    .filter((line) => !isBioCtaLine(line))
+    .join('\n')
+    .trim();
   const trailing = cleaned.match(/(?:^|\n)[ \t]*(?:#[^\s#]+[ \t]*)+$/);
   const rawBody = trailing ? cleaned.slice(0, trailing.index).trim() : cleaned;
   const inline = trailing?.[0].match(/#[^\s#]+/g) || [];
@@ -137,7 +147,7 @@ export function shapeCaption({ caption = '', hashtags = [], brandTag, limit = MA
 
   const tags = nicheHashtags([...inline, ...hashtags, brandTag], { caption: body, limit });
 
-  return [body, ENGAGEMENT, LINK_IN_BIO, tags.length ? tags.join(' ') : null]
+  return [body, ENGAGEMENT, tags.length ? tags.join(' ') : null, LINK_IN_BIO]
     .filter(Boolean)
     .join('\n\n');
 }

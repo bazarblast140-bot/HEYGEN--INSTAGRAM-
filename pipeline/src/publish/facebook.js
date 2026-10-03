@@ -73,13 +73,15 @@ export async function crossPostCarousel({ pageId, token, imageUrls, caption, fet
 }
 
 /** A Reel becomes a Facebook Reel on the Page, fetched from the same public URL. */
-export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImpl = fetch }) {
+export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImpl = fetch, onStage }) {
   if (!videoUrl) throw new Error('no video URL to cross-post');
+  onStage?.('start');
   const start = await graph(`${pageId}/video_reels`, {
     method: 'POST', params: { upload_phase: 'start' }, token, fetchImpl,
   });
   const videoId = start.video_id;
   const uploadUrl = start.upload_url || `https://rupload.facebook.com/video-upload/${VERSION}/${videoId}`;
+  onStage?.('upload', videoId);
   const up = await fetchImpl(uploadUrl, {
     method: 'POST',
     headers: { Authorization: `OAuth ${token}`, file_url: videoUrl },
@@ -88,6 +90,9 @@ export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImp
   if (!up.ok || upBody.success === false || upBody.error) {
     throw new Error(`Facebook reel upload failed: ${upBody.error?.message || upBody.debug_info?.message || up.status}`);
   }
+  // Past this point a lost response may still mean a live post, so callers
+  // treat a failure here as "uncertain" and never retry it automatically.
+  onStage?.('finish', videoId);
   await graph(`${pageId}/video_reels`, {
     method: 'POST',
     params: { upload_phase: 'finish', video_id: videoId, video_state: 'PUBLISHED', description: caption || '' },
