@@ -263,8 +263,16 @@ export function slideTextProblems(spec) {
   return problems;
 }
 
+/** Finance: "compare" carries the model's own values, so it is rationed. */
+export function compareProblems(spec) {
+  if (!FINANCE.includes(spec?.category)) return [];
+  const n = (spec.slides || []).filter((s) => String(s?.calc?.type || '').toLowerCase() === 'compare').length;
+  return n > 2 ? [`${n} slides use "compare" — at most 2; use emi / sip / cagr / operating_leverage / margin / change so the code computes the result`] : [];
+}
+
 export function softProblems(spec, { stories = null } = {}) {
   return [
+    ...compareProblems(spec),
     ...checkEcho(spec), ...slideTextProblems(spec),
     // Hindi, sourced numbers, leaked labels, empty panels — sent back to the
     // model inside the same attempt cap; the final gate is in build-carousel.

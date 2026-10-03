@@ -183,3 +183,21 @@ test('a news chart must be built only from numbers in the fetched items', async 
   const reported = computeCalc({ type: 'compare', unit: 'num', items: [{ label: 'Fall', value: 18.343 }, { label: 'Reserves', value: 747.56 }] });
   assert.equal(chartBackedBy(reported, pool), true);
 });
+
+test('operating leverage and margin are computed, and compare is rationed on finance posts', async () => {
+  const ol = computeCalc({ type: 'operating_leverage', sales: 100, variableCost: 60, fixedCost: 30, salesChangePct: 10 });
+  const get = (k) => ol.all.find((f) => f.key === k).value;
+  assert.equal(get('contribution'), 40);
+  assert.equal(get('ebit'), 10);
+  assert.equal(get('dol'), 4);
+  assert.equal(get('profitChangePct'), 40);
+  assert.equal(get('newEbit'), 14);
+  assert.equal(mismatches('Sales 10% बढ़े तो profit 40% बढ़ेगा', ol.all).length, 0);
+  assert.equal(mismatches('Sales 20% बढ़े तो profit 50% बढ़ेगा', ol.all).length, 2, 'the inconsistent 20% → 50% claim is caught');
+  const m = computeCalc({ type: 'margin', revenue: 100, cost: 85 });
+  assert.equal(m.all.find((f) => f.key === 'marginPct').value, 15);
+  const { compareProblems } = await import('../pipeline/src/carousel/generate.js');
+  const cmp = { type: 'compare', unit: '%', items: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] };
+  assert.equal(compareProblems({ category: 'fundamentals', slides: [{ calc: cmp }, { calc: cmp }, { calc: cmp }] }).length, 1);
+  assert.equal(compareProblems({ category: 'latest-news', slides: [{ calc: cmp }, { calc: cmp }, { calc: cmp }] }).length, 0);
+});
