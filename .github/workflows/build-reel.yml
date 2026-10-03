@@ -212,6 +212,7 @@ jobs:
           FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
           FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
         run: |
           ID=$(sed -e 's/\x1b\[[0-9;]*m//g' publish.log | grep -oE '^[[:space:]]*published:? [0-9]+' | head -n 1 | grep -oE '[0-9]+$' || true)
           node pipeline/fb-crosspost.js --kind reel --ig-media "$ID" \
