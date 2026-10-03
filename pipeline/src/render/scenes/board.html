@@ -109,6 +109,7 @@
     <div id="handle"></div>
     <div id="progress"><i></i></div>
   </div>
+<script src="chart-labels.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -160,6 +161,27 @@
     return { box, y };
   }
   function title(svg, str) { if (str) text(svg, 0, 30, str, { size: 26, fill: COLORS.ink, anchor: 'start', weight: 700 }); }
+
+  // Axis labels: full text, wrapped to 2 lines or shrunk to fit the bar slot
+  // (chart-labels.js). Never sliced, never clipped.
+  function fitLabels(svg, labels, maxWidth, size) {
+    // A temporary probe measures each candidate; it is removed before drawing
+    // (it must not count as chart text in the safe-area check).
+    const probe = el('text', { x: 0, y: 0, 'font-weight': 600, opacity: 0 }, svg);
+    const measure = (str, sz) => { probe.setAttribute('font-size', sz); probe.textContent = str; return probe.getComputedTextLength(); };
+    const fits = labels.map((l) => window.ChartLabels.fitLabel(l, maxWidth, measure, { size }));
+    probe.remove();
+    return fits;
+  }
+  const extraLines = (fits) => Math.max(0, ...fits.map((f) => f.lines.length - 1));
+  function axisLabel(svg, x, y, fit, { fill = COLORS.muted } = {}) {
+    const t = el('text', { x, y, 'font-size': fit.size, fill, 'text-anchor': 'middle', 'font-weight': 600 }, svg);
+    fit.lines.forEach((line, k) => {
+      const span = el('tspan', { x, dy: k ? Math.round(fit.size * 1.15) : 0 }, t);
+      span.textContent = line;
+    });
+    return t;
+  }
 
   const DRAW = {
     split(svg, W, H, c) {
@@ -227,31 +249,38 @@
     bars(svg, W, H, c) {
       title(svg, c.title);
       const lo = Math.min(0, ...c.values); const hi = niceMax(Math.max(...c.values.map(Math.abs)) * 1.12);
-      const { box, y } = frame(svg, W, H, lo, hi, c.unit, { bottom: 60 });
-      const n = c.values.length; const slot = (box.x1 - box.x0) / n; const bw = Math.min(170, slot * 0.58);
+      const n = c.values.length;
+      const fits = fitLabels(svg, c.labels, ((W - 136) / n) * 0.94, 26);
+      const { box, y } = frame(svg, W, H, lo, hi, c.unit, { bottom: 60 + 30 * extraLines(fits) });
+      const slot = (box.x1 - box.x0) / n; const bw = Math.min(170, slot * 0.58);
       c.values.forEach((v, i) => {
         const cx = box.x0 + slot * (i + 0.5);
         const top = Math.min(y(v), y(0)); const h = Math.max(4, Math.abs(y(v) - y(0)));
         el('rect', { x: cx - bw / 2, y: top, width: bw, height: h, rx: 10, fill: col((c.colors || [])[i]) }, svg);
         text(svg, cx, top - 14, fmt(v, c.unit), { size: 32, fill: COLORS.ink, weight: 800 });
-        text(svg, cx, box.y1 + 40, c.labels[i], { size: 26, fill: COLORS.muted });
+        axisLabel(svg, cx, box.y1 + 40, fits[i]);
       });
     },
     stackbars(svg, W, H, c) {
       title(svg, c.title);
       const n = c.labels.length;
       const totals = c.labels.map((_, i) => c.stacks.reduce((s, st) => s + st.values[i], 0));
-      const hi = niceMax(Math.max(...totals) * 1.05);
-      const { box, y } = frame(svg, W, H, 0, hi, c.unit);
-      const slot = (box.x1 - box.x0) / n; const bw = Math.max(6, slot * 0.66);
+      const few = n <= 4;   // a few big bars: value inside each segment, total on top
+      const hi = niceMax(Math.max(...totals) * (few ? 1.15 : 1.05));
+      const fits = fitLabels(svg, c.labels, ((W - 136) / n) * 0.94, few ? 26 : 20);
+      const { box, y } = frame(svg, W, H, 0, hi, c.unit, few ? { bottom: 60 + 30 * extraLines(fits) } : { bottom: 50 + 24 * extraLines(fits) });
+      const slot = (box.x1 - box.x0) / n; const bw = few ? Math.min(240, slot * 0.6) : Math.max(6, slot * 0.66);
       for (let i = 0; i < n; i += 1) {
         let base = 0; const cx = box.x0 + slot * (i + 0.5);
         c.stacks.forEach((st) => {
           const v = st.values[i];
-          el('rect', { x: cx - bw / 2, y: y(base + v), width: bw, height: Math.max(1, y(base) - y(base + v)), fill: col(st.color) }, svg);
+          const h = Math.max(1, y(base) - y(base + v));
+          el('rect', { x: cx - bw / 2, y: y(base + v), width: bw, height: h, fill: col(st.color) }, svg);
+          if (few && h >= 44) text(svg, cx, y(base + v) + h / 2 + 12, fmt(v, c.unit), { size: 34, fill: '#0A0A0A', weight: 800 });
           base += v;
         });
-        if (n <= 10 || i === 0 || (i + 1) % 5 === 0) text(svg, cx, box.y1 + 34, c.labels[i], { size: 20 });
+        if (few) text(svg, cx, y(totals[i]) - 14, fmt(totals[i], c.unit), { size: 32, fill: COLORS.ink, weight: 800 });
+        if (n <= 10 || i === 0 || (i + 1) % 5 === 0) axisLabel(svg, cx, box.y1 + (few ? 40 : 34), fits[i]);
       }
       let lx = W;
       [...c.stacks].reverse().forEach((s) => {
@@ -264,8 +293,10 @@
     groupbars(svg, W, H, c) {
       title(svg, c.title);
       const hi = niceMax(Math.max(...c.groups.flatMap((g) => g.values)) * 1.12);
-      const { box, y } = frame(svg, W, H, 0, hi, c.unit, { bottom: 60 });
-      const n = c.labels.length; const slot = (box.x1 - box.x0) / n; const g = c.groups.length;
+      const n = c.labels.length;
+      const fits = fitLabels(svg, c.labels, ((W - 136) / n) * 0.94, 26);
+      const { box, y } = frame(svg, W, H, 0, hi, c.unit, { bottom: 60 + 30 * extraLines(fits) });
+      const slot = (box.x1 - box.x0) / n; const g = c.groups.length;
       const bw = Math.min(110, (slot * 0.74) / g);
       c.labels.forEach((label, i) => {
         const cx = box.x0 + slot * (i + 0.5);
@@ -274,7 +305,7 @@
           el('rect', { x: x + 3, y: y(v), width: bw - 6, height: Math.max(3, y(0) - y(v)), rx: 8, fill: col(grp.color) }, svg);
           text(svg, x + bw / 2, y(v) - 12, fmt(v, c.unit), { size: 24, fill: COLORS.ink, weight: 800 });
         });
-        text(svg, cx, box.y1 + 40, label, { size: 26 });
+        axisLabel(svg, cx, box.y1 + 40, fits[i]);
       });
       let lx = W;
       [...c.groups].reverse().forEach((s) => {

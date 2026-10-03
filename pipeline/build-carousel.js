@@ -24,6 +24,7 @@ import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } f
 import { createHash } from 'node:crypto';
 import { boardSlides } from './src/carousel/board.js';
 import { computeCalc } from './src/carousel/calc.js';
+import { applyEdits } from './src/carousel/edits.js';
 import { repairHeavyWords } from './src/carousel/language.js';
 import { istParts } from './src/carousel/categories.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
@@ -157,7 +158,55 @@ async function main() {
   let fetchedStories = null;
 
   let spec;
-  if (args.generate || args.preview) {
+  // Re-render a reviewed preview's generated spec with reviewer edits — no
+  // model call. The words are that run's model output (plus the listed edits);
+  // the full quality gate runs again below, so it is publishable only if it passes.
+  let rerender = null;
+  if (args.rerender) {
+    if (!args.slot || !ALL_SLOTS.includes(args.slot)) {
+      console.error('--rerender needs --slot (evening, midday …)');
+      process.exit(1);
+    }
+    const source = JSON.parse(await fs.readFile(args.rerender, 'utf8'));
+    if (!FINANCE.includes(source.category)) {
+      console.error(`--rerender is for finance carousels; "${source.category}" needs its fetched sources and is not re-rendered`);
+      process.exit(1);
+    }
+    const sourceReport = args['source-report'] ? JSON.parse(await fs.readFile(args['source-report'], 'utf8')) : null;
+    if (sourceReport && sourceReport.slot !== args.slot) {
+      console.error(`the source build is for the ${sourceReport.slot} slot, not ${args.slot}`);
+      process.exit(1);
+    }
+    if (sourceReport && sourceReport.generated !== true) {
+      console.error('the source build was not model-generated — checked-in content is not re-rendered as a preview');
+      process.exit(1);
+    }
+    let edited = { ...source, fallback: false, reviewed: false };
+    let applied = [];
+    if (args.edits) {
+      try {
+        ({ spec: edited, applied } = applyEdits(edited, JSON.parse(await fs.readFile(args.edits, 'utf8'))));
+      } catch (err) {
+        console.error(`edits did not apply: ${err.message}`);
+        process.exit(1);
+      }
+    }
+    slotUsed = args.slot;
+    generated = true;
+    spec = edited;
+    rerender = {
+      fromRun: args['from-run'] ? String(args['from-run']) : null,
+      sourceSpecSha256: createHash('sha256').update(await fs.readFile(args.rerender)).digest('hex'),
+      sourceContentHash: sourceReport?.contentHash || null,
+      edits: applied,
+    };
+    console.log(`Re-render (no model call) of ${rerender.fromRun ? `run ${rerender.fromRun}` : args.rerender}`);
+    applied.forEach((a) => note(`edit: ${a}`));
+    await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
+    await fs.writeFile(path.join(HERE, 'out', 'spec-generated.json'), JSON.stringify(spec, null, 2));
+  }
+
+  if (!rerender && (args.generate || args.preview)) {
     console.log(args.preview ? 'Preview — writing a carousel without posting' : 'Writing today\'s carousel');
     const now = clock();
     const requested = args.preview
@@ -340,7 +389,7 @@ async function main() {
   const frames = framesToPost(ready, {
     slot: slotUsed,
     carouselStory: flagOn(ENABLE_CAROUSEL_STORY),
-    preview: args.preview === true,
+    preview: args.preview === true || Boolean(rerender),
   });
   if (!frames.length) {
     console.log('story    none — one Story a day, only with the evening post');
@@ -397,7 +446,8 @@ async function main() {
     charts,
     style: 'v3-chart-board',
     slot: slotUsed || null,
-    preview: args.preview === true,
+    preview: args.preview === true || Boolean(rerender),
+    rerender,
     builtAt: new Date().toISOString(),
     istDate: istParts(new Date()).date,
     contentHash: await hashFiles([...files, ...stories]),

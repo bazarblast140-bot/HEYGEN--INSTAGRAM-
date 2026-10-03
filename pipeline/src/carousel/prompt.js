@@ -35,6 +35,7 @@ CALC TYPES (exact keys; amounts रुपये में plain numbers, rates %
 - {"type":"expectancy","winRate":40,"reward":2,"risk":1}
 - {"type":"option","kind":"long_call"|"long_put","strike":24000,"premium":120,"lot":75}
 - {"type":"operating_leverage","sales":100,"variableCost":60,"fixedCost":30,"salesChangePct":10,"unit":"num"|"INR"}   code निकालेगा contribution, operating profit, leverage (x), profit change %
+- {"type":"contribution_split","sales":100,"variableCost":60,"fixedCost":30,"unit":"num"|"INR"}   stacked bar: contribution = fixed cost + operating profit
 - {"type":"margin","revenue":100,"cost":80,"costLabel":"Total cost","unit":"num"|"INR"}   profit और margin %
 - {"type":"compare","unit":"INR"|"%"|"num","items":[{"label":"Contribution","value":40},{"label":"Profit","value":10}]}   labels short English (≤14 chars)
   compare सिर्फ़ code के निकाले figures की side-by-side तुलना है. जो result किसी formula से निकलता है (profit change, EMI, interest, CAGR, margin) उसे compare की value मत बनाओ — matching type दो, code निकालेगा. पूरे carousel में compare ज़्यादा से ज़्यादा 2 slides.
