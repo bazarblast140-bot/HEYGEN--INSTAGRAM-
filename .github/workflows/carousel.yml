@@ -153,8 +153,19 @@ jobs:
           IG_SURFACE: ${{ vars.IG_SURFACE }}
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Approval mode: a catch-up cron does not build again once an earlier run
+      # today already built this slot and is awaiting approval (no extra model
+      # calls). Scheduled runs only; manual and approve_build runs skip this.
+      - name: Already built and awaiting approval?
+        id: gated
+        if: ${{ env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL == 'true' && env.AUTOMATED == 'true' && steps.slot.outputs.pending == 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node pipeline/gated-build.js --slot "${{ steps.slot.outputs.slot }}" --run-id "${{ github.run_id }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Check the script-writing keys
-        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -187,17 +198,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Chromium for Playwright
-        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         run: npx playwright install --with-deps chromium
 
       - name: Install tesseract (cover photo text check)
-        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         continue-on-error: true
         run: sudo apt-get install -y --no-install-recommends tesseract-ocr >/dev/null
 
       - name: Build the carousel
         id: build
-        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
