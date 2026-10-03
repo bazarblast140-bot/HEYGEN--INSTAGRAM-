@@ -21,10 +21,9 @@ import { z } from 'zod';
 import { resolveProvider, callOpenAICompatible, shouldRetryProviderError, VENDORS } from '../script/providers.js';
 import { MAX_MODEL_ATTEMPTS } from '../script/attempts.js';
 import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } from '../script/topics.js';
-import { categoryFor, slotFor, SLIDES } from './categories.js';
+import { categoryFor, slotFor, SLIDES, FINANCE } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
 import { checkEcho } from './echo.js';
-import { checkMoneySources } from './money.js';
 import { softQualityProblems } from './quality.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
@@ -32,14 +31,20 @@ import { SYSTEM, buildUserPrompt } from './prompt.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LEDGER = path.resolve(HERE, '..', '..', 'carousel-history.json');
 
+// Structured chart inputs. The model names the numbers it assumes; calc.js
+// computes every figure from them. Free-form so a slightly different key set
+// is reported by computeCalc ("emi needs rate") instead of failing the schema.
+const Calc = z.object({ type: z.string() }).passthrough();
+
 const Slide = z.object({
   band: z.enum(['center', 'bottom']),
   headline: z.string(),
   subline: z.string().nullable(),
   source: z.string().nullable(),
   cta: z.boolean(),
-  query: z.string(),
+  query: z.string().nullable().optional(),
   person: z.string().nullable().optional(),
+  calc: Calc.nullable().optional(),
 });
 
 export const CarouselSpec = z.object({
@@ -120,12 +125,13 @@ export function normalizeCarouselDraft(raw, { category } = {}) {
       cta: typeof slide.cta === 'boolean' ? slide.cta : isLast,
       query,
       person: englishQuery(slide.person) || null,
+      calc: slide.calc && typeof slide.calc === 'object' && !Array.isArray(slide.calc) ? slide.calc : (slide.chart && typeof slide.chart === 'object' && !Array.isArray(slide.chart) ? slide.chart : null),
     };
   });
 
   const topic = asText(src.topic) || asText(src.title) || asText(src.subject) || slides[0]?.headline || 'आज का बाज़ार';
   const resolvedCategory = asText(src.category) || category || 'latest-news';
-  const cited = slides.map((slide) => slide.source).find(Boolean);
+  const cited = category === 'ai-news' || category === 'latest-news' ? slides.map((slide) => slide.source).find(Boolean) : null;
   const caption = asText(src.caption)
     || [...slides.filter((slide) => !slide.cta).slice(0, 2).map((slide) => slide.headline), cited ? `स्रोत: ${cited}` : '']
       .filter(Boolean)
@@ -206,12 +212,10 @@ export function normalizeSpec(spec, { sourced = false } = {}) {
     } else {
       band = 'bottom';
       cta = false;
-      // A missing source on a real fact can be labelled. A padded copy of the
-      // follow card must not be given a market citation it does not have.
-      const filler = /रोज़ एक नया तथ्य|सेव करो|फ़ॉलो करो|^follow me$/i.test(`${headline || ''}\n${subline || ''}`);
-      if (!sourced && !String(source || '').trim() && !filler) {
-        source = 'NSE / BSE public market data, 2024';
-      }
+      // Finance slides never get a source label invented for them. The only
+      // line under a calculation is the calculation note, written by code
+      // (calc.js) at build time. AI/news keep the outlet they cite.
+      if (!sourced) source = null;
     }
 
     return {
@@ -261,7 +265,7 @@ export function slideTextProblems(spec) {
 
 export function softProblems(spec, { stories = null } = {}) {
   return [
-    ...checkEcho(spec), ...checkMoneySources(spec), ...slideTextProblems(spec),
+    ...checkEcho(spec), ...slideTextProblems(spec),
     // Hindi, sourced numbers, leaked labels, empty panels — sent back to the
     // model inside the same attempt cap; the final gate is in build-carousel.
     ...softQualityProblems(spec, { stories }),
@@ -284,11 +288,12 @@ export function validateShape(spec, recentTopics) {
   slides.forEach((slide, i) => {
     const n = i + 1;
     const factSlide = slide.band !== 'center' && !slide.cta;
-    if (factSlide && !String(slide.source || '').trim()) {
+    const finance = FINANCE.includes(spec.category);
+    if (factSlide && !finance && !String(slide.source || '').trim()) {
       problems.push(`slide ${n} states a fact with no source`);
     }
-    if (!/^[\x20-\x7E]+$/.test(String(slide.query || ''))) {
-      problems.push(`slide ${n} query must be plain English — Pexels does not index Devanagari`);
+    if (factSlide && finance && !slide.calc) {
+      problems.push(`slide ${n} has no calc — every content slide needs structured chart inputs`);
     }
     if (slide.person && !/^[\x20-\x7E]+$/.test(String(slide.person))) {
       problems.push(`slide ${n} person name must be plain English (e.g. "Elon Musk")`);
@@ -331,7 +336,7 @@ export async function generateCarousel({
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let userPrompt = buildUserPrompt({ category, date, recentTopics });
     if (lastProblems.length) {
-      userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर fact slide पर source with year.`;
+      userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर content slide (2–9) पर valid "calc", source null, और text की हर संख्या calc से निकलनी चाहिए.`;
     }
 
     onAttempt?.(attempt, `${provider.name}/${chosenModel}`, category);
@@ -372,9 +377,7 @@ export async function generateCarousel({
   // that would leave the account silent for a day.
   if (lastOutput) {
     const salvaged = normalizeSpec(lastOutput);
-    const hard = validateShape(salvaged, recentTopics).filter((p) =>
-      !p.includes('repeats') && !p.includes('no year'),
-    );
+    const hard = validateShape(salvaged, recentTopics).filter((p) => !p.includes('repeats'));
     if (!hard.length) {
       if (record) await recordTopic({ topic: salvaged.topic, angle: salvaged.category, date: `${date} ${slot}`, file: LEDGER });
       return { spec: salvaged, provider: provider.name, model: lastUsed, attempts: maxAttempts, category, slot };

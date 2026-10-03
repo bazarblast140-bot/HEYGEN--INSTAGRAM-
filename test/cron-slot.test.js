@@ -13,14 +13,32 @@ import { CRON_SLOTS, slotForCron, slotFor, SLOTS, resolveRun } from '../pipeline
 
 const WORKFLOW = new URL('../.github/workflows/carousel.yml', import.meta.url);
 
-test('a late run keeps the slot it was scheduled for', () => {
+test('a late run keeps the slot it was scheduled for, and does not backfill it', () => {
   // 19:30 IST cron, delivered around 06:07 IST the next morning.
   const late = new Date('2026-10-02T00:37:00Z');
   assert.equal(slotFor(late), null, 'precondition: the clock is outside both windows');
   assert.equal(slotForCron('0 14 * * *'), 'evening');
   const decision = resolveRun({ event: 'schedule', cron: '0 14 * * *', now: late, entries: [] });
-  assert.equal(decision.pending, true);
-  assert.equal(decision.slot, 'evening');
+  assert.equal(decision.slot, 'evening', 'not relabelled by the clock');
+  assert.equal(decision.pending, false);
+  assert.equal(decision.reason, 'stale');
+  // A late catch-up still inside the window does post.
+  const inside = resolveRun({ event: 'schedule', cron: '41 14 * * *', now: new Date('2026-10-02T15:10:00Z'), entries: [] });
+  assert.equal(inside.pending, true);
+});
+
+test("today's 16:30 news slot never backfills at 20:00 IST", () => {
+  const on = { ENABLE_AI_NEWS_CAROUSELS: 'true' };
+  const evening = new Date('2026-10-03T14:30:00Z'); // 20:00 IST
+  for (const cron of ['0 11 * * *', '7 11 * * *', '22 11 * * *', '41 11 * * *']) {
+    const d = resolveRun({ event: 'schedule', cron, now: evening, entries: [], env: on });
+    assert.equal(d.slot, 'news');
+    assert.equal(d.pending, false, cron);
+    assert.equal(d.reason, 'stale');
+  }
+  const asked = resolveRun({ event: 'workflow_dispatch', dispatchSlot: 'news', now: evening, entries: [], env: on });
+  assert.equal(asked.pending, false);
+  assert.equal(asked.reason, 'wrong-time');
 });
 
 test('both firings of a slot agree', () => {

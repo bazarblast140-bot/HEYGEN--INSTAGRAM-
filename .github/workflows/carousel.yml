@@ -13,8 +13,16 @@ name: Build carousel
 # stops a second copy. A dispatch with no slot, or outside every window,
 # is a soft skip (exit 0). It does not call the script model.
 #
-# A scheduled run PUBLISHES. Guards reject unsourced slides, repeated topics,
-# and non-JPEG builds.
+# A scheduled run PUBLISHES — unless the repository variable
+# CAROUSEL_REQUIRE_APPROVAL is true. Then every run only builds and uploads the
+# slides (artifact "carousel"); a person reviews them and dispatches this
+# workflow with approve_build=<that run id> to post exactly those files.
+# A late schedule outside its slot's IST window is stale and posts nothing
+# (a missed slot is never backfilled). Guards reject failed quality gates,
+# repeated topics, and non-JPEG builds.
+#
+# Slides are v3 dark chart-boards: every figure is computed by code
+# (pipeline/src/carousel/calc.js), no stock photos are fetched.
 
 on:
   repository_dispatch:
@@ -51,10 +59,6 @@ on:
       spec:
         description: Carousel spec to build
         default: pipeline/specs/carousel-hindi.json
-      no_photos:
-        description: Skip Pexels, use the generated gradient
-        type: boolean
-        default: false
       generate:
         description: Write today's topic with the model (off = the checked-in spec)
         type: boolean
@@ -72,6 +76,9 @@ on:
         description: Generate this slot now for review. Does not publish and does not use the posting queue.
         type: boolean
         default: false
+      approve_build:
+        description: "Run id of a reviewed build (carousel.yml or carousel-preview.yml) to publish exactly as built. Leave empty to build."
+        default: ''
 
 concurrency:
   # Preview must not sit in the same queue as a scheduled publish.
@@ -88,9 +95,13 @@ jobs:
       # Unset means off. Do not set these repository variables until a preview is approved.
       ENABLE_AI_NEWS_CAROUSELS: ${{ vars.ENABLE_AI_NEWS_CAROUSELS }}
       ENABLE_CAROUSEL_STORY: ${{ vars.ENABLE_CAROUSEL_STORY }}
+      # true = build and upload only; publish needs approve_build=<run id>.
+      CAROUSEL_REQUIRE_APPROVAL: ${{ vars.CAROUSEL_REQUIRE_APPROVAL }}
+      APPROVE_BUILD: ${{ github.event.inputs.approve_build }}
 
     permissions:
       contents: write
+      actions: read
 
     steps:
       - uses: actions/checkout@v4
@@ -102,8 +113,36 @@ jobs:
 
       - run: npm ci
 
+      # ---- approval path: publish a reviewed build, byte for byte ----
+      - name: Download the reviewed build
+        if: ${{ env.APPROVE_BUILD != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: carousel
+          path: pipeline/out
+          run-id: ${{ github.event.inputs.approve_build }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: May this build be published?
+        id: approve
+        if: ${{ env.APPROVE_BUILD != '' }}
+        run: node pipeline/approve-build.js --report pipeline/out/carousel-report.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Is the approved slot still open?
+        id: approveslot
+        if: ${{ env.APPROVE_BUILD != '' && steps.approve.outputs.ok == 'true' }}
+        env:
+          GITHUB_EVENT_NAME: workflow_dispatch
+          DISPATCH_SLOT: ${{ steps.approve.outputs.slot }}
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_SURFACE: ${{ vars.IG_SURFACE }}
+        run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # ---- build path ----
       - name: Is this slot still pending?
         id: slot
+        if: ${{ env.APPROVE_BUILD == '' }}
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           SCHEDULED_CRON: ${{ github.event.schedule }}
@@ -115,7 +154,7 @@ jobs:
         run: node pipeline/slot-status.js | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Check the script-writing keys
-        if: ${{ steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
+        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -148,14 +187,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Chromium for Playwright
-        if: ${{ steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
+        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         run: npx playwright install --with-deps chromium
 
       - name: Build the carousel
         id: build
-        if: ${{ steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true' }}
+        if: ${{ env.APPROVE_BUILD == '' && (steps.slot.outputs.pending == 'true' || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -183,7 +221,6 @@ jobs:
           fi
           node pipeline/build-carousel.js \
             --spec "${{ github.event.inputs.spec || 'pipeline/specs/carousel-hindi.json' }}" \
-            ${{ github.event.inputs.no_photos == 'true' && '--no-photos' || '' }} \
             ${{ github.event.inputs.generate != 'false' && '--generate' || '' }} \
             $SLOT_ARG \
             $REQUIRE \
@@ -198,8 +235,17 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Waiting for a human slide review
+        if: ${{ env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL == 'true' && steps.build.outcome == 'success' }}
+        run: |
+          {
+            echo '## Awaiting approval — nothing was published'
+            echo "Review the **carousel** artifact of this run, then dispatch this workflow with"
+            echo "\`approve_build=${{ github.run_id }}\` (inside the slot's IST window, same IST day)."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: What would be posted
-        if: env.AUTOMATED != 'true' && github.event.inputs.publish != 'true'
+        if: env.APPROVE_BUILD == '' && env.AUTOMATED != 'true' && github.event.inputs.publish != 'true'
         continue-on-error: true
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
@@ -215,9 +261,11 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Either finance slot may publish. A story is attached only to the evening post.
+      # With CAROUSEL_REQUIRE_APPROVAL=true only an approved build (approve_build)
+      # reaches this step; force/publish/schedule alone do not.
       - name: Publish to Instagram
         id: publish
-        if: ${{ github.event.inputs.preview != 'true' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true') }}
+        if: ${{ (env.APPROVE_BUILD != '' && steps.approve.outputs.ok == 'true' && steps.approveslot.outputs.pending == 'true') || (env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL != 'true' && github.event.inputs.preview != 'true' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true')) }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -259,6 +307,10 @@ jobs:
           done
           echo "Could not record the Facebook cross-post." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Record the approved build's topic
+        if: ${{ steps.publish.outcome == 'success' && env.APPROVE_BUILD != '' }}
+        run: node pipeline/approve-build.js --report pipeline/out/carousel-report.json --record
+
       - name: Remember this post's topic
         if: steps.publish.outcome == 'success'
         run: |
@@ -274,7 +326,7 @@ jobs:
           echo "Could not record the topic -- the next run may repeat it." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && env.APPROVE_BUILD == '' }}
         with:
           name: carousel
           path: |

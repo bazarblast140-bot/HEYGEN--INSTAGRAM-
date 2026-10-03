@@ -1,0 +1,80 @@
+name: Carousel preview (never publishes)
+
+# Builds one carousel for human review and uploads it as an artifact.
+# It can never publish: no Instagram/Facebook token is passed to it, it has
+# read-only repository permissions, and it has no publish step. DeepSeek is the only paid call (three attempts at most, the
+# existing MAX_MODEL_ATTEMPTS cap).
+#
+# The artifact "carousel" has the same layout carousel.yml uploads, so a
+# reviewed preview can be published as-is later with
+#   carousel.yml  →  approve_build=<this run id>
+# (same IST day, inside the slot's window, slot not yet posted). The approval
+# step re-checks the slide hash, so what posts is exactly what was reviewed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: Which slot to preview
+        type: choice
+        options: ['evening', 'midday', 'news', 'ai']
+        default: 'evening'
+
+concurrency:
+  group: carousel-preview-${{ github.event.inputs.slot }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Build the preview
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          SCRIPT_PROVIDER: deepseek
+          SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
+        run: |
+          set -o pipefail
+          node pipeline/build-carousel.js --preview --require-generated --slot "${{ github.event.inputs.slot }}" 2>&1 | tee carousel.log
+          node pipeline/contact-sheet.js --dir pipeline/out/slides --out pipeline/out/contact-sheet.png \
+            --title "${{ github.event.inputs.slot }} preview · run ${{ github.run_id }}"
+          {
+            echo '## Carousel preview — nothing was published'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' carousel.log
+            echo '```'
+            echo '```json'
+            cat pipeline/out/carousel-report.json
+            echo '```'
+            echo "To publish exactly these slides later: carousel.yml with approve_build=${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: carousel
+          path: |
+            pipeline/out/slides
+            pipeline/out/story
+            pipeline/out/spec-generated.json
+            pipeline/out/caption.txt
+            pipeline/out/carousel-report.json
+            pipeline/out/contact-sheet.png
+          retention-days: 14
+          if-no-files-found: warn

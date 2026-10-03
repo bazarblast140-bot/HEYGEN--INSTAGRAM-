@@ -16,7 +16,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SCENE = path.join(HERE, 'src', 'render', 'scenes', 'slide.html');
+// v3 dark chart-board. The old photo scene (slide.html) is not used for
+// carousels any more: no stock photos, every content slide is a chart.
+const SCENE = path.join(HERE, 'src', 'render', 'scenes', 'board.html');
 
 export const WIDTH = 1080;
 export const HEIGHT = 1350;          // 4:5 — the tallest ratio the feed allows
@@ -39,11 +41,12 @@ export const QUALITY = 92;
 
 const DEMO = {
   brand: '',
+  category: 'personal-finance',
   slides: [
-    { band: 'center', headline: 'दुनिया की सबसे बड़ी कंपनियाँ\n1 करोड़ रुपये कितनी देर में कमाती हैं' },
-    { headline: 'एप्पल', subline: '1 करोड़ रुपये\n52 सेकंड में' },
-    { headline: 'रिलायंस', subline: '1 करोड़ रुपये\n4 मिनट 12 सेकंड में' },
-    { headline: 'टीसीएस', subline: '1 करोड़ रुपये\n9 मिनट 30 सेकंड में' },
+    { band: 'center', headline: '₹50 लाख का home loan,\ninterest कितना?' },
+    { headline: 'आधे से ज़्यादा पैसा interest में', subline: '₹50 लाख, 8.5%, 20 साल', calc: { type: 'emi', principal: 5000000, rate: 8.5, years: 20, view: 'split' } },
+    { headline: 'Loan balance धीरे घटता है', subline: 'शुरू के सालों में EMI का बड़ा हिस्सा interest', calc: { type: 'emi', principal: 5000000, rate: 8.5, years: 20, view: 'balance' } },
+    { headline: 'सेव करो', subline: 'फ़ॉलो करो', cta: true },
   ],
 };
 
@@ -143,9 +146,8 @@ export async function renderSlides({
         bottomInset,
         tight,
         callout: slide.callout || '',
-        background: toUrl(slide.background),
-        logo: toUrl(slide.logo || spec.logo),
-        insets: (slide.insets || []).map((it) => ({ ...it, image: toUrl(it.image) })),
+        chart: slide.chart || null,
+        figures: slide.figures || [],
       };
 
       await page.evaluate((d) => window.__slide.load(d), payload);
@@ -171,7 +173,9 @@ export async function renderSlides({
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const spec = args.spec ? JSON.parse(await fs.readFile(args.spec, 'utf8')) : DEMO;
+  const raw = args.spec ? JSON.parse(await fs.readFile(args.spec, 'utf8')) : DEMO;
+  const { boardSlides } = await import('./src/carousel/board.js');
+  const spec = { ...raw, slides: boardSlides(raw) };
   const outDir = path.resolve(args.out || path.join(HERE, 'out', 'slides'));
 
   const { files } = await renderSlides({

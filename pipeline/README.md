@@ -301,3 +301,33 @@ Tries both `graph.facebook.com` and `graph.instagram.com` with your token and
 account id, and tells you which answers. Set `IG_SURFACE` to that. Worth running
 before any scheduled post — a token that was never going to publish otherwise
 wastes a full build.
+
+## Carousels: v3 dark chart-board (2026-10)
+
+- **Look**: ported from Paise Ki Pathshala's v3 "Chart Board" — navy terminal
+  background with a faint grid, one navy card with a thin gold edge, yellow
+  headline, off-white copy, green/red/blue semantic colours
+  (`pipeline/src/render/scenes/board.html`). No stock photos are fetched for
+  carousels.
+- **Numbers**: the model returns structured inputs per content slide
+  (`"calc": {"type":"emi","principal":5000000,"rate":8.5,"years":20}`);
+  `pipeline/src/carousel/calc.js` computes every figure (EMI, total interest,
+  SIP value, CAGR, % change, recovery, position size, payoff …), the chart, the
+  figure strip and a literally true footnote ("Calculation: standard EMI
+  formula"). Every number the model wrote is re-read
+  (`pipeline/src/carousel/figures.js`, Devanagari/Latin digits, ₹, लाख/lakh/L,
+  करोड़/crore/Cr, %) and the post is blocked if one is >1% off (rounding aside).
+- **Language**: simple Hinglish; EMI / interest / loan / tenure / SIP / return /
+  tax in Roman do not count against the Devanagari share. Heavy words (अवधि,
+  मूलधन, प्रतिफल, निवेशकों हेतु …) are listed in
+  `pipeline/src/carousel/language.js`, named in the prompt, auto-replaced and gated.
+- **Sources**: finance slides carry no source label; AI/news slides may cite only
+  an outlet that is in the fetched items.
+- **Review gate**: set the repository variable `CAROUSEL_REQUIRE_APPROVAL=true`
+  and scheduled runs only build + upload the `carousel` artifact. Publish a
+  reviewed build with `carousel.yml` → `approve_build=<run id>` (works with a
+  `carousel-preview.yml` run too). The approval re-checks the slide sha256, the
+  IST day, the slot window and the ledger.
+- **No backfill**: a late schedule outside its slot's IST window is `stale`.
+- **Preview**: `carousel-preview.yml` (workflow_dispatch, slot input) builds with
+  DeepSeek only, uploads slides + `contact-sheet.png`, and cannot publish.

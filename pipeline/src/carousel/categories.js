@@ -237,8 +237,10 @@ export function categoryFor(date = new Date(), slot = 'evening') {
 /**
  * Decide whether this run may publish.
  *
- * A GitHub schedule carries its slot in the cron, and that cron is often
- * hours late — the slot still stands, and the ledger stops a second copy.
+ * A GitHub schedule carries its slot in the cron (so a late 07:00 UTC run is
+ * still "midday", never relabelled by the clock), but it may publish only
+ * inside that slot's IST window. A late run outside it is "stale" and posts
+ * nothing: a missed slot is never backfilled on its own.
  * Anything else (a workflow_dispatch with no slot, an old external trigger)
  * has to be inside the slot's IST window. Outside it, the run does not post.
  */
@@ -260,6 +262,9 @@ export function resolveRun({
 
   if (event === 'schedule' && fromCron) {
     slot = fromCron;
+    // A late GitHub schedule keeps its slot's name, but it does not backfill:
+    // a 16:30 news cron that arrives at 20:00 is stale and posts nothing.
+    if (!inWindow(fromCron, now)) reason = 'stale';
   } else if (explicit) {
     slot = explicit;
     if (!ALL_SLOTS.includes(explicit)) reason = 'unknown';

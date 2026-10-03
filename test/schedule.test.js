@@ -40,15 +40,15 @@ test('an explicit evening slot at 17:07 IST is the wrong time', () => {
   assert.equal(decision.reason, 'wrong-time');
 });
 
-test('a scheduled run keeps its slot even when the clock is hours off', () => {
+test('a scheduled run keeps its slot even when the clock is hours off, but a stale slot is not backfilled', () => {
   const decision = resolveRun({
     event: 'schedule',
     cron: '0 14 * * *',
     now: at('2026-10-01T00:37:00Z'),
   });
   assert.equal(decision.slot, 'evening');
-  assert.equal(decision.pending, true);
-  assert.equal(decision.reason, 'due');
+  assert.equal(decision.pending, false);
+  assert.equal(decision.reason, 'stale');
 });
 
 test('a second run in the same window does not post again', () => {

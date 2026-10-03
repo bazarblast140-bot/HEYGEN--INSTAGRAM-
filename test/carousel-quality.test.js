@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   hindiProblems, hindiShare, numberProblems, leakProblems, emptyProblems, dropPaddedPanels,
-  layoutProblems, safeArea, softQualityProblems, hardQualityProblems, FILLER_SOURCE,
+  layoutProblems, safeArea, softQualityProblems, hardQualityProblems, FILLER_SOURCE, sourceProblems,
 } from '../pipeline/src/carousel/quality.js';
 import { softProblems } from '../pipeline/src/carousel/generate.js';
 import { publishDecision } from '../pipeline/src/publish/allow.js';
@@ -14,14 +14,19 @@ const good = {
   category: 'fundamentals',
   slides: [
     { band: 'center', headline: 'ROCE से असली कमाई पहचानो', subline: null, source: null, cta: false },
-    { band: 'bottom', headline: 'ROCE 15% से ऊपर अच्छा', subline: 'पूंजी पर रिटर्न लगातार ऊँचा रहे तो कारोबार मज़बूत है', source: 'NSE वार्षिक रिपोर्ट, 2024', cta: false },
-    { band: 'bottom', headline: 'कर्ज़ पर नज़र रखो', subline: 'ज़्यादा कर्ज़ ROCE को कमज़ोर करता है', source: 'RBI, 2024', cta: false },
+    { band: 'bottom', headline: 'ROCE 15% से ऊपर अच्छा', subline: 'पूंजी पर रिटर्न लगातार ऊँचा रहे तो कारोबार मज़बूत है', source: null, cta: false,
+      calc: { type: 'compare', unit: '%', items: [{ label: 'Company A', value: 15 }, { label: 'Company B', value: 9 }] } },
+    { band: 'bottom', headline: 'कर्ज़ पर नज़र रखो', subline: 'ज़्यादा कर्ज़ ROCE को कमज़ोर करता है', source: null, cta: false,
+      calc: { type: 'change', from: 18, to: 12, unit: '%' } },
     { band: 'bottom', headline: 'सेव करो', subline: 'फ़ॉलो करो', source: null, cta: true },
   ],
 };
 
-test('Hindi: Devanagari must dominate; tickers and numbers do not count against it', () => {
+test('Hindi: Devanagari must dominate; tickers, numbers and common English finance words do not count against it', () => {
   assert.deepEqual(hindiProblems(good), []);
+  const hinglish = { slides: [{ headline: 'EMI में interest कितना जाता है', subline: 'Home loan की tenure, SIP return और tax समझो' }] };
+  assert.ok(hindiShare(hinglish) > 0.95, `share ${hindiShare(hinglish)}`);
+  assert.deepEqual(hindiProblems(hinglish), []);
   assert.ok(hindiShare(good) > 0.9);
   const english = {
     slides: [
@@ -34,15 +39,30 @@ test('Hindi: Devanagari must dominate; tickers and numbers do not count against 
   assert.deepEqual(hindiProblems({ slides: [{ headline: 'NIFTY 50 PE 22.5 EPS CAGR' }] }), [], 'tickers only is fine');
 });
 
-test('numbers: a number on a fact slide needs a real, dated source; cover numbers must be sourced', () => {
+test('numbers: every finance content slide needs a calc, and every figure must match it', () => {
   assert.deepEqual(numberProblems(good), []);
-  const unsourced = { slides: [good.slides[0], { ...good.slides[1], source: FILLER_SOURCE }] };
-  assert.match(numberProblems(unsourced, { soft: false })[0], /without a real source line/);
-  const undated = { slides: [good.slides[0], { ...good.slides[1], source: 'NSE' }] };
-  assert.match(numberProblems(undated)[0], /has no year/);
-  assert.deepEqual(numberProblems(undated, { soft: false }), [], 'the year rule is advisory');
-  const cover = { slides: [{ ...good.slides[0], headline: '73% लोग यह गलती करते हैं' }, good.slides[1]] };
-  assert.match(numberProblems(cover).join(' '), /cover number\(s\) 73/);
+  const noCalc = { ...good, slides: [good.slides[0], { ...good.slides[1], calc: null }, good.slides[3]] };
+  assert.match(numberProblems(noCalc)[0], /slide 2 has no calc/);
+  const wrong = { ...good, slides: [good.slides[0], { ...good.slides[1], headline: 'ROCE 17% से ऊपर अच्छा' }, good.slides[3]] };
+  assert.match(numberProblems(wrong)[0], /"17%" does not match any computed figure/);
+  const cover = { ...good, slides: [{ ...good.slides[0], headline: '73% लोग यह गलती करते हैं' }, ...good.slides.slice(1)] };
+  assert.match(numberProblems(cover).join(' '), /slide 1: "73%"/);
+  assert.match(numberProblems(good, { caption: 'ROCE 21% हो तो' }).join(' '), /caption: "21%"/);
+});
+
+test('sources: a finance slide shows no source label except the calculation note', () => {
+  assert.deepEqual(sourceProblems(good), []);
+  const labelled = { ...good, slides: [good.slides[0], { ...good.slides[1], source: 'SBI होम लोन EMI कैलकुलेटर 2025' }, good.slides[3]] };
+  assert.match(sourceProblems(labelled)[0], /slide 2 shows the source label "SBI होम लोन EMI कैलकुलेटर 2025", which nothing in the pipeline verified/);
+  const filler = { ...good, slides: [good.slides[0], { ...good.slides[1], source: FILLER_SOURCE }, good.slides[3]] };
+  assert.equal(sourceProblems(filler).length, 1, 'the old filler label is refused too');
+  const noted = { ...good, slides: [good.slides[0], { ...good.slides[1], source: 'Calculation: values as stated on the slide; gap and ratio computed' }, good.slides[3]] };
+  assert.deepEqual(sourceProblems(noted), [], 'the code-written calculation note is allowed');
+  assert.match(sourceProblems(good, { caption: 'हुक\n\nस्रोत: RBI, 2025' })[0], /caption names a source/);
+  const stories = [{ title: 'x', site: 'Reuters', date: '2026-10-02' }];
+  const news = { slides: [{ band: 'center', headline: 'ख़बर' }, { band: 'bottom', headline: 'बात', source: 'Bloomberg, 2026-10-02' }] };
+  assert.match(sourceProblems(news, { stories })[0], /not one of the fetched items/);
+  assert.deepEqual(sourceProblems({ slides: [news.slides[0], { ...news.slides[1], source: 'Reuters, 2026-10-02' }] }, { stories }), []);
 });
 
 test('numbers on AI/news slides must come from the fetched items', () => {
@@ -54,7 +74,7 @@ test('numbers on AI/news slides must come from the fetched items', () => {
       { band: 'bottom', headline: 'मार्केट कैप 5 ट्रिलियन', subline: 'नया रिकॉर्ड', source: 'Reuters, 2026-10-02' },
     ],
   };
-  const problems = numberProblems(spec, { stories, soft: false });
+  const problems = numberProblems(spec, { stories });
   assert.equal(problems.length, 1);
   assert.match(problems[0], /slide 3 has number\(s\) 5 that are not in the fetched source items/);
 });
