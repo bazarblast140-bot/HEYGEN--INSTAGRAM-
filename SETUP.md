@@ -28,9 +28,11 @@ left — but those credits are spendable from the HeyGen web app, not from an AP
 key. That is what the 403 means: right path, wrong entitlement.
 
 **The voice no longer waits for this.** Synthesis moved to ElevenLabs, which the
-API key does reach, so the reel is narrated in Rajesh's cloned voice on the free
+API key does reach, so the reel is narrated by ElevenLabs on the free
 HeyGen plan. A paid HeyGen plan now buys only the *face* — the few seconds of
-avatar on screen — which is the least urgent part.
+avatar on screen — which is the least urgent part. Since 3 Oct 2026 the reel
+voice is the ElevenLabs library voice "Rudra" (`ypnkIsDASPgHZuanrF0q`), not
+Rajesh's clone; any other voice id stops the build before synthesis.
 
 What does still block posting is market data. No keyless source reaches a CI
 runner: Stooq answers HTML to every URL variant on both hosts, and Yahoo answers
