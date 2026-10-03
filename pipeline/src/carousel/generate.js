@@ -24,7 +24,7 @@ import { readHistory, findRepeat, recordTopic, readUsedStories, recordStories } 
 import { categoryFor, slotFor, SLIDES, FINANCE } from './categories.js';
 import { fetchStories, storyKey } from './news.js';
 import { checkEcho } from './echo.js';
-import { softQualityProblems } from './quality.js';
+import { softQualityProblems, hardQualityProblems } from './quality.js';
 import { SYSTEM as NEWS_SYSTEM, buildUserPrompt as buildNewsPrompt } from './news-prompt.js';
 import { SYSTEM, buildUserPrompt } from './prompt.js';
 
@@ -272,6 +272,29 @@ export function softProblems(spec, { stories = null } = {}) {
   ];
 }
 
+/**
+ * Keep the attempt the final gate likes best. The last attempt skips the soft
+ * checks, so it can be worse than an earlier one (attempt 2 with only an echo
+ * complaint, attempt 3 with a wrong figure). No extra model call: this only
+ * chooses among replies already paid for.
+ */
+export function betterCandidate(best, candidate) {
+  if (candidate.shape.length) return best;
+  if (!best) return candidate;
+  return candidate.gate.length <= best.gate.length ? candidate : best;
+}
+
+export function candidateFor(spec, { recentTopics = [], stories = null, used, attempt, prepare = (s) => normalizeSpec(s) } = {}) {
+  const ready = prepare(spec);
+  return {
+    spec: ready,
+    used,
+    attempt,
+    shape: validateShape(ready, recentTopics).filter((p) => !p.includes('repeats')),
+    gate: hardQualityProblems(ready, { stories, caption: ready.caption }),
+  };
+}
+
 export function validateShape(spec, recentTopics) {
   const problems = [];
   const slides = spec.slides || [];
@@ -313,6 +336,7 @@ export async function generateCarousel({
   model,
   onAttempt,
   onReject,
+  onNote,
   record = true,
 } = {}) {
   const provider = resolveProvider();
@@ -331,6 +355,7 @@ export async function generateCarousel({
   let lastProblems = [];
   let lastOutput = null;
   let lastUsed = chosenModel;
+  let best = null;
 
   const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -355,10 +380,17 @@ export async function generateCarousel({
         ...validateShape(shaped, recentTopics),
         ...(attempt < maxAttempts ? softProblems(shaped) : []),
       ];
+      const candidate = candidateFor(output, { recentTopics, used, attempt });
+      const previous = best;
+      best = betterCandidate(best, candidate);
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        if (record) await recordTopic({ topic: shaped.topic, angle: shaped.category, date: `${date} ${slot}`, file: LEDGER });
-        return { spec: shaped, provider: provider.name, model: used, attempts: attempt, category, slot };
+        // An earlier reply that passes the final gate beats this one if this one does not.
+        const pick = candidate.gate.length && previous && previous.gate.length < candidate.gate.length
+          ? previous : { ...candidate, spec: shaped };
+        if (pick === previous) onNote?.(`using attempt ${pick.attempt}: it passes more of the final gate than attempt ${attempt}`);
+        if (record) await recordTopic({ topic: pick.spec.topic, angle: pick.spec.category, date: `${date} ${slot}`, file: LEDGER });
+        return { spec: pick.spec, provider: provider.name, model: pick.used, attempts: attempt, category, slot };
       }
     } catch (err) {
       console.log(`  attempt ${attempt} failed: ${err.message}`);
@@ -373,8 +405,13 @@ export async function generateCarousel({
     }
   }
 
-  // Final salvage: normalize last model output and drop soft/repeat-only blocks
-  // that would leave the account silent for a day.
+  // Final salvage: the attempt the final gate likes best (or the last output),
+  // normalized, with soft/repeat-only blocks dropped.
+  if (best && !best.shape.length) {
+    onNote?.(`using attempt ${best.attempt} (${best.gate.length} gate problem(s))`);
+    if (record) await recordTopic({ topic: best.spec.topic, angle: best.spec.category, date: `${date} ${slot}`, file: LEDGER });
+    return { spec: best.spec, provider: provider.name, model: best.used, attempts: maxAttempts, category, slot };
+  }
   if (lastOutput) {
     const salvaged = normalizeSpec(lastOutput);
     const hard = validateShape(salvaged, recentTopics).filter((p) => !p.includes('repeats'));

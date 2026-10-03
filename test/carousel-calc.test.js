@@ -155,3 +155,22 @@ test('chart-board: every content slide gets a computed chart, no photo, and a li
   const missing = validateSpec({ ...spec, slides: [spec.slides[0], { band: 'bottom', headline: 'x' }, spec.slides[5]] });
   assert.match(missing.join(' '), /slide 2 has no "calc"/);
 });
+
+test('signs are said in words; bar labels are names, not claims', () => {
+  const change = computeCalc({ type: 'change', from: 100, to: 60, unit: 'INR', fromLabel: 'Profit', toLabel: 'Cash' });
+  assert.deepEqual(mismatches('Cash ₹40 पीछे, 40% कम', change.all), []);
+  const cmp = computeCalc({ type: 'compare', unit: 'INR', items: [{ label: 'Year 1', value: 100 }, { label: 'Year 3', value: 150 }] });
+  const labels = [...cmp.chart.labels];
+  assert.deepEqual(mismatches('3 साल में ₹150', cmp.all, { labels }), []);
+  assert.equal(mismatches('3 साल में ₹170', cmp.all, { labels }).length, 1);
+});
+
+test('the generator keeps the attempt that passes the final gate, without another model call', async () => {
+  const { betterCandidate } = await import('../pipeline/src/carousel/generate.js');
+  const a2 = { attempt: 2, shape: [], gate: [] };
+  const a3 = { attempt: 3, shape: [], gate: ['slide 6: "₹150" does not match'] };
+  assert.equal(betterCandidate(betterCandidate(null, a2), a3), a2);
+  const broken = { attempt: 1, shape: ['19 slides'], gate: [] };
+  assert.equal(betterCandidate(null, broken), null, 'a reply with a broken shape is never kept');
+  assert.equal(betterCandidate(a3, { attempt: 3, shape: [], gate: [] }).gate.length, 0);
+});

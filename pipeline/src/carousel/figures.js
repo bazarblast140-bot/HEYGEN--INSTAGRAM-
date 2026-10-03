@@ -83,6 +83,8 @@ export const ROUNDING_CAP = 0.025;  // "₹54 लाख" for 54.14 is rounding; 
 const UNIT_OF = { '₹': 'INR', '%': 'PCT', years: 'YEARS', months: 'MONTHS', '': 'NUM' };
 
 function close(token, value) {
+  // The sign is said in words ("40% कम", "₹20 पीछे"), so magnitudes are compared.
+  value = Math.abs(value);
   const diff = Math.abs(token.value - value);
   const base = Math.max(Math.abs(value), 1e-9);
   if (diff / base <= TOLERANCE) return true;
@@ -111,10 +113,14 @@ export function harmless(token) {
  * Every figure in `text` must equal (within rounding) one of `figures`
  * ({ value, unit, text }). Returns [{ token, nearest }] for the ones that don't.
  */
-export function mismatches(text, figures = []) {
+export function mismatches(text, figures = [], { labels = [] } = {}) {
   const bad = [];
+  // Numbers inside the calc's own category labels ("Year 3", "15 yrs") are
+  // names of bars, not claims.
+  const named = new Set(labels.flatMap((l) => parseFigures(l).map((t) => t.value)));
   for (const token of parseFigures(text)) {
     if (harmless(token)) continue;
+    if (['NUM', 'YEARS', 'MONTHS'].includes(token.kind) && named.has(token.value)) continue;
     const pool = figures.filter((f) => compatible(token, f));
     if (pool.some((f) => close(token, f.value))) continue;
     const nearest = pool.slice().sort((a, b) => Math.abs(a.value - token.value) - Math.abs(b.value - token.value))[0] || null;

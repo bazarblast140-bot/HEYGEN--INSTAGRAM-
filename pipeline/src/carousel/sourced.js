@@ -9,6 +9,7 @@ import { MAX_MODEL_ATTEMPTS } from '../script/attempts.js';
 import { readHistory, recordTopic } from '../script/topics.js';
 import {
   LEDGER, normalizeSpec, validateShape, softProblems, checkSources, sourcedCarouselSchema,
+  candidateFor, betterCandidate,
 } from './generate.js';
 import { SYSTEM, buildSourcedPrompt } from './sourced-prompt.js';
 
@@ -141,6 +142,8 @@ export async function generateSourcedCarousel({
   let lastProblems = [];
   let lastOutput = null;
   let lastUsed = chosenModel;
+  let best = null;
+  const prepare = (out) => applySourceCitation(normalizeSpec(out, { sourced: true }), found[0]);
 
   const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -165,13 +168,20 @@ export async function generateSourcedCarousel({
         ...checkSources(shaped, sites),
         ...(attempt < maxAttempts ? softProblems(shaped, { stories: found }) : []),
       ];
+      const candidate = candidateFor(output, { recentTopics, stories: found, used, attempt, prepare });
+      if (checkSources(candidate.spec, sites).length) candidate.shape.push('sources');
+      const previous = best;
+      best = betterCandidate(best, candidate);
       if (lastProblems.length) onReject?.(attempt, lastProblems);
       if (!lastProblems.length) {
-        if (record) await recordTopic({ topic: shaped.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
+        const pick = candidate.gate.length && previous && previous.gate.length < candidate.gate.length
+          ? previous : { ...candidate, spec: shaped, used };
+        if (pick === previous) onNote?.(`using attempt ${pick.attempt}: it passes more of the final gate than attempt ${attempt}`);
+        if (record) await recordTopic({ topic: pick.spec.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
         return {
-          spec: shaped,
+          spec: pick.spec,
           provider: provider.name,
-          model: used,
+          model: pick.used,
           attempts: attempt,
           category,
           slot,
@@ -191,6 +201,14 @@ export async function generateSourcedCarousel({
     }
   }
 
+  if (best && !best.shape.length) {
+    onNote?.(`using attempt ${best.attempt} (${best.gate.length} gate problem(s))`);
+    if (record) await recordTopic({ topic: best.spec.topic, angle: category, date: `${date} ${slot}`, file: LEDGER });
+    return {
+      spec: best.spec, provider: provider.name, model: best.used, attempts: maxAttempts,
+      category, slot, stories: found, verifiedSource: true, sourceFresh: true,
+    };
+  }
   if (lastOutput) {
     const salvaged = applySourceCitation(normalizeSpec(lastOutput, { sourced: true }), found[0]);
     const hard = [

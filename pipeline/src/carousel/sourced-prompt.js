@@ -51,7 +51,8 @@ ${list}
 </stories>
 ${direction}
 <structure>
-ठीक ${SLIDES} slides.
+ठीक ${SLIDES} slides — न ज़्यादा, न कम. हर ख़बर के लिए अलग slide मत बनाओ: सबसे बड़ी एक ख़बर (या एक theme) चुनो और उसे 8 fact slides में समझाओ.
+Headline 8 शब्द तक, subline 14 शब्द तक. ज़्यादातर text देवनागरी में.
   1. cover — band "center", curiosity hook, स्रोत नहीं
   2-${SLIDES - 1}. fact slides — band "bottom", source में नाम और तारीख़
   ${SLIDES}. follow card — cta true, source null
