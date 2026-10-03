@@ -5,7 +5,7 @@
 // note (literally true); AI/news footnotes are the fetched outlet and date.
 // There is no photograph anywhere in this path.
 
-import { computeCalc, figureStrip } from './calc.js';
+import { computeCalc, figureStrip, EXAMPLE_COMPARE_NOTE } from './calc.js';
 import { FINANCE } from './categories.js';
 
 export const HANDLE = '@rajesh_technical_trader';
@@ -48,12 +48,15 @@ export function boardSlides(spec) {
       return { ...base, chart: hero?.chart || null, figures: hero ? figureStrip(hero) : [], footnote: '', source: null };
     }
     if (finance) {
+      // The gate only passes a finance compare whose values code computed from
+      // the worked example, so its footnote says so (not "values as stated").
+      const note = calc?.ok ? (calc.type === 'compare' ? EXAMPLE_COMPARE_NOTE : calc.note) : null;
       return {
         ...base,
         chart: calc?.ok ? calc.chart : null,
         figures: calc?.ok ? figureStrip(calc) : [],
-        source: calc?.ok ? calc.note : null,
-        footnote: calc?.ok ? calc.note : '',
+        source: note,
+        footnote: note || '',
       };
     }
     const source = String(slide.source || '').trim();

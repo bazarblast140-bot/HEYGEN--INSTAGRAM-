@@ -15,6 +15,10 @@
 //   Real value after inflation = A / (1+r)^y
 //   Recovery after a loss L    = 1/(1−L) − 1
 
+/** Footnote for a compare chart (news: values from the fetched items; finance: from the worked example). */
+export const COMPARE_NOTE = 'Calculation: gap and ratio computed from the values shown';
+export const EXAMPLE_COMPARE_NOTE = 'Calculation: every value computed from the worked example; gap and ratio computed';
+
 export const UNITS = { INR: '₹', PCT: '%', NUM: '', YEARS: 'years', MONTHS: 'months' };
 
 const num = (v) => (typeof v === 'string' ? Number(v.replace(/[,₹\s%]/g, '')) : Number(v));
@@ -185,7 +189,8 @@ const TYPES = {
       inputs: [val('sales', 'Sales', S), val('variableCost', 'Variable cost', V), val('fixedCost', 'Fixed cost', F), pct('salesChangePct', 'Sales change', ch, 2)],
       figures: [val('contribution', 'Contribution', C), val('ebit', 'Operating profit', E), plain('dol', 'Operating leverage', dol, UNITS.NUM, `${trim(dol, 2)}x`),
         pct('profitChangePct', 'Profit change', profitChange), val('newSales', 'New sales', newSales), val('newEbit', 'New operating profit', newEbit),
-        pct('contributionMargin', 'Contribution margin', (C / S) * 100), pct('ebitMargin', 'Operating margin', (E / S) * 100)],
+        pct('contributionMargin', 'Contribution margin', (C / S) * 100), pct('ebitMargin', 'Operating margin', (E / S) * 100),
+        val('totalCost', 'Total cost', V + F), val('newTotalCost', 'New total cost', V * (1 + ch / 100) + F)],
       highlight: ['salesChangePct', 'dol', 'profitChangePct'],
       chart: { kind: 'bars', title: 'Sales change vs operating profit change', unit: 'PCT', labels: ['Sales', 'Operating profit'],
         values: [ch, profitChange], colors: [ch >= 0 ? 'blue' : 'red', profitChange >= 0 ? 'green' : 'red'] },
@@ -371,7 +376,7 @@ const TYPES = {
       chart: { kind: 'bars', title: c.title || 'Comparison', unit: unit === UNITS.INR ? 'INR' : unit === UNITS.PCT ? 'PCT' : 'NUM',
         labels: items.map((it, i) => String(it.label || `#${i + 1}`).slice(0, 14)), values: vals,
         colors: vals.map((v) => (v === max ? 'yellow' : 'blue')) },
-      note: 'Calculation: values as stated on the slide; gap and ratio computed',
+      note: COMPARE_NOTE,
     };
   },
 };

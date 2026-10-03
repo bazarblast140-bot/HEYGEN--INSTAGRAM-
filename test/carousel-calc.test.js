@@ -49,6 +49,7 @@ test('the original wrong "₹52 लाख" fails the check; the right figure pas
 
   const spec = {
     category: 'personal-finance',
+    example: LOAN,
     slides: [
       { band: 'center', headline: '₹50 लाख का home loan', cta: false },
       { band: 'bottom', headline: 'कुल ब्याज लगभग ₹52 लाख', subline: '₹50 लाख, 8.5%, 20 साल', calc: LOAN, cta: false },
@@ -200,4 +201,67 @@ test('operating leverage and margin are computed, and compare is rationed on fin
   const cmp = { type: 'compare', unit: '%', items: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] };
   assert.equal(compareProblems({ category: 'fundamentals', slides: [{ calc: cmp }, { calc: cmp }, { calc: cmp }] }).length, 1);
   assert.equal(compareProblems({ category: 'latest-news', slides: [{ calc: cmp }, { calc: cmp }, { calc: cmp }] }).length, 0);
+});
+
+// The 3 Oct evening preview (operating leverage) contradicted itself through
+// "compare" slides of the model's own numbers: slide 2 "sales +20% → profit
+// +50%" (2.5x), slide 3 "40/10 = 4x", slide 5 "fixed 30, variable 20, leverage
+// 3" with no sales, slide 9 "15% vs 50%", footnote "values as stated".
+test('one worked example: every slide must agree with it (3 Oct operating-leverage preview)', async () => {
+  const { exampleProblems } = await import('../pipeline/src/carousel/example.js');
+  const { sourceProblems } = await import('../pipeline/src/carousel/quality.js');
+  const { EXAMPLE_COMPARE_NOTE } = await import('../pipeline/src/carousel/calc.js');
+  const EX = { type: 'operating_leverage', sales: 100, variableCost: 60, fixedCost: 30, salesChangePct: 10 };
+  const cover = { band: 'center', headline: 'Sales थोड़ी बढ़ी, profit बहुत', cta: false };
+  const end = { band: 'bottom', headline: 'सेव करो', subline: 'फ़ॉलो करो', cta: true };
+  const cmp = (...items) => ({ type: 'compare', unit: '%', items: items.map(([label, value]) => ({ label, value })) });
+  const slide = (headline, calc, subline = null) => ({ band: 'bottom', headline, subline, cta: false, calc });
+
+  const preview = {
+    category: 'fundamentals',
+    example: EX,
+    slides: [cover,
+      slide('Sales 20% बढ़ी, profit 50%', cmp(['Sales', 20], ['Profit', 50])),
+      slide('Operating leverage 4x', EX),
+      slide('Fixed cost का असर', { type: 'compare', unit: 'num', items: [{ label: 'Fixed', value: 30 }, { label: 'Variable', value: 20 }, { label: 'Leverage', value: 3 }] }),
+      slide('Margin का फ़र्क़', cmp(['Margin', 15], ['Growth', 50])),
+      slide('Variable cost कम', { ...EX, variableCost: 50 }),
+      end],
+  };
+  const p = exampleProblems(preview).join('\n');
+  assert.match(p, /slide 2: compare value "Sales" 20 is not computed/);
+  assert.match(p, /slide 2: compare value "Profit" 50 is not computed/);
+  assert.match(p, /slide 4: compare value "Variable" 20/);
+  assert.match(p, /slide 4: compare value "Leverage" 3/);
+  assert.doesNotMatch(p, /"Fixed" 30/, 'fixed cost 30 is the example');
+  assert.match(p, /slide 5: compare value "Margin" 15/);
+  assert.match(p, /slide 5: compare value "Growth" 50/);
+  assert.match(p, /slide 6: Variable cost 50 is not in the worked example/);
+  assert.match(financeNumberProblems(preview).join('\n'), /slide 2: compare value/, 'it is part of the hard number gate');
+
+  assert.match(exampleProblems({ ...preview, example: undefined })[0], /no worked example/);
+  assert.match(exampleProblems({ ...preview, example: cmp(['a', 1], ['b', 2]) })[0], /cannot be a "compare"/);
+
+  // The same story told consistently: sales 100, variable 60, fixed 30 →
+  // contribution 40, EBIT 10, leverage 4x; a 20% what-if is computed (80%).
+  const fixed = {
+    category: 'fundamentals',
+    example: EX,
+    slides: [cover,
+      slide('Sales 10% बढ़ी, profit 40%', EX, 'Sales 100, variable cost 60, fixed cost 30'),
+      slide('Sales 20% बढ़ी तो profit 80%', { ...EX, salesChangePct: 20 }),
+      slide('Contribution 40, profit सिर्फ़ 10', { type: 'compare', unit: 'num', items: [{ label: 'Contribution', value: 40 }, { label: 'Profit', value: 10 }] }),
+      slide('Margin सिर्फ़ 10%', { type: 'margin', revenue: 100, cost: 90 }),
+      end],
+  };
+  assert.deepEqual(exampleProblems(fixed), []);
+  assert.deepEqual(financeNumberProblems(fixed), []);
+  const contradicting = { ...fixed, slides: fixed.slides.map((s, i) => (i === 2 ? { ...s, headline: 'Sales 20% बढ़ी तो profit 50%' } : s)) };
+  assert.match(financeNumberProblems(contradicting).join('\n'), /slide 3: "50%" does not match/, 'text must agree with the computed 80%');
+
+  // A finance compare is footnoted as computed, never "values as stated".
+  const boards = boardSlides(fixed);
+  assert.equal(boards[3].footnote, EXAMPLE_COMPARE_NOTE);
+  assert.doesNotMatch(boards.map((b) => b.footnote).join(' '), /as stated/);
+  assert.deepEqual(sourceProblems({ ...fixed, slides: boards }), []);
 });
