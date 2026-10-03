@@ -1,0 +1,253 @@
+{
+ "spec": "pipeline/specs/carousel-hindi.json",
+ "slides": 10,
+ "width": 1080,
+ "height": 1350,
+ "format": "jpeg",
+ "files": [
+  "pipeline/specs/repost/sbi-2026-10-03/slides/01.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/02.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/03.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/04.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/05.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/06.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/07.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/08.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/09.jpg",
+  "pipeline/specs/repost/sbi-2026-10-03/slides/10.jpg"
+ ],
+ "photos": 8,
+ "insets": 0,
+ "topic": "EMI का गणित: ब्याज बनाम मूलधन",
+ "category": "personal-finance",
+ "brand": "Rajesh Technical Traders",
+ "generated": true,
+ "fallback": false,
+ "reviewed": false,
+ "verifiedSource": false,
+ "sourceFresh": false,
+ "publishable": true,
+ "quality": {
+  "ok": true,
+  "problems": [],
+  "checks": "all figures computed and asserted in code (sbi-fix2.mjs); every photo tesseract-checked (no words/numbers) and licence CC0/CC BY; no source labels"
+ },
+ "stories": [
+  "pipeline/specs/repost/sbi-2026-10-03/story-1.jpg"
+ ],
+ "lines": [
+  {
+   "n": 1,
+   "headline": "हर EMI में ब्याज और मूलधन का हिस्सा बदलता है",
+   "subline": null,
+   "source": null
+  },
+  {
+   "n": 2,
+   "headline": "शुरुआत में ब्याज का दबदबा",
+   "subline": "30 साल के लोन की पहली EMI में 90% से ज़्यादा ब्याज होता है",
+   "source": null
+  },
+  {
+   "n": 3,
+   "headline": "आखिरी साल मूलधन चुकता",
+   "subline": "आखिरी 12 EMI में 90% से अधिक राशि मूलधन के लिए जाती है",
+   "source": null
+  },
+  {
+   "n": 4,
+   "headline": "₹50 लाख लोन, 8.5% ब्याज",
+   "subline": "20 साल में EMI ₹43,391, कुल ब्याज लगभग ₹54.1 लाख",
+   "source": null
+  },
+  {
+   "n": 5,
+   "headline": "ब्याज दर का असर",
+   "subline": "8.5% से 9.5% होने पर EMI ₹43,391 से\n₹46,607, यानी ₹3,215 ज़्यादा",
+   "source": null
+  },
+  {
+   "n": 6,
+   "headline": "अवधि बढ़ाने का नुकसान",
+   "subline": "20 से 30 साल करने पर EMI घटती है, पर कुल\nब्याज ₹54.1 लाख से ₹88.4 लाख हो जाता है",
+   "source": null
+  },
+  {
+   "n": 7,
+   "headline": "प्रीपेमेंट का फायदा",
+   "subline": "12 EMI के बाद ₹1 लाख प्रीपेमेंट से\nब्याज ₹3,82,265 कम, 11 महीने पहले खत्म",
+   "source": null
+  },
+  {
+   "n": 8,
+   "headline": "टैक्स में ब्याज का छिपा फायदा",
+   "subline": "सेक्शन 24(b) में होम लोन ब्याज पर ₹2 लाख\nतक कटौती (old regime, self-occupied)",
+   "source": null
+  },
+  {
+   "n": 9,
+   "headline": "EMI और किराया",
+   "subline": "अगर किराया EMI से कम है, तो खरीदने का फैसला सिर्फ भावना से न लें",
+   "source": null
+  },
+  {
+   "n": 10,
+   "headline": "इस पोस्ट को सेव करें",
+   "subline": "ऐसे ही finance insights के लिए फॉलो करें",
+   "source": null
+  }
+ ],
+ "fix": {
+  "of": "run 37106939248 / release carousel-2026-10-03-37106939248 / IG media 18089688200678070",
+  "approved": "slide 4 approved by Boss Yt; slides 5-8 and label removal per Boss Yt (17:48 IST)",
+  "figures_computed": {
+   "emi_8_5_20y": 43391.16,
+   "emi_9_5_20y": 46606.56,
+   "emi_rise": 3215.4,
+   "emi_8_5_30y": 38445.67,
+   "interest_20y": 5413878.8,
+   "interest_30y": 8840442.7,
+   "prepay_1L_after_12_emis": {
+    "interest_saved": 382265.12,
+    "months_saved": 11,
+    "tenure_months": 229
+   },
+   "prepay_1L_at_start": {
+    "interest_saved": 423136.32,
+    "months_saved": 12
+   }
+  },
+  "slides": {
+   "1": {
+    "text": "unchanged",
+    "footnote": "Photo: madpai / Flickr · CC BY 2.0",
+    "photo": {
+     "credit": "madpai / Flickr",
+     "licence": "CC BY 2.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/2.0/",
+     "page": "https://www.flickr.com/photos/59353670@N00/301629452",
+     "image": "https://live.staticflickr.com/120/301629452_e26966ca21_b.jpg",
+     "alt": "Residential Development - Bangalore"
+    },
+    "textCheck": "tesseract: no words, no numbers"
+   },
+   "10": {
+    "text": "unchanged",
+    "footnote": "Photo: ToGa Wanderings / Flickr · CC BY 2.0",
+    "photo": {
+     "credit": "ToGa Wanderings / Flickr",
+     "licence": "CC BY 2.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/2.0/",
+     "page": "https://www.flickr.com/photos/69031678@N00/8369902021",
+     "image": "https://live.staticflickr.com/8231/8369902021_9bc157d659_b.jpg",
+     "alt": "Apartment Complex in Colaba"
+    },
+    "textCheck": "tesseract: no words, no numbers"
+   },
+   "2": {
+    "text": "unchanged",
+    "footnote": "Photo: Niyantha / Flickr · CC BY 2.0",
+    "photo": {
+     "credit": "Niyantha / Flickr",
+     "licence": "CC BY 2.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/2.0/",
+     "page": "https://www.flickr.com/photos/10038095@N02/2134818092",
+     "image": "https://live.staticflickr.com/2005/2134818092_7b3d87f2ab_b.jpg",
+     "alt": "Bombay Skyline"
+    },
+    "textCheck": "tesseract: no words, no numbers",
+    "removed_label": "RBI Handbook of Statistics on Indian Economy 2024"
+   },
+   "3": "original; source label \"HDFC Bank होम लोन अमॉर्टाइजेशन शेड्यूल 2025\" erased",
+   "9": {
+    "text": "unchanged",
+    "footnote": "Photo: ToGa Wanderings / Flickr · CC BY 2.0",
+    "photo": {
+     "credit": "ToGa Wanderings / Flickr",
+     "licence": "CC BY 2.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/2.0/",
+     "page": "https://www.flickr.com/photos/69031678@N00/8369902021",
+     "image": "https://live.staticflickr.com/8231/8369902021_9bc157d659_b.jpg",
+     "alt": "Apartment Complex in Colaba"
+    },
+    "textCheck": "tesseract: no words, no numbers",
+    "removed_label": "RBI Financial Stability Report 2024"
+   },
+   "4": {
+    "subline": "20 साल में EMI ₹43,391, कुल ब्याज लगभग ₹54.1 लाख",
+    "removed_label": "SBI होम लोन EMI कैलकुलेटर 2025",
+    "photo": {
+     "source": "Wikimedia Commons",
+     "page": "https://commons.wikimedia.org/wiki/File:Residential_Building,_Hyderabad,_20022015.jpg",
+     "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Residential_Building%2C_Hyderabad%2C_20022015.jpg/1920px-Residential_Building%2C_Hyderabad%2C_20022015.jpg",
+     "author": "Nikhilb239",
+     "licence": "CC BY 3.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/3.0",
+     "description": "Indu Fortune Fields Gardenia Apartments in Hitec City, Hyderabad"
+    }
+   },
+   "5": {
+    "subline": "8.5% से 9.5% होने पर EMI ₹43,391 से\n₹46,607, यानी ₹3,215 ज़्यादा",
+    "footnote": "Photo: Biswarup Ganguly / Commons · CC BY 3.0",
+    "removed_label": "ICICI Bank होम लोन EMI कैलकुलेटर 2025",
+    "photo": {
+     "credit": "Biswarup Ganguly / Commons",
+     "licence": "CC BY 3.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Apartment_BUildings_Under_Construction_-_Street_501_-_Rajarhat_-_Kolkata_2017-06-21_2719.JPG",
+     "alt": "Apartment buildings under construction, Rajarhat, Kolkata"
+    }
+   },
+   "6": {
+    "subline": "20 से 30 साल करने पर EMI घटती है, पर कुल\nब्याज ₹54.1 लाख से ₹88.4 लाख हो जाता है",
+    "footnote": "Photo: ramkich4u / Wikimedia Commons · CC0",
+    "removed_label": "बैंक ऑफ बड़ौदा होम लोन कैलकुलेटर 2025",
+    "photo": {
+     "credit": "ramkich4u / Wikimedia Commons",
+     "licence": "CC0",
+     "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/",
+     "page": "https://commons.wikimedia.org/wiki/File:Hyderabad_view_Plots.jpg",
+     "alt": "View of residential apartments and plots in Hyderabad"
+    }
+   },
+   "7": {
+    "subline": "12 EMI के बाद ₹1 लाख प्रीपेमेंट से\nब्याज ₹3,82,265 कम, 11 महीने पहले खत्म",
+    "footnote": "Photo: Bigul Malayi / WordPress Photos · CC0",
+    "removed_label": "Axis Bank होम लोन प्रीपेमेंट कैलकुलेटर 2025",
+    "photo": {
+     "credit": "Bigul Malayi / WordPress Photos",
+     "licence": "CC0",
+     "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+     "page": "https://wordpress.org/photos/photo/626692df0b/",
+     "alt": "Traditional white Kerala house among coconut trees, Kozhikode"
+    }
+   },
+   "8": {
+    "subline": "सेक्शन 24(b) में होम लोन ब्याज पर ₹2 लाख\nतक कटौती (old regime, self-occupied)",
+    "footnote": "Photo: raj_nair81 / Flickr · CC BY 2.0",
+    "removed_label": "Income Tax Department, Section 24(b) 2025",
+    "photo": {
+     "credit": "raj_nair81 / Flickr",
+     "licence": "CC BY 2.0",
+     "licenceUrl": "https://creativecommons.org/licenses/by/2.0/",
+     "page": "https://www.flickr.com/photos/38523933@N00/5520734250",
+     "alt": "A typical Kerala house, Guruvayoor"
+    }
+   }
+  },
+  "caption": "unchanged; it carries no figures (no ₹4,338 or ₹52-82 लाख)",
+  "renderer": "pre-v3 slide.html at 7acbce67976ffba3a7cf254b16f927e60a7c4009 (sbi-fix.mjs, sbi-fix2.mjs)",
+  "open_flags": [],
+  "story": {
+   "file": "story/story-1.jpg",
+   "text": "unchanged (cover headline + \"10 स्लाइड · पूरी पोस्ट प्रोफ़ाइल पर\")",
+   "photo": "same as slide 1"
+  },
+  "photos_replaced_18:00": "slides 1, 2, 9, 10 and the Story: old photos had a calculator reading 269 739 + Cyrillic keyboard, a \"$12.4BB\" chart, and a \"HOUSE FOR RENT\" sign"
+ },
+ "repost": {
+  "replaces": "IG media 18089688200678070 (https://www.instagram.com/p/DeBiubHGK9S/)",
+  "key": "sbi-2026-10-03",
+  "workflow": ".github/workflows/sbi-repost.yml"
+ }
+}
