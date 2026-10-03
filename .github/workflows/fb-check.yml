@@ -1,0 +1,25 @@
+name: Facebook Page check
+
+# Read-only. Shows which Facebook Page the Instagram token speaks for and
+# whether it can post there. Never posts, never prints the token.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Which Page, which permissions
+        env:
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: node pipeline/fb-crosspost.js --whoami | tee -a "$GITHUB_STEP_SUMMARY"
