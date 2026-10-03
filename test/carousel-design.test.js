@@ -48,7 +48,7 @@ test('a crowded slide is sent back to be shortened', () => {
 });
 
 test('the prompt asks for a hook cover, less text, and a save follow close', () => {
-  assert.match(SYSTEM, /Cover: एक bold line/);
+  assert.match(SYSTEM, /Cover: एक bold hook line/);
   const text = buildUserPrompt({ category: 'fundamentals', date: '2026-10-01' });
   assert.match(text, /सेव करो और फ़ॉलो करो/);
   assert.match(text, /ज़्यादा से ज़्यादा 5/);

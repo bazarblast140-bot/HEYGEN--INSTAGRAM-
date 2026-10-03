@@ -3,7 +3,7 @@
 //
 //   node pipeline/build-carousel.js --spec pipeline/specs/carousel-hindi.json
 //   node pipeline/build-carousel.js --generate               # today's topic
-//   node pipeline/build-carousel.js --spec ... --no-photos   # gradients only
+//   (no stock photos: every slide is a v3 dark chart-board drawn from calc.js)
 //   node pipeline/build-carousel.js --spec ... --format png   # lossless, not postable
 //   node pipeline/build-carousel.js --generate --require-generated   # no fallback
 //
@@ -21,8 +21,10 @@ import fs from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } from './render-slides.js';
-import { attachBackgrounds, attachInsets } from './src/render/backgrounds.js';
-import { attachFixed, fillGaps } from './src/render/pictures.js';
+import { createHash } from 'node:crypto';
+import { boardSlides } from './src/carousel/board.js';
+import { repairHeavyWords } from './src/carousel/language.js';
+import { istParts } from './src/carousel/categories.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
 import { ALL_SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
 import { clock } from './src/publish/same-day.js';
@@ -109,6 +111,7 @@ export function composeCaption(spec, brandTag) {
 export function validateSpec(spec) {
   const problems = [];
   const slides = spec.slides || [];
+  const sourced = !FINANCE.includes(spec.category);
 
   if (!slides.length) problems.push('spec has no slides');
   if (slides.length > 10) problems.push(`${slides.length} slides — Instagram allows 10`);
@@ -122,12 +125,22 @@ export function validateSpec(spec) {
     if (!String(slide.headline || '').trim()) problems.push(`slide ${n} has no headline`);
 
     const carriesFact = slide.band !== 'center' && !slide.cta;
-    if (carriesFact && !String(slide.source || slide.footnote || '').trim()) {
+    if (carriesFact && sourced && !String(slide.source || slide.footnote || '').trim()) {
       problems.push(`slide ${n} states a fact with no "source"`);
+    }
+    if (carriesFact && !sourced && !slide.calc) {
+      problems.push(`slide ${n} has no "calc" — every finance content slide is a chart computed by code`);
     }
   });
 
   return problems;
+}
+
+/** sha256 over the slide bytes, so an approval names exactly what is posted. */
+export async function hashFiles(files) {
+  const h = createHash('sha256');
+  for (const f of files) h.update(await fs.readFile(f));
+  return h.digest('hex');
 }
 
 async function main() {
@@ -246,8 +259,16 @@ async function main() {
   // Always normalize bands/cta/sources before the hard gate. Models occasionally
   // return two covers; that used to reject the whole day after generation spent
   // three attempts. Repair is cheaper than silence.
-  spec = normalizeSpec(spec, { sourced: sourcedSlot });
+  spec = normalizeSpec(spec, { sourced: sourcedSlot || !FINANCE.includes(spec.category) });
   note('shape normalized (exactly one cover, last slide save and follow)');
+
+  // Quality repair before render: padded / empty panels are dropped, not shipped
+  // (before the shape check, so a padded follow-card copy is not a "fact" slide).
+  const padded = dropPaddedPanels(spec);
+  if (padded.dropped) {
+    spec = padded.spec;
+    note(`quality: dropped ${padded.dropped} padded/empty panel(s)`);
+  }
 
   const problems = validateSpec(spec);
   if (problems.length) {
@@ -255,46 +276,23 @@ async function main() {
     process.exit(1);
   }
 
-  // Quality repair before render: padded / empty panels are dropped, not shipped.
-  const padded = dropPaddedPanels(spec);
-  if (padded.dropped) {
-    spec = padded.spec;
-    note(`quality: dropped ${padded.dropped} padded/empty panel(s)`);
+  // Simple Hinglish: heavy words (अवधि, मूलधन ...) are replaced with the word
+  // people use (tenure, principal). The gate below still refuses any left.
+  const plain = repairHeavyWords(spec);
+  if (plain.replaced.length) {
+    spec = plain.spec;
+    note(`language: replaced ${plain.replaced.join(', ')}`);
   }
 
-  const withFootnotes = {
+  // v3 chart-board: chart, figure strip and footnote come from calc.js. No
+  // stock photo is fetched for a carousel, ever (--no-photos is now the only mode).
+  if (args['no-photos'] === undefined) note('no stock photos — every content slide is a chart computed from its calc');
+  const ready = {
     ...spec,
-    slides: spec.slides.map((s) => ({
-      ...s,
-      subline: balanceSubline(s.subline),
-      footnote: s.footnote ?? s.source ?? '',
-    })),
+    slides: boardSlides(spec).map((s) => ({ ...s, subline: balanceSubline(s.subline) })),
   };
-
-  let ready = withFootnotes;
-  if (args['no-photos']) {
-    note('--no-photos — generated gradient behind every slide');
-  } else {
-    console.log('Backgrounds');
-    const { spec: withOurs, attached: ours } = await attachFixed(withFootnotes, { onNote: note });
-    const { spec: withPhotos, attached } = await attachBackgrounds(withOurs, {
-      outDir: path.join(HERE, 'out', 'photos'),
-      onNote: note,
-    });
-    const { spec: withGivenPictures, filled } = await fillGaps(withPhotos, { onNote: note });
-
-    console.log('Celebrity insets');
-    const { spec: withInsets, attached: insets } = await attachInsets(withGivenPictures, {
-      outDir: path.join(HERE, 'out', 'photos'),
-      onNote: note,
-    });
-    ready = withInsets;
-
-    const given = ours + filled;
-    console.log(`  ${attached + given}/${spec.slides.length} slides carry a picture`
-      + (given ? `  (${given} of them yours)` : '')
-      + (insets ? `  ·  ${insets} celebrity inset(s)` : ''));
-  }
+  const charts = ready.slides.filter((s) => s.chart).length;
+  console.log(`  ${charts}/${ready.slides.length} slides carry a computed chart`);
 
   console.log('Rendering');
   const renderFeed = (tight) => renderSlides({
@@ -373,8 +371,15 @@ async function main() {
     slides: files.length,
     width: WIDTH, height: HEIGHT, format,
     files: files.map((f) => path.relative(process.cwd(), f)),
-    photos: ready.slides.filter((s) => s.background).length,
-    insets: ready.slides.filter((s) => s.insets?.length).length,
+    photos: 0,
+    insets: 0,
+    charts,
+    style: 'v3-chart-board',
+    slot: slotUsed || null,
+    preview: args.preview === true,
+    builtAt: new Date().toISOString(),
+    istDate: istParts(new Date()).date,
+    contentHash: await hashFiles([...files, ...stories]),
     topic: spec.topic || null,
     category: spec.category || null,
     brand: spec.brand || BRAND.brand,
@@ -393,6 +398,8 @@ async function main() {
       headline: (s.headline || '').replace(/\n/g, ' '),
       subline: (s.subline || '').replace(/\n/g, ' ') || null,
       source: s.source || null,
+      figures: (s.figures || []).map((f) => `${f.label} ${f.text}`),
+      calc: s.calc || null,
     })),
     notes,
   };

@@ -1,4 +1,4 @@
-// A money slide has to say which document its number came from.
+// Money slides carry no source label nothing verified (was: a dated source).
 //
 // The first real evening post cited "भारतीय रिज़र्व बैंक (RBI), ऐतिहासिक आँकड़े"
 // under a figure for 1991. Nobody can check that. The same post's best slide
@@ -15,7 +15,7 @@ import { checkMoneySources, isMoney } from '../pipeline/src/carousel/money.js';
 import { softProblems, validateShape } from '../pipeline/src/carousel/generate.js';
 import { FINANCE, POOL } from '../pipeline/src/carousel/categories.js';
 
-const slide = (over = {}) => ({ band: 'bottom', headline: 'शीर्षक', subline: 'आँकड़ा', source: 'RBI, 2025', cta: false, ...over });
+const slide = (over = {}) => ({ band: 'bottom', headline: 'शीर्षक', subline: 'आँकड़ा', source: null, cta: false, ...over });
 
 const spec = (category, slides) => ({ category, topic: 'विषय', slides });
 
@@ -27,20 +27,21 @@ test('it applies to the money pool and to nothing else', () => {
   assert.equal(POOL.some((c) => !FINANCE.includes(c)), false);
 });
 
-test('a source with no year is flagged', () => {
+test('a dated label is no longer asked for: an unverified source label on a money slide is refused', () => {
   const problems = checkMoneySources(spec('fundamentals', [
     slide({ band: 'center', subline: null, source: null }),
-    slide({ source: 'भारतीय रिज़र्व बैंक (RBI), ऐतिहासिक आँकड़े' }),
+    slide({ source: 'SBI होम लोन EMI कैलकुलेटर 2025' }),
   ]));
   assert.equal(problems.length, 1);
   assert.match(problems[0], /slide 2/);
-  assert.match(problems[0], /no year/);
+  assert.match(problems[0], /nothing in the pipeline verified/);
 });
 
-test('a source naming its report and date passes', () => {
-  const problems = checkMoneySources(spec('fundamentals', [
-    slide({ source: 'RBI, साप्ताहिक सांख्यिकीय पूरक, सितंबर 2025' }),
-    slide({ source: 'विश्व बैंक, World Development Indicators 2024' }),
+test('no label, or the literal calculation note, passes', () => {
+  const calc = { type: 'emi', principal: 5000000, rate: 8.5, years: 20 };
+  const problems = checkMoneySources(spec('personal-finance', [
+    slide({ source: null }),
+    slide({ calc, source: 'Calculation: standard EMI formula (monthly reducing balance)' }),
   ]));
   assert.deepEqual(problems, []);
 });
@@ -58,8 +59,8 @@ test('a science post is left alone', () => {
   assert.deepEqual(problems, []);
 });
 
-test('it is advisory: softProblems carries it, validateShape does not', () => {
-  const bad = spec('fundamentals', [slide({ source: 'RBI' })]);
-  assert.equal(softProblems(bad).some((p) => /no year/.test(p)), true);
-  assert.equal(validateShape(bad, []).some((p) => /no year/.test(p)), false);
+test('softProblems carries it to the model; validateShape does not', () => {
+  const bad = spec('fundamentals', [slide({ source: 'RBI, 2025' })]);
+  assert.equal(softProblems(bad).some((p) => /nothing in the pipeline verified/.test(p)), true);
+  assert.equal(validateShape(bad, []).some((p) => /verified/.test(p)), false);
 });

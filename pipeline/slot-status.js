@@ -47,6 +47,8 @@ if (decision.reason === 'duplicate') {
   console.log(`soft skip — ${label} — already posted: "${decision.posted.topic}". Nothing to do.`);
 } else if (decision.reason === 'unknown') {
   console.log(`soft skip — ${label} — unknown slot "${decision.slot}". Skipping.`);
+} else if (decision.reason === 'stale') {
+  console.log(`soft skip — ${label} — the ${decision.slot} schedule arrived outside its IST window. A missed slot is not backfilled.`);
 } else if (decision.reason === 'wrong-time') {
   console.log(`soft skip — ${label} — ${decision.slot} is outside its IST window. Skipping.`);
 } else if (decision.reason === 'outside') {

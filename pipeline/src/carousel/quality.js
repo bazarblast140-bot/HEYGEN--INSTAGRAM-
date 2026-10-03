@@ -1,3 +1,8 @@
+import { computeCalc } from './calc.js';
+import { mismatches, describe } from './figures.js';
+import { stripAllowedEnglish, heavyWordProblems } from './language.js';
+import { FINANCE } from './categories.js';
+
 // Pre-publish quality rules for carousels.
 //
 // Two tiers, so no rule adds a paid loop:
@@ -12,11 +17,19 @@
 // What each rule can and cannot see:
 //   Hindi      — script share of the slide text, after removing tickers/ALL-CAPS
 //                abbreviations, numbers, hashtags and handles. Reliable.
-//   Numbers    — every number-bearing fact slide must carry a real source line
-//                (not the generic filler normalizeSpec writes). For AI/news
-//                slots, every number must also appear in the fetched feed items.
-//                Finance slots have no fetched data to compare against, so for
-//                them only the "has a real, dated source line" part is checked.
+//   Numbers    — finance slots: every content slide carries a structured calc
+//                ({type:'emi', principal, rate, years} ...) and calc.js computes
+//                every figure. Each number the model wrote is re-read
+//                (figures.js) and must match an input or a computed figure
+//                within rounding (>1% off blocks). AI/news slots: every number
+//                must appear in the fetched feed items (or be computed by code
+//                from numbers that do).
+//   Sources    — finance slides show no source label, only the literally true
+//                calculation note from calc.js. AI/news slides may cite only an
+//                outlet that is in the fetched items.
+//   Language   — Devanagari share after removing tickers and the encouraged
+//                English finance words (EMI, interest, loan, tenure, SIP ...);
+//                heavy words (अवधि, मूलधन, प्रतिफल ...) are banned.
 //   Cut-off    — rendered glyph boxes (DOM Range rects in the slide scene)
 //                against a 6% inset, which also covers Instagram's 3:4 grid crop
 //                of a 4:5 post. Reliable for text; pictures are not checked.
@@ -30,8 +43,6 @@ export const HINDI_SOFT = 0.6;
 export const HINDI_HARD = 0.5;
 export const FILLER_SOURCE = 'NSE / BSE public market data, 2024';
 
-const YEAR = /\b(19|20)\d{2}\b/;
-
 function slideText(slide) {
   return [slide?.headline, slide?.subline].filter(Boolean).join(' ');
 }
@@ -41,7 +52,8 @@ const isFact = (slide, i) => i !== 0 && slide?.band !== 'center' && !slide?.cta;
 // ---------------------------------------------------------------- Hindi
 
 export function scriptCounts(text) {
-  const t = String(text || '')
+  const t = stripAllowedEnglish(String(text || '')
+    .replace(/https?:\/\/\S+/g, ' '))
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/[@#][\w\u0900-\u097F]+/g, ' ')
     .replace(/\b[A-Z][A-Z0-9&/.\-]+\b/g, ' ')   // NIFTY, EPS, P/E, CAGR, HDFC
@@ -67,7 +79,7 @@ export function hindiProblems(spec, { min = HINDI_SOFT } = {}) {
   const problems = [];
   const share = hindiShare(spec);
   if (share < min) {
-    problems.push(`slide text is ${Math.round(share * 100)}% Devanagari — write it in Hindi (Devanagari); only tickers/abbreviations like NIFTY, EPS and numbers may stay in English`);
+    problems.push(`slide text is ${Math.round(share * 100)}% Devanagari — write simple Hinglish: Hindi in Devanagari, with common finance words (EMI, interest, loan, tenure, SIP, return, tax) in English`);
   }
   (spec?.slides || []).forEach((slide, i) => {
     const c = scriptCounts(slideText(slide));
@@ -84,41 +96,106 @@ export function numbersIn(text) {
     .map((n) => n.replace(/\.0+$/, ''));
 }
 
-function realSource(source) {
-  const s = String(source || '').trim();
-  return Boolean(s) && s !== FILLER_SOURCE;
+const stripTags = (text) => String(text || '').replace(/[@#][\w.\u0900-\u097F]+/g, ' ');
+
+/** The computed calc for every slide (null where there is none). */
+export function slideCalcs(spec) {
+  return (spec?.slides || []).map((slide) => (slide?.calc ? computeCalc(slide.calc) : null));
 }
 
 /**
- * Hard part: a fact slide that states a number names a real source line.
- * Soft part: that source carries a year, and a number on the cover reappears on
- * a sourced slide (a hook number nobody sources is the easiest one to invent).
- * With fetched items (AI/news slots), every slide number must be in them.
+ * Finance: each content slide needs a valid calc; every figure in its text is
+ * an input or a computed figure (within rounding). The cover, the follow card
+ * and the caption are checked against every slide's figures.
  */
-export function numberProblems(spec, { stories = null, soft = true } = {}) {
+export function financeNumberProblems(spec, { caption = null } = {}) {
   const problems = [];
   const slides = spec?.slides || [];
-  const pool = stories
-    ? new Set(stories.flatMap((s) => [...numbersIn(s.title), ...numbersIn(s.date), ...numbersIn(s.summary)]))
-    : null;
+  const calcs = slideCalcs(spec);
+  const everything = calcs.filter((c) => c?.ok).flatMap((c) => c.all);
   slides.forEach((slide, i) => {
-    const nums = numbersIn(slideText(slide));
-    if (!nums.length || !isFact(slide, i)) return;
-    if (!realSource(slide.source)) {
-      problems.push(`slide ${i + 1} states ${nums.join(', ')} without a real source line`);
-    } else if (soft && !pool && !YEAR.test(String(slide.source))) {
-      problems.push(`slide ${i + 1} states ${nums.join(', ')} but its source "${slide.source}" has no year`);
-    }
-    if (pool) {
-      const missing = nums.filter((n) => !pool.has(n));
-      if (missing.length) problems.push(`slide ${i + 1} has number(s) ${missing.join(', ')} that are not in the fetched source items — use only numbers from the source`);
+    const text = slideText(slide);
+    const calc = calcs[i];
+    if (isFact(slide, i)) {
+      if (!calc) { problems.push(`slide ${i + 1} has no calc — every content slide needs structured inputs for its chart (e.g. {"type":"emi","principal":5000000,"rate":8.5,"years":20})`); return; }
+      if (!calc.ok) { problems.push(`slide ${i + 1} calc is invalid: ${calc.error}`); return; }
+      for (const m of mismatches(text, calc.all)) problems.push(`slide ${i + 1}: ${describe(m)}`);
+    } else {
+      for (const m of mismatches(text, everything)) problems.push(`slide ${i + 1}: ${describe(m)}`);
     }
   });
-  if (soft && slides[0]) {
-    const sourced = new Set(slides.flatMap((s, i) => (isFact(s, i) && realSource(s.source) ? numbersIn(slideText(s)) : [])));
-    const loose = numbersIn(slideText(slides[0])).filter((n) => !sourced.has(n) && !(pool && pool.has(n)));
-    if (loose.length) problems.push(`cover number(s) ${loose.join(', ')} do not appear on any sourced slide`);
+  const cap = caption ?? spec?.caption;
+  if (cap) for (const m of mismatches(stripTags(cap), everything)) problems.push(`caption: ${describe(m)}`);
+  return problems;
+}
+
+/** AI/news: numbers come from the fetched items, or from code over those numbers. */
+export function sourcedNumberProblems(spec, { stories }) {
+  const problems = [];
+  const slides = spec?.slides || [];
+  const pool = new Set(stories.flatMap((s) => [...numbersIn(s.title), ...numbersIn(s.date), ...numbersIn(s.summary)]));
+  const calcs = slideCalcs(spec);
+  slides.forEach((slide, i) => {
+    let allowed = pool;
+    const calc = calcs[i];
+    if (calc?.ok) {
+      const inputs = calc.inputs.map((f) => String(Number(f.value.toFixed(4))));
+      const missingInputs = inputs.filter((n) => !pool.has(n));
+      if (missingInputs.length) problems.push(`slide ${i + 1} chart uses ${missingInputs.join(', ')}, which are not in the fetched source items`);
+      else allowed = new Set([...pool, ...calc.figures.map((f) => f.text.replace(/[^\d.]/g, '')), ...calc.figures.map((f) => String(Math.round(f.value)))]);
+    } else if (calc && !calc.ok) {
+      problems.push(`slide ${i + 1} chart calc is invalid: ${calc.error}`);
+    }
+    const nums = numbersIn(slideText(slide));
+    if (!nums.length || !isFact(slide, i)) return;
+    const missing = nums.filter((n) => !allowed.has(n));
+    if (missing.length) problems.push(`slide ${i + 1} has number(s) ${missing.join(', ')} that are not in the fetched source items — use only numbers from the source`);
+  });
+  return problems;
+}
+
+export function numberProblems(spec, { stories = null, caption = null } = {}) {
+  if (stories) return sourcedNumberProblems(spec, { stories });
+  if (FINANCE.includes(spec?.category)) return financeNumberProblems(spec, { caption });
+  return [];
+}
+
+// ---------------------------------------------------------------- sources
+
+const SOURCE_WORD = /(?:स्रोत|source)\s*:/i;
+
+/**
+ * No source label unless it is verified. Finance: a slide may show only its
+ * calculation note (written by code from calc.js), and the caption names no
+ * source. AI/news: a cited outlet must be one of the fetched items.
+ */
+export function sourceProblems(spec, { stories = null, caption = null } = {}) {
+  const problems = [];
+  const slides = spec?.slides || [];
+  if (stories) {
+    const sites = [...new Set(stories.map((s) => String(s.site || '').toLowerCase()).filter(Boolean))];
+    slides.forEach((slide, i) => {
+      const cited = String(slide.source || '').toLowerCase();
+      if (!cited || !isFact(slide, i)) return;
+      if (!sites.some((site) => cited.includes(site))) problems.push(`slide ${i + 1} cites "${slide.source}", which is not one of the fetched items`);
+    });
+    return problems;
   }
+  if (spec?.category && !FINANCE.includes(spec.category)) {
+    slides.forEach((slide, i) => {
+      if (String(slide.source || '').trim() && isFact(slide, i)) problems.push(`slide ${i + 1} cites "${slide.source}" but no fetched items back it`);
+    });
+    return problems;
+  }
+  const calcs = slideCalcs(spec);
+  slides.forEach((slide, i) => {
+    const shown = String(slide.source || '').trim();
+    if (!shown) return;
+    const note = calcs[i]?.ok ? calcs[i].note : null;
+    if (shown !== note) problems.push(`slide ${i + 1} shows the source label "${shown}", which nothing in the pipeline verified — finance slides carry no source label`);
+  });
+  const cap = caption ?? spec?.caption;
+  if (cap && SOURCE_WORD.test(cap)) problems.push('caption names a source that nothing in the pipeline verified — remove the "स्रोत:" line');
   return problems;
 }
 
@@ -241,7 +318,9 @@ export function layoutProblems(measures, { width, height, story = false, bottomI
 export function softQualityProblems(spec, { stories = null } = {}) {
   return [
     ...hindiProblems(spec, { min: HINDI_SOFT }),
-    ...numberProblems(spec, { stories, soft: true }),
+    ...heavyWordProblems(spec),
+    ...numberProblems(spec, { stories }),
+    ...sourceProblems(spec, { stories }),
     ...leakProblems(spec, { caption: spec?.caption }),
     ...emptyProblems(spec),
   ];
@@ -251,13 +330,15 @@ export function softQualityProblems(spec, { stories = null } = {}) {
 export function hardQualityProblems(spec, { stories = null, caption = '' } = {}) {
   return [
     ...hindiProblems(spec, { min: HINDI_HARD }),
-    ...numberProblems(spec, { stories, soft: false }),
+    ...heavyWordProblems(spec, { caption }),
+    ...numberProblems(spec, { stories, caption }),
+    ...sourceProblems(spec, { stories, caption }),
     ...leakProblems(spec, { caption }),
     ...emptyProblems(spec),
   ];
 }
 
 export const UNCHECKED = [
-  'finance-slot numbers are not compared with data (there is no fetched data for them); only a real, dated source line is required',
-  'pictures are not checked for cut-off; only rendered text is measured',
+  'finance calc inputs (e.g. an 8.5% rate) are the model\'s assumptions; the code computes every figure from them but does not check the rate against a bank\'s live card',
+  'chart graphics are not measured for cut-off; only rendered text is measured',
 ];

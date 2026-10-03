@@ -1,0 +1,430 @@
+<!doctype html>
+<!--
+  v3 dark chart-board slide (ported from the Paise Ki Pathshala "Chart Board"
+  look): deep navy terminal background with a faint 54px grid and vignette, one
+  rounded navy card with a thin gold edge, yellow headline, off-white copy,
+  muted labels, and a chart drawn from numbers the CODE computed (calc.js).
+  No photographs, ever.
+
+  Palette (from board_kit.py / scene_frames.py):
+    bg top #070C18 → bottom #040810, grid #121C2A, card #0C1220, gold #D4A848,
+    yellow #FACC15, ink #E2E8F0, muted #94A3B8, green #22C55E, red #EF4444,
+    blue #60A5FA, plot grid #202C40.
+
+  Static and deterministic: render-slides.js calls __slide.load(data) once per
+  slide and screenshots; __slide.measure() returns rendered text boxes for the
+  6% safe-area gate.
+-->
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Inter'; src: url('../../../assets/fonts-ttf/inter-600.ttf') format('truetype'); font-weight: 600; }
+  @font-face { font-family: 'Inter'; src: url('../../../assets/fonts-ttf/inter-700.ttf') format('truetype'); font-weight: 700 900; }
+  @font-face {
+    font-family: 'Noto Devanagari';
+    src: url('../../../assets/fonts-ttf/noto-devanagari.ttf') format('truetype-variations');
+    font-weight: 100 900;
+  }
+  :root {
+    --gold: #D4A848; --yellow: #FACC15; --ink: #E2E8F0; --muted: #94A3B8;
+    --green: #22C55E; --red: #EF4444; --blue: #60A5FA; --card: #0C1220;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: var(--stage-w, 1080px); height: var(--stage-h, 1350px);
+    background: #040810;
+    font-family: 'Inter', 'Noto Devanagari', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #stage {
+    position: relative; overflow: hidden;
+    width: var(--stage-w, 1080px); height: var(--stage-h, 1350px);
+    background:
+      radial-gradient(ellipse 85% 75% at 50% 45%, transparent 40%, rgba(0,0,0,.55) 100%),
+      repeating-linear-gradient(90deg, #121C2A 0 1px, transparent 1px 54px),
+      repeating-linear-gradient(0deg, #121C2A 0 1px, transparent 1px 54px),
+      linear-gradient(180deg, #070C18 0%, #040810 100%);
+  }
+  #card {
+    position: absolute; left: 72px; right: 72px; top: 96px; bottom: 150px;
+    background: var(--card); border: 2px solid var(--gold); border-radius: 26px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.55);
+    padding: 40px 44px 30px;
+    display: flex; flex-direction: column;
+  }
+  #top { display: flex; align-items: center; justify-content: space-between; height: 46px; flex: 0 0 auto; }
+  #kicker {
+    background: var(--yellow); color: #0A0A0A; border-radius: 23px;
+    font-weight: 700; font-size: 24px; line-height: 46px; padding: 0 20px; white-space: nowrap;
+  }
+  #page { color: var(--muted); font-weight: 600; font-size: 26px; }
+  #bar { height: 8px; width: 62%; margin: 28px auto 34px; background: var(--yellow); border-radius: 4px; flex: 0 0 auto; }
+  #headline {
+    color: var(--yellow); font-weight: 800; font-variation-settings: 'wght' 800;
+    line-height: 1.22; white-space: pre-line; margin-top: 26px;
+  }
+  #subline {
+    color: var(--ink); font-weight: 600; font-variation-settings: 'wght' 600;
+    line-height: 1.3; white-space: pre-line; margin-top: 14px;
+  }
+  .cover #headline, .cta #headline { text-align: center; margin-top: 0; }
+  .cover #subline, .cta #subline { text-align: center; }
+  #chartwrap { flex: 1 1 auto; min-height: 0; margin-top: 24px; position: relative; }
+  #chart { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  #chart text { font-family: 'Inter', 'Noto Devanagari', sans-serif; }
+  #figures { display: flex; gap: 16px; margin-top: 20px; flex: 0 0 auto; }
+  .fig {
+    flex: 1 1 0; min-width: 0; background: #0F1A2E; border: 1px solid #2A3A55; border-radius: 16px;
+    padding: 14px 16px 12px;
+  }
+  .fig .l { color: var(--muted); font-size: 24px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+  .fig .v { color: var(--ink); font-size: 40px; font-weight: 700; white-space: nowrap; margin-top: 2px; }
+  .fig.hot .v { color: var(--yellow); }
+  #footnote { color: var(--muted); font-size: 23px; font-weight: 600; line-height: 1.3; margin-top: 16px; flex: 0 0 auto; }
+  #callout { color: var(--yellow); font-size: 40px; font-weight: 700; text-align: center; margin-top: 22px; flex: 0 0 auto; }
+  #handle { position: absolute; left: 88px; color: var(--gold); font-size: 28px; font-weight: 700; }
+  #progress { position: absolute; left: 72px; right: 72px; height: 8px; border-radius: 4px; background: #1C2434; }
+  #progress i { display: block; height: 100%; border-radius: 4px; background: var(--gold); }
+  .hidden { display: none !important; }
+  .cta #chartwrap { display: flex; align-items: center; justify-content: center; }
+  /* A news fact with no numbers to chart: the copy sits centred on the board
+     with a gold rule, instead of a photo. */
+  .nochart #bar { display: block !important; margin: auto auto 34px; }
+  .nochart #footnote { margin-top: auto; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="card">
+      <div id="top"><span id="kicker"></span><span id="page"></span></div>
+      <div id="bar" class="hidden"></div>
+      <div id="headline"></div>
+      <div id="subline"></div>
+      <div id="chartwrap"><svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div id="figures"></div>
+      <div id="footnote"></div>
+      <div id="callout" class="hidden"></div>
+    </div>
+    <div id="handle"></div>
+    <div id="progress"><i></i></div>
+  </div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const COLORS = { green: '#22C55E', red: '#EF4444', blue: '#60A5FA', yellow: '#FACC15', muted: '#94A3B8', gold: '#D4A848', ink: '#E2E8F0' };
+  const col = (c) => COLORS[c] || c || COLORS.blue;
+
+  const trim = (v, d) => String(Number(Number(v).toFixed(d)));
+  function fmt(v, unit) {
+    const a = Math.abs(v); const s = v < 0 ? '-' : '';
+    if (unit === 'PCT') return `${trim(v, 1)}%`;
+    if (unit === 'INR') {
+      if (a >= 1e7) return `${s}₹${trim(a / 1e7, 2)}Cr`;
+      if (a >= 1e5) return `${s}₹${trim(a / 1e5, 2)}L`;
+      if (a >= 1e3) return `${s}₹${trim(a / 1e3, 1)}K`;
+      return `${s}₹${Math.round(a)}`;
+    }
+    if (a >= 1e7) return `${s}${trim(a / 1e7, 2)}Cr`;
+    if (a >= 1e5) return `${s}${trim(a / 1e5, 2)}L`;
+    return `${s}${a >= 100 ? Math.round(a).toLocaleString('en-IN') : trim(a, 2)}`;
+  }
+
+  function el(name, attrs = {}, parent) {
+    const node = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  function text(parent, x, y, str, { size = 24, fill = COLORS.muted, anchor = 'middle', weight = 600 } = {}) {
+    const t = el('text', { x, y, 'font-size': size, fill, 'text-anchor': anchor, 'font-weight': weight }, parent);
+    t.textContent = str;
+    return t;
+  }
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const p = 10 ** Math.floor(Math.log10(v));
+    for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+    return 10 * p;
+  }
+  function frame(svg, W, H, lo, hi, unit, { left = 120, bottom = 50, top = 54, rows = 4 } = {}) {
+    const box = { x0: left, x1: W - 16, y0: top, y1: H - bottom };
+    const y = (v) => box.y1 - ((v - lo) / (hi - lo || 1)) * (box.y1 - box.y0);
+    for (let k = 0; k <= rows; k += 1) {
+      const v = lo + ((hi - lo) * k) / rows;
+      const yy = y(v);
+      el('line', { x1: box.x0, x2: box.x1, y1: yy, y2: yy, stroke: k === 0 ? '#3A4A66' : '#202C40', 'stroke-width': k === 0 ? 2 : 1 }, svg);
+      text(svg, box.x0 - 12, yy + 8, fmt(v, unit), { size: 22, anchor: 'end' });
+    }
+    return { box, y };
+  }
+  function title(svg, str) { if (str) text(svg, 0, 30, str, { size: 26, fill: COLORS.ink, anchor: 'start', weight: 700 }); }
+
+  const DRAW = {
+    split(svg, W, H, c) {
+      title(svg, c.title);
+      const total = c.parts.reduce((sum, p) => sum + p.value, 0) || 1;
+      const barY = 56; const barH = Math.max(60, Math.min(110, H * 0.28)); let x = 0;
+      c.parts.forEach((p) => {
+        const w = (p.value / total) * W;
+        el('rect', { x, y: barY, width: Math.max(2, w - 4), height: barH, rx: 14, fill: col(p.color) }, svg);
+        text(svg, x + w / 2 - 2, barY + barH / 2 + 13, `${trim((p.value / total) * 100, 1)}%`, { size: 36, fill: '#0A0A0A', weight: 800 });
+        x += w;
+      });
+      const room = H - (barY + barH) - 10;
+      const gap = Math.min(66, room / (c.parts.length + 1.2));
+      if (gap < 44) {
+        // compact: one legend line under the bar
+        let lx = 0;
+        c.parts.forEach((p) => {
+          el('rect', { x: lx, y: barY + barH + 18, width: 24, height: 24, rx: 6, fill: col(p.color) }, svg);
+          const t = text(svg, lx + 34, barY + barH + 39, `${p.name} ${fmt(p.value, c.unit)}`, { size: 26, fill: COLORS.ink, anchor: 'start' });
+          lx += t.getComputedTextLength() + 70;
+        });
+        return;
+      }
+      let ly = barY + barH + gap;
+      c.parts.forEach((p) => {
+        el('rect', { x: 0, y: ly - 28, width: 34, height: 34, rx: 8, fill: col(p.color) }, svg);
+        text(svg, 52, ly, p.name, { size: 32, fill: COLORS.ink, anchor: 'start' });
+        text(svg, W, ly, fmt(p.value, c.unit), { size: 40, fill: COLORS.ink, anchor: 'end', weight: 800 });
+        ly += gap;
+      });
+      el('line', { x1: 0, x2: W, y1: ly - gap * 0.6, y2: ly - gap * 0.6, stroke: '#2A3A55', 'stroke-width': 2 }, svg);
+      text(svg, 52, ly + 6, 'Total', { size: 32, fill: COLORS.yellow, anchor: 'start', weight: 700 });
+      text(svg, W, ly + 6, fmt(total, c.unit), { size: 40, fill: COLORS.yellow, anchor: 'end', weight: 800 });
+    },
+    line(svg, W, H, c) {
+      title(svg, c.title);
+      const all = c.series.flatMap((s) => s.points);
+      const xs = all.map((p) => p[0]); const vs = all.map((p) => p[1]);
+      const xlo = Math.min(...xs); const xhi = Math.max(...xs);
+      const lo = Math.min(0, ...vs); const hi = niceMax(Math.max(...vs) * 1.05);
+      const { box, y } = frame(svg, W, H, lo, hi, c.unit);
+      const x = (v) => box.x0 + ((v - xlo) / (xhi - xlo || 1)) * (box.x1 - box.x0 - 10);
+      const step = Math.max(1, Math.ceil((xhi - xlo) / 6));
+      for (let v = xlo; v <= xhi + 1e-9; v += step) text(svg, x(v), box.y1 + 36, `${c.xLabel === 'year' ? 'Y' : ''}${trim(v, 0)}`, { size: 22 });
+      c.series.forEach((s, si) => {
+        const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(' ');
+        if (si === 0) {
+          const area = `${d} L${x(s.points.at(-1)[0]).toFixed(1)},${y(lo)} L${x(s.points[0][0]).toFixed(1)},${y(lo)} Z`;
+          el('path', { d: area, fill: col(s.color), opacity: 0.14 }, svg);
+        }
+        el('path', { d, fill: 'none', stroke: col(s.color), 'stroke-width': si === 0 ? 7 : 4, 'stroke-dasharray': s.color === 'muted' ? '14 10' : 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+        const end = s.points.at(-1);
+        el('circle', { cx: x(end[0]), cy: y(end[1]), r: 9, fill: col(s.color) }, svg);
+      });
+      // legend
+      let lx = W;
+      [...c.series].reverse().forEach((s) => {
+        const t = text(svg, lx, 30, s.name, { size: 24, fill: col(s.color), anchor: 'end', weight: 700 });
+        lx -= t.getComputedTextLength() + 34;
+        el('rect', { x: lx + 6, y: 12, width: 20, height: 20, rx: 5, fill: col(s.color) }, svg);
+        lx -= 18;
+      });
+    },
+    bars(svg, W, H, c) {
+      title(svg, c.title);
+      const lo = Math.min(0, ...c.values); const hi = niceMax(Math.max(...c.values.map(Math.abs)) * 1.12);
+      const { box, y } = frame(svg, W, H, lo, hi, c.unit, { bottom: 60 });
+      const n = c.values.length; const slot = (box.x1 - box.x0) / n; const bw = Math.min(170, slot * 0.58);
+      c.values.forEach((v, i) => {
+        const cx = box.x0 + slot * (i + 0.5);
+        const top = Math.min(y(v), y(0)); const h = Math.max(4, Math.abs(y(v) - y(0)));
+        el('rect', { x: cx - bw / 2, y: top, width: bw, height: h, rx: 10, fill: col((c.colors || [])[i]) }, svg);
+        text(svg, cx, top - 14, fmt(v, c.unit), { size: 32, fill: COLORS.ink, weight: 800 });
+        text(svg, cx, box.y1 + 40, c.labels[i], { size: 26, fill: COLORS.muted });
+      });
+    },
+    stackbars(svg, W, H, c) {
+      title(svg, c.title);
+      const n = c.labels.length;
+      const totals = c.labels.map((_, i) => c.stacks.reduce((s, st) => s + st.values[i], 0));
+      const hi = niceMax(Math.max(...totals) * 1.05);
+      const { box, y } = frame(svg, W, H, 0, hi, c.unit);
+      const slot = (box.x1 - box.x0) / n; const bw = Math.max(6, slot * 0.66);
+      for (let i = 0; i < n; i += 1) {
+        let base = 0; const cx = box.x0 + slot * (i + 0.5);
+        c.stacks.forEach((st) => {
+          const v = st.values[i];
+          el('rect', { x: cx - bw / 2, y: y(base + v), width: bw, height: Math.max(1, y(base) - y(base + v)), fill: col(st.color) }, svg);
+          base += v;
+        });
+        if (n <= 10 || i === 0 || (i + 1) % 5 === 0) text(svg, cx, box.y1 + 34, c.labels[i], { size: 20 });
+      }
+      let lx = W;
+      [...c.stacks].reverse().forEach((s) => {
+        const t = text(svg, lx, 30, s.name, { size: 24, fill: col(s.color), anchor: 'end', weight: 700 });
+        lx -= t.getComputedTextLength() + 34;
+        el('rect', { x: lx + 6, y: 12, width: 20, height: 20, rx: 5, fill: col(s.color) }, svg);
+        lx -= 18;
+      });
+    },
+    groupbars(svg, W, H, c) {
+      title(svg, c.title);
+      const hi = niceMax(Math.max(...c.groups.flatMap((g) => g.values)) * 1.12);
+      const { box, y } = frame(svg, W, H, 0, hi, c.unit, { bottom: 60 });
+      const n = c.labels.length; const slot = (box.x1 - box.x0) / n; const g = c.groups.length;
+      const bw = Math.min(110, (slot * 0.74) / g);
+      c.labels.forEach((label, i) => {
+        const cx = box.x0 + slot * (i + 0.5);
+        c.groups.forEach((grp, k) => {
+          const v = grp.values[i]; const x = cx - (g * bw) / 2 + k * bw;
+          el('rect', { x: x + 3, y: y(v), width: bw - 6, height: Math.max(3, y(0) - y(v)), rx: 8, fill: col(grp.color) }, svg);
+          text(svg, x + bw / 2, y(v) - 12, fmt(v, c.unit), { size: 24, fill: COLORS.ink, weight: 800 });
+        });
+        text(svg, cx, box.y1 + 40, label, { size: 26 });
+      });
+      let lx = W;
+      [...c.groups].reverse().forEach((s) => {
+        const t = text(svg, lx, 30, s.name, { size: 24, fill: col(s.color), anchor: 'end', weight: 700 });
+        lx -= t.getComputedTextLength() + 34;
+        el('rect', { x: lx + 6, y: 12, width: 20, height: 20, rx: 5, fill: col(s.color) }, svg);
+        lx -= 18;
+      });
+    },
+    payoff(svg, W, H, c) {
+      title(svg, c.title);
+      const pts = c.series[0].points; const vs = pts.map((p) => p[1]);
+      const lo = Math.min(...vs); const hi = Math.max(...vs, 0);
+      const pad = (hi - lo) * 0.1;
+      const { box, y } = frame(svg, W, H, lo - pad, hi + pad, c.unit);
+      const xlo = pts[0][0]; const xhi = pts.at(-1)[0];
+      const x = (v) => box.x0 + ((v - xlo) / (xhi - xlo)) * (box.x1 - box.x0);
+      el('line', { x1: box.x0, x2: box.x1, y1: y(0), y2: y(0), stroke: COLORS.ink, 'stroke-width': 2 }, svg);
+      for (let i = 0; i < pts.length - 1; i += 1) {
+        const m = (pts[i][1] + pts[i + 1][1]) / 2;
+        el('line', { x1: x(pts[i][0]), y1: y(pts[i][1]), x2: x(pts[i + 1][0]), y2: y(pts[i + 1][1]), stroke: m >= 0 ? COLORS.green : COLORS.red, 'stroke-width': 8, 'stroke-linecap': 'round' }, svg);
+      }
+      for (const [v, label, color] of [[c.strike, `Strike ${fmt(c.strike, 'NUM')}`, COLORS.muted], [c.breakeven, `BE ${fmt(c.breakeven, 'NUM')}`, COLORS.yellow]]) {
+        el('line', { x1: x(v), x2: x(v), y1: box.y0, y2: box.y1, stroke: color, 'stroke-width': 2, 'stroke-dasharray': '10 8' }, svg);
+        text(svg, x(v), box.y1 + 36, label, { size: 22, fill: color, weight: 700 });
+      }
+    },
+  };
+
+  function fitText(node, { max, min, maxHeight, maxLines = 2 }) {
+    const breaks = (node.textContent.match(/\n/g) || []).length;
+    const wanted = breaks ? breaks + 1 : maxLines;
+    let size = max;
+    node.style.fontSize = size + 'px';
+    const lines = () => Math.round(node.scrollHeight / parseFloat(getComputedStyle(node).lineHeight));
+    while (size > min && (node.scrollHeight > maxHeight || lines() > wanted)) { size -= 2; node.style.fontSize = size + 'px'; }
+  }
+
+  window.__slide = {
+    size(w, h) {
+      const root = document.documentElement.style;
+      root.setProperty('--stage-w', w + 'px');
+      root.setProperty('--stage-h', h + 'px');
+    },
+    load(data) {
+      const {
+        headline = '', subline = '', footnote = '', callout = '', band = 'bottom', cta = false,
+        chart = null, figures = [], kicker = '', page = '', handle = '', progress = 0,
+        bottomInset = 0, tight = false,
+      } = data;
+      const story = Boolean(bottomInset);
+      const H = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-h')) || 1350;
+      const card = $('card');
+      const cover = band === 'center';
+      card.className = cover ? 'cover' : cta ? 'cta' : chart ? 'fact' : 'fact nochart';
+      // Feed: card 96..1200 (safe 81..1269). Story: 250..(H - bottomInset - 20).
+      card.style.top = (story ? 250 : 96) + 'px';
+      card.style.bottom = (story ? bottomInset + 20 : 150) + 'px';
+      $('handle').style.top = (story ? H - bottomInset + 12 : 1218) + 'px';
+      $('handle').classList.toggle('hidden', story || !handle);
+      $('progress').style.top = (story ? H - bottomInset - 4 : 1262) + 'px';
+      $('progress').classList.toggle('hidden', story);
+      $('progress').querySelector('i').style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+
+      $('kicker').textContent = kicker; $('kicker').classList.toggle('hidden', !kicker);
+      $('page').textContent = page;
+      $('handle').textContent = handle;
+      $('bar').classList.toggle('hidden', !(cover || cta));
+
+      const h = $('headline'); const s = $('subline'); const f = $('footnote'); const c = $('callout');
+      h.textContent = headline; s.textContent = subline || ''; f.textContent = footnote || ''; c.textContent = callout || '';
+      s.classList.toggle('hidden', !subline); f.classList.toggle('hidden', !footnote); c.classList.toggle('hidden', !callout);
+
+      const k = tight ? 0.86 : 1;
+      const fit = (o) => ({ ...o, max: Math.round(o.max * k), min: Math.round(o.min * k) });
+      if (cover || cta) fitText(h, fit({ max: 104, min: 64, maxHeight: 400, maxLines: 3 }));
+      else if (!chart) fitText(h, fit({ max: 88, min: 54, maxHeight: 330, maxLines: 3 }));
+      else fitText(h, fit({ max: 70, min: 46, maxHeight: 180, maxLines: 2 }));
+      if (subline) fitText(s, fit({ max: cover || cta || !chart ? 50 : 42, min: 30, maxHeight: 130, maxLines: 2 }));
+
+      const figs = $('figures');
+      figs.innerHTML = '';
+      (figures || []).slice(0, 3).forEach((fg, i) => {
+        const d = document.createElement('div');
+        d.className = 'fig' + (i === (figures.length > 2 ? 1 : figures.length - 1) ? ' hot' : '');
+        d.id = `fig-${i}`;
+        const l = document.createElement('div'); l.className = 'l'; l.textContent = fg.label;
+        const v = document.createElement('div'); v.className = 'v'; v.textContent = fg.text;
+        d.append(l, v); figs.appendChild(d);
+        let size = 40;
+        while (size > 24 && v.scrollWidth > v.clientWidth + 1) { size -= 2; v.style.fontSize = size + 'px'; }
+      });
+      figs.classList.toggle('hidden', !(figures || []).length);
+
+      const svg = $('chart');
+      svg.innerHTML = '';
+      const wrap = $('chartwrap');
+      wrap.classList.toggle('hidden', !chart && !cta);
+      if (chart && DRAW[chart.kind]) {
+        const r = wrap.getBoundingClientRect();
+        const W = Math.max(200, r.width); const HH = Math.max(160, r.height);
+        svg.setAttribute('viewBox', `0 0 ${W} ${HH}`);
+        DRAW[chart.kind](svg, W, HH, chart);
+      } else if (cta) {
+        const r = wrap.getBoundingClientRect();
+        const W = Math.max(200, r.width); const HH = Math.max(160, r.height);
+        svg.setAttribute('viewBox', `0 0 ${W} ${HH}`);
+        const cx = W / 2; const cy = HH / 2;
+        el('rect', { x: cx - 330, y: cy - 60, width: 660, height: 120, rx: 60, fill: '#0F1A2E', stroke: COLORS.gold, 'stroke-width': 3 }, svg);
+        text(svg, cx, cy + 14, handle || '', { size: 42, fill: COLORS.yellow, weight: 800 });
+      }
+      document.body.dataset.ready = '1';
+    },
+    measure() {
+      const out = { boxes: [], clipped: [] };
+      const add = (id, node) => {
+        if (!node || node.classList.contains('hidden') || !node.textContent.trim()) return;
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden') return;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+        if (!rects.length) return;
+        out.boxes.push({
+          id,
+          left: Math.min(...rects.map((r) => r.left)), top: Math.min(...rects.map((r) => r.top)),
+          right: Math.max(...rects.map((r) => r.right)), bottom: Math.max(...rects.map((r) => r.bottom)),
+          text: node.textContent.slice(0, 40),
+        });
+        if (node.scrollWidth > node.clientWidth + 2) out.clipped.push(id);
+      };
+      for (const id of ['headline', 'subline', 'footnote', 'callout', 'handle', 'kicker']) add(id, $(id));
+      document.querySelectorAll('.fig .v').forEach((v, i) => add(`figure-${i + 1}`, v));
+      // Chart text (axis labels, values) must also stay inside the safe area.
+      const svgRect = $('chart').getBoundingClientRect();
+      if (svgRect.width) {
+        const texts = [...$('chart').querySelectorAll('text')].map((t) => t.getBoundingClientRect()).filter((r) => r.width);
+        if (texts.length) {
+          out.boxes.push({
+            id: 'chart-labels',
+            left: Math.min(...texts.map((r) => r.left)), top: Math.min(...texts.map((r) => r.top)),
+            right: Math.max(...texts.map((r) => r.right)), bottom: Math.max(...texts.map((r) => r.bottom)),
+            text: 'chart',
+          });
+        }
+      }
+      return out;
+    },
+  };
+})();
+</script>
+</body>
+</html>
