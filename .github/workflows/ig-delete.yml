@@ -1,0 +1,42 @@
+name: IG delete post
+on:
+  workflow_dispatch:
+    inputs:
+      ig_media_id:
+        description: "IG media id to delete"
+        required: true
+      must_contain:
+        description: "Caption must contain this text (safety check)"
+        required: true
+      fb_id:
+        description: "Optional FB Page post id of the cross-post copy to delete too"
+        required: false
+      dry_run:
+        description: "Only show the post, don't delete"
+        type: boolean
+        default: true
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check and delete
+        env:
+          IGT: ${{ secrets.IG_ACCESS_TOKEN }}
+          FBT: ${{ secrets.FB_PAGE_TOKEN }}
+          IGID: ${{ inputs.ig_media_id }}
+          FBID: ${{ inputs.fb_id }}
+          MUST: ${{ inputs.must_contain }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          G=https://graph.facebook.com/v21.0
+          [[ "$IGID" =~ ^[0-9]+$ ]] || { echo "bad ig id"; exit 1; }
+          [[ -z "$FBID" || "$FBID" =~ ^[0-9_]+$ ]] || { echo "bad fb id"; exit 1; }
+          curl -sS "$G/$IGID?fields=id,media_type,timestamp,permalink,caption&access_token=$IGT" > m.json
+          python3 -c "import json;d=json.load(open('m.json'));print(json.dumps({k:(v[:300] if isinstance(v,str) else v) for k,v in d.items()},ensure_ascii=False,indent=1))"
+          python3 -c "import json,os,sys;d=json.load(open('m.json'));sys.exit(0 if os.environ['MUST'] in d.get('caption','') else 1)" || { echo "caption check FAILED"; exit 1; }
+          if [ -n "$FBID" ]; then curl -sS "$G/$FBID?fields=id,created_time,permalink_url,message&access_token=$FBT" | python3 -c "import json,sys;d=json.load(sys.stdin);d['message']=d.get('message','')[:200];print(json.dumps(d,ensure_ascii=False,indent=1))"; fi
+          [ "$DRY" = "true" ] && { echo "dry run, nothing deleted"; exit 0; }
+          echo "IG delete:"; curl -sS -X DELETE "$G/$IGID?access_token=$IGT"; echo
+          echo "IG GET after: $(curl -s -o /dev/null -w '%{http_code}' "$G/$IGID?fields=id&access_token=$IGT")"
+          if [ -n "$FBID" ]; then echo "FB delete:"; curl -sS -X DELETE "$G/$FBID?access_token=$FBT"; echo
+            echo "FB GET after: $(curl -s -o /dev/null -w '%{http_code}' "$G/$FBID?fields=id&access_token=$FBT")"; fi
