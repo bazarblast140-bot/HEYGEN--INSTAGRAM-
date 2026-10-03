@@ -35,7 +35,7 @@ import { ACCOUNT_BRAND } from './src/publish/allow.js';
 import { framesToPost } from './src/carousel/story.js';
 import { shapeCaption } from './src/publish/caption.js';
 import {
-  dropPaddedPanels, layoutProblems, hardQualityProblems, hindiShare, UNCHECKED,
+  dropPaddedPanels, layoutProblems, hardQualityProblems, hindiShare, UNCHECKED, storyNumbers, chartBackedBy,
 } from './src/carousel/quality.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -288,16 +288,21 @@ async function main() {
 
   // A news/AI chart whose inputs do not compute is dropped (the slide becomes a
   // text board); its numbers are still checked against the fetched items.
+  // Same for a chart built on a number the model derived itself (e.g. adding two
+  // reported figures): a chart input must be a number in the fetched items.
   if (!FINANCE.includes(spec.category)) {
+    const pool = fetchedStories ? storyNumbers(fetchedStories) : null;
     let dropped = 0;
     spec = {
       ...spec,
       slides: spec.slides.map((s) => {
-        if (s.calc && !computeCalc(s.calc).ok) { dropped += 1; return { ...s, calc: null }; }
+        if (!s.calc) return s;
+        const calc = computeCalc(s.calc);
+        if (!calc.ok || (pool && !chartBackedBy(calc, pool))) { dropped += 1; return { ...s, calc: null }; }
         return s;
       }),
     };
-    if (dropped) note(`dropped ${dropped} news chart(s) whose inputs do not compute`);
+    if (dropped) note(`dropped ${dropped} news chart(s) whose inputs do not compute or are not in the fetched items`);
   }
 
   // v3 chart-board: chart, figure strip and footnote come from calc.js. No

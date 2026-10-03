@@ -136,6 +136,16 @@ export function financeNumberProblems(spec, { caption = null } = {}) {
   return problems;
 }
 
+/** Numbers that appear in the fetched items, as numbersIn() writes them. */
+export function storyNumbers(stories = []) {
+  return new Set(stories.flatMap((s) => [...numbersIn(s.title), ...numbersIn(s.date), ...numbersIn(s.summary)]));
+}
+
+/** True when every input of a news chart is a number from the fetched items. */
+export function chartBackedBy(calc, pool) {
+  return Boolean(calc?.ok) && calc.inputs.every((f) => pool.has(String(Number(f.value.toFixed(4)))));
+}
+
 /** AI/news: numbers come from the fetched items, or from code over those numbers. */
 export function sourcedNumberProblems(spec, { stories }) {
   const problems = [];

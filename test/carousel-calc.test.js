@@ -174,3 +174,12 @@ test('the generator keeps the attempt that passes the final gate, without anothe
   assert.equal(betterCandidate(null, broken), null, 'a reply with a broken shape is never kept');
   assert.equal(betterCandidate(a3, { attempt: 3, shape: [], gate: [] }).gate.length, 0);
 });
+
+test('a news chart must be built only from numbers in the fetched items', async () => {
+  const { storyNumbers, chartBackedBy } = await import('../pipeline/src/carousel/quality.js');
+  const pool = storyNumbers([{ title: 'Forex reserves fall $18.343 billion to $747.56 billion', date: '2026-10-02' }]);
+  const derived = computeCalc({ type: 'change', from: 765.903, to: 747.56, unit: 'num' });
+  assert.equal(chartBackedBy(derived, pool), false, '765.903 is the model adding two reported numbers');
+  const reported = computeCalc({ type: 'compare', unit: 'num', items: [{ label: 'Fall', value: 18.343 }, { label: 'Reserves', value: 747.56 }] });
+  assert.equal(chartBackedBy(reported, pool), true);
+});
