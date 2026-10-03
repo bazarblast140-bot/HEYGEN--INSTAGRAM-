@@ -34,7 +34,10 @@ CALC TYPES (exact keys; amounts रुपये में plain numbers, rates %
 - {"type":"position","capital":100000,"riskPct":1,"entry":500,"stop":490}
 - {"type":"expectancy","winRate":40,"reward":2,"risk":1}
 - {"type":"option","kind":"long_call"|"long_put","strike":24000,"premium":120,"lot":75}
+- {"type":"operating_leverage","sales":100,"variableCost":60,"fixedCost":30,"salesChangePct":10,"unit":"num"|"INR"}   code निकालेगा contribution, operating profit, leverage (x), profit change %
+- {"type":"margin","revenue":100,"cost":80,"costLabel":"Total cost","unit":"num"|"INR"}   profit और margin %
 - {"type":"compare","unit":"INR"|"%"|"num","items":[{"label":"FD","value":7},{"label":"SIP","value":12}]}   labels short English (≤14 chars)
+  compare सिर्फ़ अलग-अलग assumptions की side-by-side तुलना के लिए है (जैसे FD 7% vs SIP 12% assumed). जो result किसी formula से निकलता है (profit change, EMI, interest, CAGR, margin) उसे compare की value मत बनाओ — matching type दो, code निकालेगा. पूरे carousel में compare ज़्यादा से ज़्यादा 2 slides.
 एक ही topic के slides में same base example रखो और views/angles बदलो (जैसे EMI split → balance curve → yearly → tenure compare → prepayment compare).
 
 LANGUAGE — simple Hinglish

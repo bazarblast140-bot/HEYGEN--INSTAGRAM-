@@ -170,6 +170,44 @@ const TYPES = {
       note: 'Calculation: standard EMI formula (monthly reducing balance) for each tenure',
     };
   },
+  operating_leverage(c) {
+    need(c, 'sales', 'variableCost', 'fixedCost', 'salesChangePct');
+    const S = num(c.sales); const V = num(c.variableCost); const F = num(c.fixedCost); const ch = num(c.salesChangePct);
+    range('salesChangePct', ch, -90, 300);
+    const C = S - V; const E = C - F;
+    if (!(S > 0) || !(V >= 0) || !(F >= 0)) throw new Error('operating_leverage needs sales > 0, costs >= 0');
+    if (!(E > 0)) throw new Error('operating_leverage needs operating profit (sales − variable − fixed) > 0');
+    const dol = C / E; const profitChange = ch * dol;
+    const newSales = S * (1 + ch / 100); const newEbit = C * (1 + ch / 100) - F;
+    const unit = c.unit === 'INR' ? UNITS.INR : UNITS.NUM;
+    const val = (k, l, v) => (unit === UNITS.INR ? inr(k, l, v) : plain(k, l, v, UNITS.NUM, trim(v, 2)));
+    return {
+      inputs: [val('sales', 'Sales', S), val('variableCost', 'Variable cost', V), val('fixedCost', 'Fixed cost', F), pct('salesChangePct', 'Sales change', ch, 2)],
+      figures: [val('contribution', 'Contribution', C), val('ebit', 'Operating profit', E), plain('dol', 'Operating leverage', dol, UNITS.NUM, `${trim(dol, 2)}x`),
+        pct('profitChangePct', 'Profit change', profitChange), val('newSales', 'New sales', newSales), val('newEbit', 'New operating profit', newEbit),
+        pct('contributionMargin', 'Contribution margin', (C / S) * 100), pct('ebitMargin', 'Operating margin', (E / S) * 100)],
+      highlight: ['salesChangePct', 'dol', 'profitChangePct'],
+      chart: { kind: 'bars', title: 'Sales change vs operating profit change', unit: 'PCT', labels: ['Sales', 'Operating profit'],
+        values: [ch, profitChange], colors: [ch >= 0 ? 'blue' : 'red', profitChange >= 0 ? 'green' : 'red'] },
+      note: 'Calculation: operating leverage = contribution ÷ operating profit; profit change = sales change × leverage',
+    };
+  },
+  margin(c) {
+    need(c, 'revenue', 'cost');
+    const Rv = num(c.revenue); const Co = num(c.cost);
+    if (!(Rv > 0) || !(Co >= 0)) throw new Error('margin needs revenue > 0, cost >= 0');
+    const unit = c.unit === 'INR' ? UNITS.INR : UNITS.NUM;
+    const val = (k, l, v) => (unit === UNITS.INR ? inr(k, l, v) : plain(k, l, v, UNITS.NUM, trim(v, 2)));
+    const P = Rv - Co;
+    return {
+      inputs: [val('revenue', String(c.revenueLabel || 'Revenue').slice(0, 18), Rv), val('cost', String(c.costLabel || 'Cost').slice(0, 18), Co)],
+      figures: [val('profit', 'Profit', P), pct('marginPct', 'Margin', (P / Rv) * 100)],
+      highlight: ['revenue', 'profit', 'marginPct'],
+      chart: { kind: 'split', title: 'Where each rupee of revenue goes', unit: unit === UNITS.INR ? 'INR' : 'NUM',
+        parts: [{ name: String(c.costLabel || 'Cost').slice(0, 18), color: 'red', value: Co }, { name: 'Profit', color: 'green', value: Math.max(P, 0) }] },
+      note: 'Calculation: margin = (revenue − cost) ÷ revenue',
+    };
+  },
   sip(c) {
     need(c, 'monthly', 'rate', 'years');
     const M = num(c.monthly); const R = num(c.rate); const Y = num(c.years);
