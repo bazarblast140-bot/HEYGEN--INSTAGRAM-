@@ -6,11 +6,11 @@
       "igTimestamp": "2026-10-03T10:17:46+0000",
       "marker": "pkp:video:KVmMkKG5gzk",
       "story": {
-        "state": "failed",
-        "tries": 1,
-        "stage": "processing",
-        "error": "Instagram rejected the video (ERROR): Error: Media upload has failed with error code 2207076",
-        "at": "2026-10-03T12:08:50.825Z"
+        "state": "done",
+        "id": "17892748953678749",
+        "from": "pinned",
+        "tries": 2,
+        "at": "2026-10-03T12:14:53.855Z"
       },
       "fb": {
         "state": "failed",
