@@ -203,6 +203,31 @@ jobs:
           done
           echo "Could not record the published reel — the next run may repeat it." >> "$GITHUB_STEP_SUMMARY"
 
+      # Facebook is a copy of a post that is already live. It never runs unless
+      # the Instagram publish succeeded, and it can never fail this job.
+      - name: Copy to the Facebook Page
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          ID=$(sed -e 's/\x1b\[[0-9;]*m//g' publish.log | grep -oE '^[[:space:]]*published:? [0-9]+' | head -n 1 | grep -oE '[0-9]+$' || true)
+          node pipeline/fb-crosspost.js --kind reel --ig-media "$ID" \
+            --video-url "${{ steps.host.outputs.url }}" --caption-file pipeline/out/caption.txt 2>&1 | tee fb.log
+          sed -e 's/\x1b\[[0-9;]*m//g' fb.log >> "$GITHUB_STEP_SUMMARY"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/fb-crosspost-history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record $(date -u +'%Y-%m-%d %H:%M') Facebook cross-post"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the Facebook cross-post." >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

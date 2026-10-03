@@ -156,6 +156,12 @@ async function main() {
 
   console.log(`\n${ok('published')} ${mediaId}`);
 
+  // For the Facebook cross-post, which runs after this step and only reads.
+  try {
+    await fs.writeFile(path.join(path.dirname(reportPath), 'hosted.json'),
+      `${JSON.stringify({ mediaId, imageUrls }, null, 2)}\n`);
+  } catch { /* the post is up; a missing copy note only skips Facebook */ }
+
   // After the post, never instead of it. A story that fails is a story that
   // did not go out; a post that fails because of a story is a day lost, so
   // nothing below here is allowed to change the exit code.
