@@ -242,6 +242,7 @@ jobs:
           FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
           FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
         run: |
           ID=$(jq -r '.mediaId // empty' pipeline/out/hosted.json 2>/dev/null || true)
           node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" \

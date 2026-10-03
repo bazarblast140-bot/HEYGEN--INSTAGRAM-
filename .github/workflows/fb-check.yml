@@ -22,4 +22,5 @@ jobs:
         env:
           FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
         run: node pipeline/fb-crosspost.js --whoami | tee -a "$GITHUB_STEP_SUMMARY"
