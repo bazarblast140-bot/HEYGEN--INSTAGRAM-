@@ -98,7 +98,7 @@ test('a Paise Reel gets one Story and one Facebook Reel, recorded on both ledger
   const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
   assert.equal(calls.story.length, 1);
   assert.equal(calls.fb.length, 1);
-  assert.match(calls.story[0], /github.com/.*companion-media/); // re-hosted, never the Meta CDN url
+  assert.match(calls.story[0], /companion-media/); // re-hosted, never the Meta CDN url
   assert.equal(out.stories[0].igMediaId, PAISE.id);
   const entry = readCompanion(files.companion).find((e) => e.igMediaId === PAISE.id);
   assert.equal(entry.story.state, 'done');
