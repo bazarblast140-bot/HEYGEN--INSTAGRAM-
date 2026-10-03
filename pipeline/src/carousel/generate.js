@@ -53,6 +53,8 @@ export const CarouselSpec = z.object({
   slides: z.array(Slide),
   caption: z.string(),
   hashtags: z.array(z.string()),
+  // Finance: the one worked example every slide is built on (example.js).
+  example: Calc.nullable().optional(),
 });
 
 const WRAPPERS = ['carousel', 'spec', 'data', 'result', 'output', 'post', 'json', 'response'];

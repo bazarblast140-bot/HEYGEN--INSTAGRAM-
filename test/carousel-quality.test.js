@@ -10,14 +10,17 @@ import { publishDecision } from '../pipeline/src/publish/allow.js';
 import { shapeCaption } from '../pipeline/src/publish/caption.js';
 import { BROKER_CTA } from '../pipeline/src/publish/cta.js';
 
+// One worked example (revenue 100, cost 85 → profit 15, margin 15%); every
+// slide's calc is built on it (example.js).
 const good = {
   category: 'fundamentals',
+  example: { type: 'margin', revenue: 100, cost: 85, unit: 'INR' },
   slides: [
-    { band: 'center', headline: 'ROCE से असली कमाई पहचानो', subline: null, source: null, cta: false },
-    { band: 'bottom', headline: 'ROCE 15% से ऊपर अच्छा', subline: 'पूंजी पर रिटर्न लगातार ऊँचा रहे तो कारोबार मज़बूत है', source: null, cta: false,
-      calc: { type: 'compare', unit: '%', items: [{ label: 'Company A', value: 15 }, { label: 'Company B', value: 9 }] } },
-    { band: 'bottom', headline: 'कर्ज़ पर नज़र रखो', subline: 'ज़्यादा कर्ज़ ROCE को कमज़ोर करता है', source: null, cta: false,
-      calc: { type: 'change', from: 18, to: 12, unit: '%' } },
+    { band: 'center', headline: 'मार्जिन से असली कमाई पहचानो', subline: null, source: null, cta: false },
+    { band: 'bottom', headline: 'मार्जिन 15% का मतलब', subline: 'हर ₹100 की बिक्री में ₹85 खर्च, ₹15 मुनाफ़ा', source: null, cta: false,
+      calc: { type: 'margin', revenue: 100, cost: 85, unit: 'INR' } },
+    { band: 'bottom', headline: 'बिक्री बड़ी, मुनाफ़ा छोटा', subline: 'हर ₹100 में सिर्फ़ ₹15 बचते हैं', source: null, cta: false,
+      calc: { type: 'compare', unit: 'INR', items: [{ label: 'Sales', value: 100 }, { label: 'Profit', value: 15 }] } },
     { band: 'bottom', headline: 'सेव करो', subline: 'फ़ॉलो करो', source: null, cta: true },
   ],
 };
@@ -43,11 +46,11 @@ test('numbers: every finance content slide needs a calc, and every figure must m
   assert.deepEqual(numberProblems(good), []);
   const noCalc = { ...good, slides: [good.slides[0], { ...good.slides[1], calc: null }, good.slides[3]] };
   assert.match(numberProblems(noCalc)[0], /slide 2 has no calc/);
-  const wrong = { ...good, slides: [good.slides[0], { ...good.slides[1], headline: 'ROCE 17% से ऊपर अच्छा' }, good.slides[3]] };
+  const wrong = { ...good, slides: [good.slides[0], { ...good.slides[1], headline: 'मार्जिन 17% का मतलब' }, good.slides[3]] };
   assert.match(numberProblems(wrong)[0], /"17%" does not match any computed figure/);
   const cover = { ...good, slides: [{ ...good.slides[0], headline: '73% लोग यह गलती करते हैं' }, ...good.slides.slice(1)] };
   assert.match(numberProblems(cover).join(' '), /slide 1: "73%"/);
-  assert.match(numberProblems(good, { caption: 'ROCE 21% हो तो' }).join(' '), /caption: "21%"/);
+  assert.match(numberProblems(good, { caption: 'मार्जिन 21% हो तो' }).join(' '), /caption: "21%"/);
 });
 
 test('sources: a finance slide shows no source label except the calculation note', () => {
@@ -56,7 +59,7 @@ test('sources: a finance slide shows no source label except the calculation note
   assert.match(sourceProblems(labelled)[0], /slide 2 shows the source label "SBI होम लोन EMI कैलकुलेटर 2025", which nothing in the pipeline verified/);
   const filler = { ...good, slides: [good.slides[0], { ...good.slides[1], source: FILLER_SOURCE }, good.slides[3]] };
   assert.equal(sourceProblems(filler).length, 1, 'the old filler label is refused too');
-  const noted = { ...good, slides: [good.slides[0], { ...good.slides[1], source: 'Calculation: values as stated on the slide; gap and ratio computed' }, good.slides[3]] };
+  const noted = { ...good, slides: [good.slides[0], { ...good.slides[1], source: 'Calculation: margin = (revenue − cost) ÷ revenue' }, good.slides[3]] };
   assert.deepEqual(sourceProblems(noted), [], 'the code-written calculation note is allowed');
   assert.match(sourceProblems(good, { caption: 'हुक\n\nस्रोत: RBI, 2025' })[0], /caption names a source/);
   const stories = [{ title: 'x', site: 'Reuters', date: '2026-10-02' }];

@@ -1,7 +1,8 @@
-import { computeCalc } from './calc.js';
+import { computeCalc, EXAMPLE_COMPARE_NOTE } from './calc.js';
 import { mismatches, describe } from './figures.js';
 import { stripAllowedEnglish, heavyWordProblems } from './language.js';
 import { FINANCE } from './categories.js';
+import { exampleProblems } from './example.js';
 
 // Pre-publish quality rules for carousels.
 //
@@ -133,6 +134,8 @@ export function financeNumberProblems(spec, { caption = null } = {}) {
   });
   const cap = caption ?? spec?.caption;
   if (cap) for (const m of mismatches(stripTags(cap), everything, { labels: allLabels })) problems.push(`caption: ${describe(m)}`);
+  // One worked example; every slide's calc built on it (see example.js).
+  problems.push(...exampleProblems(spec, { isContent: (i) => isFact(slides[i], i) }));
   return problems;
 }
 
@@ -209,7 +212,7 @@ export function sourceProblems(spec, { stories = null, caption = null } = {}) {
     const shown = String(slide.source || '').trim();
     if (!shown) return;
     const note = calcs[i]?.ok ? calcs[i].note : null;
-    if (shown !== note) problems.push(`slide ${i + 1} shows the source label "${shown}", which nothing in the pipeline verified — finance slides carry no source label`);
+    if (shown !== note && !(calcs[i]?.type === 'compare' && shown === EXAMPLE_COMPARE_NOTE)) problems.push(`slide ${i + 1} shows the source label "${shown}", which nothing in the pipeline verified — finance slides carry no source label`);
   });
   const cap = caption ?? spec?.caption;
   if (cap && SOURCE_WORD.test(cap)) problems.push('caption names a source that nothing in the pipeline verified — remove the "स्रोत:" line');

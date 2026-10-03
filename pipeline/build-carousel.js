@@ -402,6 +402,7 @@ async function main() {
     istDate: istParts(new Date()).date,
     contentHash: await hashFiles([...files, ...stories]),
     topic: spec.topic || null,
+    example: spec.example || null,
     category: spec.category || null,
     brand: spec.brand || BRAND.brand,
     generated,

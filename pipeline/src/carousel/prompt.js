@@ -36,9 +36,15 @@ CALC TYPES (exact keys; amounts रुपये में plain numbers, rates %
 - {"type":"option","kind":"long_call"|"long_put","strike":24000,"premium":120,"lot":75}
 - {"type":"operating_leverage","sales":100,"variableCost":60,"fixedCost":30,"salesChangePct":10,"unit":"num"|"INR"}   code निकालेगा contribution, operating profit, leverage (x), profit change %
 - {"type":"margin","revenue":100,"cost":80,"costLabel":"Total cost","unit":"num"|"INR"}   profit और margin %
-- {"type":"compare","unit":"INR"|"%"|"num","items":[{"label":"FD","value":7},{"label":"SIP","value":12}]}   labels short English (≤14 chars)
-  compare सिर्फ़ अलग-अलग assumptions की side-by-side तुलना के लिए है (जैसे FD 7% vs SIP 12% assumed). जो result किसी formula से निकलता है (profit change, EMI, interest, CAGR, margin) उसे compare की value मत बनाओ — matching type दो, code निकालेगा. पूरे carousel में compare ज़्यादा से ज़्यादा 2 slides.
-एक ही topic के slides में same base example रखो और views/angles बदलो (जैसे EMI split → balance curve → yearly → tenure compare → prepayment compare).
+- {"type":"compare","unit":"INR"|"%"|"num","items":[{"label":"Contribution","value":40},{"label":"Profit","value":10}]}   labels short English (≤14 chars)
+  compare सिर्फ़ code के निकाले figures की side-by-side तुलना है. जो result किसी formula से निकलता है (profit change, EMI, interest, CAGR, margin) उसे compare की value मत बनाओ — matching type दो, code निकालेगा. पूरे carousel में compare ज़्यादा से ज़्यादा 2 slides.
+
+ONE WORKED EXAMPLE — पूरे carousel का एक ही उदाहरण (code इसे check करता है, गड़बड़ = BLOCK)
+- Top-level "example" दो: एक calc (compare नहीं) जिस पर पूरा carousel बना है. जैसे {"type":"operating_leverage","sales":100,"variableCost":60,"fixedCost":30,"salesChangePct":10} → code: contribution 40, operating profit 10, leverage 4x, profit +40%.
+- Slide 2 का calc बिल्कुल यही example हो.
+- बाकी हर slide का calc इसी example के numbers से बने: inputs = example के inputs या code के निकाले figures (जैसे margin: revenue 100, cost 90). सिर्फ़ एक what-if lever बदल सकते हो: operating_leverage → salesChangePct, sip/lumpsum/inflation → years, emi_compare → years, drawdown → losses. Result code निकालेगा (जैसे salesChangePct 20 → profit +80%); text में वही लिखो.
+- compare में सिर्फ़ वो values जो code ने निकाली (जैसे Contribution 40 vs Operating profit 10). अपनी कोई नई संख्या (15%, 50%, "leverage 3") compare में मत डालो.
+- अलग-अलग slides पर अलग-अलग numbers (एक जगह 20% → 50%, दूसरी जगह 10% → 40%) = BLOCK.
 
 LANGUAGE — simple Hinglish
 - Hindi देवनागरी में, लेकिन आम English finance words Roman में ही लिखो: EMI, interest, loan, tenure, SIP, return, tax, principal, inflation, premium, stop-loss.
@@ -62,7 +68,7 @@ export function buildUserPrompt({ category, date, recentTopics = [] }) {
 आज (${date}) category **${category}** के अंदर एक नया finance topic चुनो जिसे numbers और charts से समझाया जा सके.
 आज के idea seeds: ${seedList}
 इनमें से एक को inspiration बनाओ, exact wording copy मत करो. Category के अंदर calculation वाला angle चुनो
-(options → payoff/breakeven, intraday/risk → position size/expectancy/drawdown, fundamentals/stocks → CAGR/change/compare,
+(options → payoff/breakeven, intraday/risk → position size/expectancy/drawdown, fundamentals/stocks → operating_leverage/margin/CAGR/change,
 personal-finance → EMI/SIP/inflation/lumpsum, market-history → drawdown/CAGR/change).
 </task>${alreadyCovered}
 
@@ -78,6 +84,7 @@ personal-finance → EMI/SIP/inflation/lumpsum, market-history → drawdown/CAGR
 {
   "topic": "3–8 शब्दों में specific topic",
   "category": "${category}",
+  "example": {"type":"emi","principal":5000000,"rate":8.5,"years":20},
   "slides": [
     {"band":"center","headline":"₹50 लाख का home loan, interest कितना?","subline":null,"source":null,"cta":false,"calc":null},
     {"band":"bottom","headline":"EMI का बड़ा हिस्सा interest","subline":"₹50 लाख, 8.5%, 20 साल का loan","source":null,"cta":false,"calc":{"type":"emi","principal":5000000,"rate":8.5,"years":20,"view":"split"}},
@@ -88,6 +95,6 @@ personal-finance → EMI/SIP/inflation/lumpsum, market-history → drawdown/CAGR
 }
 </output_format>
 
-भेजने से पहले जाँचो: topic नया है; slides 2–9 हर एक पर valid calc है; text की हर संख्या calc input है या formula से सही result; कोई source/स्रोत label नहीं; भारी शब्द नहीं; hashtags ज़्यादा से ज़्यादा 5, niche Indian-finance; आख़िरी slide सेव करो और फ़ॉलो करो कहती है; caption में कोई URL नहीं.
+भेजने से पहले जाँचो: topic नया है; एक "example" है और slide 2 का calc वही है; slides 2–9 हर एक पर valid calc है जो उसी example के numbers से बना है; text की हर संख्या calc input है या formula से सही result; कोई source/स्रोत label नहीं; भारी शब्द नहीं; hashtags ज़्यादा से ज़्यादा 5, niche Indian-finance; आख़िरी slide सेव करो और फ़ॉलो करो कहती है; caption में कोई URL नहीं.
 `;
 }
