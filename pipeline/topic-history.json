@@ -14,6 +14,11 @@
       "date": "2026-10-03",
       "topic": "NIFTYBEES open high close low trap",
       "angle": "OPEN HIGH CLOSE LOW"
+    },
+    {
+      "date": "2026-10-04",
+      "topic": "NIFTYBEES opening gap trap",
+      "angle": "GAP UP TRAP"
     }
   ]
 }
