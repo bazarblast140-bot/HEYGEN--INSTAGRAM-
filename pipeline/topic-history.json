@@ -9,6 +9,11 @@
       "date": "2026-10-02",
       "topic": "NIFTYBEES volume spike trap",
       "angle": "HIGH VOLUME TRAP"
+    },
+    {
+      "date": "2026-10-03",
+      "topic": "NIFTYBEES open high close low trap",
+      "angle": "OPEN HIGH CLOSE LOW"
     }
   ]
 }
