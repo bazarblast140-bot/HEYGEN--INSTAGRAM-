@@ -96,3 +96,15 @@ renders, runs the full quality gate and uploads the same `carousel` artifact
 (report carries `rerender.fromRun`, the source spec sha256 and the edit list).
 That step has no model key. Publish it, like any preview, with
 `carousel.yml approve_build=<the re-render's run id>`.
+
+### Cover photo (slide 1 only)
+
+Inner slides stay chart-boards. The model adds `coverPhoto: { queries, mustHave, avoid }`;
+`pipeline/src/carousel/cover-photo.js` searches Pexels (free key) then Wikimedia Commons
+(CC0 / public domain / CC BY only), rejects by metadata (documents, forms, invoices, paper,
+screens, charts, logos; on finance: foreign context, named people / ceremonies, and no
+Indian marker), then rejects any downloaded photo with visible text or long numbers
+(tesseract, free and local). The source, page URL, licence and every rejection reason are
+in `carousel-report.json → coverPhoto`. No photo passes → the v3 chart cover. A photo never
+blocks a post; the number, Hinglish and source gates still do.
+

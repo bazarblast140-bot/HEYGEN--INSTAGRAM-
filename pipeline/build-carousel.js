@@ -25,6 +25,7 @@ import { createHash } from 'node:crypto';
 import { boardSlides } from './src/carousel/board.js';
 import { computeCalc } from './src/carousel/calc.js';
 import { applyEdits } from './src/carousel/edits.js';
+import { attachCoverPhoto } from './src/carousel/cover-photo.js';
 import { repairHeavyWords } from './src/carousel/language.js';
 import { istParts } from './src/carousel/categories.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
@@ -354,9 +355,18 @@ async function main() {
     if (dropped) note(`dropped ${dropped} news chart(s) whose inputs do not compute or are not in the fetched items`);
   }
 
-  // v3 chart-board: chart, figure strip and footnote come from calc.js. No
-  // stock photo is fetched for a carousel, ever (--no-photos is now the only mode).
-  if (args['no-photos'] === undefined) note('no stock photos — every content slide is a chart computed from its calc');
+  // v3 chart-board: chart, figure strip and footnote come from calc.js. Inner
+  // slides never get a photo. The COVER may get one topic photo that passed the
+  // relevance, document/foreign and visible-text checks (cover-photo.js); if
+  // none passes, the chart cover stays. A photo never blocks the post.
+  let coverPhoto = { used: false, reason: 'off' };
+  if (args['no-photos'] || args['no-cover-photo'] || process.env.CAROUSEL_COVER_PHOTO === 'off') {
+    note('cover photo off — chart cover');
+  } else {
+    const withPhoto = await attachCoverPhoto(spec, { outDir: path.join(HERE, 'out', 'photos'), onNote: note });
+    spec = withPhoto.spec;
+    coverPhoto = withPhoto.photo;
+  }
   const ready = {
     ...spec,
     slides: boardSlides(spec).map((s) => ({ ...s, subline: balanceSubline(s.subline) })),
@@ -448,6 +458,7 @@ async function main() {
     slot: slotUsed || null,
     preview: args.preview === true || Boolean(rerender),
     rerender,
+    coverPhoto,
     builtAt: new Date().toISOString(),
     istDate: istParts(new Date()).date,
     contentHash: await hashFiles([...files, ...stories]),

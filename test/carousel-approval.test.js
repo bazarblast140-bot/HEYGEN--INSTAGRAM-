@@ -53,7 +53,8 @@ test('carousel.yml: with CAROUSEL_REQUIRE_APPROVAL only an approved build reache
   assert.match(cond, /env\.APPROVE_BUILD != '' && steps\.approve\.outputs\.ok == 'true' && steps\.approveslot\.outputs\.pending == 'true'/);
   assert.match(cond, /env\.APPROVE_BUILD == '' && env\.CAROUSEL_REQUIRE_APPROVAL != 'true'/);
   assert.match(wf, /run-id: \$\{\{ github\.event\.inputs\.approve_build \}\}/);
-  assert.doesNotMatch(wf, /PEXELS_API_KEY/, 'no stock photos are fetched for carousels');
+  // Pexels is used for the cover photo only, and only in the build step.
+  assert.doesNotMatch(publish, /PEXELS_API_KEY/, 'the publish step fetches no photos');
 });
 
 test('carousel-preview.yml can never publish', async () => {

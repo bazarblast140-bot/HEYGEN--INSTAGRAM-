@@ -55,6 +55,8 @@ export const CarouselSpec = z.object({
   hashtags: z.array(z.string()),
   // Finance: the one worked example every slide is built on (example.js).
   example: Calc.nullable().optional(),
+  // Cover photo request (cover-photo.js): { queries, mustHave, avoid }.
+  coverPhoto: z.object({}).passthrough().nullable().optional(),
 });
 
 const WRAPPERS = ['carousel', 'spec', 'data', 'result', 'output', 'post', 'json', 'response'];
@@ -150,6 +152,7 @@ export function normalizeCarouselDraft(raw, { category } = {}) {
     slides,
     caption,
     hashtags: hashtags.slice(0, 5),
+    coverPhoto: src.coverPhoto && typeof src.coverPhoto === 'object' && !Array.isArray(src.coverPhoto) ? src.coverPhoto : null,
   };
 }
 

@@ -1,0 +1,9 @@
+{
+  "review": "Photo-cover preview of the approved 19:30 build 37120437152 (operating leverage). Cover photo only; every slide and the caption unchanged. Not for tonight's post.",
+  "edits": [
+    { "op": "cover_photo",
+      "queries": ["Indian factory workers manufacturing India", "Indian shopkeeper store India", "Indian business office team India"],
+      "mustHave": ["factory", "manufacturing", "workers", "shop", "shopkeeper", "store", "business", "office"],
+      "avoid": ["logo", "chart", "screen", "document", "laptop"] }
+  ]
+}

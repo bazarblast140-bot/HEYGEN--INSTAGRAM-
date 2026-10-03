@@ -3,7 +3,11 @@
 // Every content slide's chart, figure strip and footnote are written here from
 // calc.js output, never from model text. Finance footnotes are the calculation
 // note (literally true); AI/news footnotes are the fetched outlet and date.
-// There is no photograph anywhere in this path.
+// The only photograph is the optional cover photo (cover-photo.js), verified
+// before it gets here; inner slides never carry one.
+
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { computeCalc, figureStrip, EXAMPLE_COMPARE_NOTE } from './calc.js';
 import { FINANCE } from './categories.js';
@@ -45,6 +49,12 @@ export function boardSlides(spec) {
     };
     if (slide.cta) return { ...base, chart: null, figures: [], footnote: '', source: null };
     if (cover) {
+      // A verified cover photo (cover-photo.js) replaces the hero chart; the
+      // computed figure strip stays. No photo → the v3 chart cover.
+      if (slide.photo?.file) {
+        return { ...base, chart: null, figures: hero ? figureStrip(hero) : [], footnote: '', source: null,
+          photo: pathToFileURL(path.resolve(slide.photo.file)).href, photoCredit: slide.photo.credit || '' };
+      }
       return { ...base, chart: hero?.chart || null, figures: hero ? figureStrip(hero) : [], footnote: '', source: null };
     }
     if (finance) {

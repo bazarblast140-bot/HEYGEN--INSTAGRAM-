@@ -4,7 +4,8 @@
   look): deep navy terminal background with a faint 54px grid and vignette, one
   rounded navy card with a thin gold edge, yellow headline, off-white copy,
   muted labels, and a chart drawn from numbers the CODE computed (calc.js).
-  No photographs, ever.
+  No photographs on inner slides. The cover (slide 1) may carry one topic
+  photo (cover-photo.js) under a dark shade, in the card, with a credit line.
 
   Palette (from board_kit.py / scene_frames.py):
     bg top #070C18 → bottom #040810, grid #121C2A, card #0C1220, gold #D4A848,
@@ -87,6 +88,17 @@
   #progress { position: absolute; left: 72px; right: 72px; height: 8px; border-radius: 4px; background: #1C2434; }
   #progress i { display: block; height: 100%; border-radius: 4px; background: var(--gold); }
   .hidden { display: none !important; }
+  /* Cover photo: inside the card, under a dark shade so the headline reads. */
+  #photo, #shade { display: none; position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 24px; }
+  #photo { object-fit: cover; z-index: 0; }
+  #shade { z-index: 0; background: linear-gradient(180deg, rgba(6,10,20,.84) 0%, rgba(6,10,20,.66) 38%, rgba(6,10,20,.70) 62%, rgba(6,10,20,.94) 100%); }
+  #card > *:not(#photo):not(#shade) { position: relative; z-index: 1; }
+  #card.photo #photo, #card.photo #shade { display: block; }
+  #card.photo #headline { text-shadow: 0 3px 18px rgba(0,0,0,.85); }
+  #card.photo #subline { text-shadow: 0 2px 12px rgba(0,0,0,.85); }
+  #card.photo #figures { margin-top: auto; }
+  #card.photo .fig { background: rgba(15,26,46,.88); }
+  #credit { color: var(--muted); font-size: 20px; font-weight: 600; margin-top: 12px; flex: 0 0 auto; text-align: right; }
   .cta #chartwrap { display: flex; align-items: center; justify-content: center; }
   /* A news fact with no numbers to chart: the copy sits centred on the board
      with a gold rule, instead of a photo. */
@@ -97,6 +109,8 @@
 <body>
   <div id="stage">
     <div id="card">
+      <img id="photo" alt="">
+      <div id="shade"></div>
       <div id="top"><span id="kicker"></span><span id="page"></span></div>
       <div id="bar" class="hidden"></div>
       <div id="headline"></div>
@@ -105,6 +119,7 @@
       <div id="figures"></div>
       <div id="footnote"></div>
       <div id="callout" class="hidden"></div>
+      <div id="credit" class="hidden"></div>
     </div>
     <div id="handle"></div>
     <div id="progress"><i></i></div>
@@ -354,13 +369,18 @@
       const {
         headline = '', subline = '', footnote = '', callout = '', band = 'bottom', cta = false,
         chart = null, figures = [], kicker = '', page = '', handle = '', progress = 0,
-        bottomInset = 0, tight = false,
+        bottomInset = 0, tight = false, photo = null, photoCredit = '',
       } = data;
+      document.body.dataset.ready = '0';
       const story = Boolean(bottomInset);
       const H = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stage-h')) || 1350;
       const card = $('card');
       const cover = band === 'center';
       card.className = cover ? 'cover' : cta ? 'cta' : chart ? 'fact' : 'fact nochart';
+      const withPhoto = Boolean(cover && photo);
+      card.classList.toggle('photo', withPhoto);
+      $('credit').textContent = withPhoto ? (photoCredit || '') : '';
+      $('credit').classList.toggle('hidden', !(withPhoto && photoCredit));
       // Feed: card 96..1200 (safe 81..1269). Story: 250..(H - bottomInset - 20).
       card.style.top = (story ? 250 : 96) + 'px';
       card.style.bottom = (story ? bottomInset + 20 : 150) + 'px';
@@ -417,7 +437,16 @@
         el('rect', { x: cx - 330, y: cy - 60, width: 660, height: 120, rx: 60, fill: '#0F1A2E', stroke: COLORS.gold, 'stroke-width': 3 }, svg);
         text(svg, cx, cy + 14, handle || '', { size: 42, fill: COLORS.yellow, weight: 800 });
       }
-      document.body.dataset.ready = '1';
+      const img = $('photo');
+      if (withPhoto) {
+        const done = () => { document.body.dataset.ready = '1'; };
+        img.onload = done;
+        img.onerror = () => { card.classList.remove('photo'); $('credit').classList.add('hidden'); done(); };
+        if (img.getAttribute('src') === photo && img.complete) done(); else img.src = photo;
+      } else {
+        img.removeAttribute('src');
+        document.body.dataset.ready = '1';
+      }
     },
     measure() {
       const out = { boxes: [], clipped: [] };
@@ -437,7 +466,7 @@
         });
         if (node.scrollWidth > node.clientWidth + 2) out.clipped.push(id);
       };
-      for (const id of ['headline', 'subline', 'footnote', 'callout', 'handle', 'kicker']) add(id, $(id));
+      for (const id of ['headline', 'subline', 'footnote', 'callout', 'handle', 'kicker', 'credit']) add(id, $(id));
       document.querySelectorAll('.fig .v').forEach((v, i) => add(`figure-${i + 1}`, v));
       // Chart text (axis labels, values) must also stay inside the safe area.
       const svgRect = $('chart').getBoundingClientRect();
