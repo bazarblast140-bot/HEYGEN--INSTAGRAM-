@@ -55,6 +55,11 @@ export const ENGLISH_OK = [
   'demat', 'broker', 'company', 'business', 'result', 'results', 'news', 'update', 'ai', 'model', 'chip', 'chips',
   'shareholder', 'regulator', 'securities', 'derivatives', 'maturity', 'time', 'per', 'vs', 'and', 'or', 'of', 'the', 'a',
   'gap', 'up', 'down', 'high', 'low', 'trend', 'volume', 'chart', 'setup', 'level', 'support', 'resistance',
+  'midcap', 'smallcap', 'largecap', 'nifty', 'sensex', 'rupee', 'dollar', 'crude', 'oil', 'ipo', 'ipos', 'listing',
+  'rally', 'sell-off', 'selloff', 'correction', 'earnings', 'quarter', 'revenue', 'sales', 'cash', 'operating',
+  'depreciation', 'net', 'gross', 'ebitda', 'roce', 'roe', 'eps', 'valuation', 'pe', 'ratio', 'cagr', 'fpi', 'fii', 'dii',
+  'policy', 'repo', 'gdp', 'tech', 'it', 'pharma', 'auto', 'metal', 'energy', 'power', 'sector', 'sectors',
+  'flow', 'flows', 'outflow', 'inflow', 'buyback', 'split', 'bonus', 'record', 'date', 'week', 'day', 'today',
 ];
 const OK = new Set(ENGLISH_OK);
 

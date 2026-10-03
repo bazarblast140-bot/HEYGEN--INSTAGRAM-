@@ -23,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderSlides, WIDTH, HEIGHT, STORY_WIDTH, STORY_HEIGHT, STORY_INSET } from './render-slides.js';
 import { createHash } from 'node:crypto';
 import { boardSlides } from './src/carousel/board.js';
+import { computeCalc } from './src/carousel/calc.js';
 import { repairHeavyWords } from './src/carousel/language.js';
 import { istParts } from './src/carousel/categories.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
@@ -184,6 +185,7 @@ async function main() {
         : await generateCarousel({
           slot,
           record: !args.preview,
+          onNote: note,
           onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
           onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
         });
@@ -282,6 +284,20 @@ async function main() {
   if (plain.replaced.length) {
     spec = plain.spec;
     note(`language: replaced ${plain.replaced.join(', ')}`);
+  }
+
+  // A news/AI chart whose inputs do not compute is dropped (the slide becomes a
+  // text board); its numbers are still checked against the fetched items.
+  if (!FINANCE.includes(spec.category)) {
+    let dropped = 0;
+    spec = {
+      ...spec,
+      slides: spec.slides.map((s) => {
+        if (s.calc && !computeCalc(s.calc).ok) { dropped += 1; return { ...s, calc: null }; }
+        return s;
+      }),
+    };
+    if (dropped) note(`dropped ${dropped} news chart(s) whose inputs do not compute`);
   }
 
   // v3 chart-board: chart, figure strip and footnote come from calc.js. No

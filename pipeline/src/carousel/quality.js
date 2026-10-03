@@ -98,6 +98,12 @@ export function numbersIn(text) {
 
 const stripTags = (text) => String(text || '').replace(/[@#][\w.\u0900-\u097F]+/g, ' ');
 
+/** Category labels of a calc's inputs and chart (bar names, not figures). */
+export function calcLabels(calc) {
+  if (!calc?.ok) return [];
+  return [...(calc.chart?.labels || []), ...calc.inputs.filter((f) => /^item\d/.test(f.key)).map((f) => f.label)];
+}
+
 /** The computed calc for every slide (null where there is none). */
 export function slideCalcs(spec) {
   return (spec?.slides || []).map((slide) => (slide?.calc ? computeCalc(slide.calc) : null));
@@ -113,19 +119,20 @@ export function financeNumberProblems(spec, { caption = null } = {}) {
   const slides = spec?.slides || [];
   const calcs = slideCalcs(spec);
   const everything = calcs.filter((c) => c?.ok).flatMap((c) => c.all);
+  const allLabels = calcs.filter((c) => c?.ok).flatMap(calcLabels);
   slides.forEach((slide, i) => {
     const text = slideText(slide);
     const calc = calcs[i];
     if (isFact(slide, i)) {
       if (!calc) { problems.push(`slide ${i + 1} has no calc — every content slide needs structured inputs for its chart (e.g. {"type":"emi","principal":5000000,"rate":8.5,"years":20})`); return; }
       if (!calc.ok) { problems.push(`slide ${i + 1} calc is invalid: ${calc.error}`); return; }
-      for (const m of mismatches(text, calc.all)) problems.push(`slide ${i + 1}: ${describe(m)}`);
+      for (const m of mismatches(text, calc.all, { labels: calcLabels(calc) })) problems.push(`slide ${i + 1}: ${describe(m)}`);
     } else {
-      for (const m of mismatches(text, everything)) problems.push(`slide ${i + 1}: ${describe(m)}`);
+      for (const m of mismatches(text, everything, { labels: allLabels })) problems.push(`slide ${i + 1}: ${describe(m)}`);
     }
   });
   const cap = caption ?? spec?.caption;
-  if (cap) for (const m of mismatches(stripTags(cap), everything)) problems.push(`caption: ${describe(m)}`);
+  if (cap) for (const m of mismatches(stripTags(cap), everything, { labels: allLabels })) problems.push(`caption: ${describe(m)}`);
   return problems;
 }
 
