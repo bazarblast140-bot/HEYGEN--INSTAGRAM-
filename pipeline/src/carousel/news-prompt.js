@@ -84,13 +84,13 @@ Image repeat मत करो.
 </last_slide>
 
 <output_format>
-Cover photo: "coverPhoto" में असली company/product/event की English searches दो (logo, screenshot, document नहीं). Code check करेगा; न मिले तो chart cover.
+Cover photo: "coverPhoto" में असली company/product/event की English searches दो (screenshot, document नहीं). Topic एक नाम वाले person/company/brand पर है (Elon Musk, Tesla, Nvidia) तो "subject" में उसका English नाम दो — cover पर वही दिखेगा (photo, logo, building, product या store). Code check करेगा; न मिले तो related photo या chart cover.
 सिर्फ़ JSON. कोई markdown fence नहीं.
 
 {
   "topic": "आज का विषय 3 से 7 शब्दों में",
   "category": "technology",
-  "coverPhoto": {"queries": ["the actual company / product / event, in English"], "mustHave": ["its name"], "avoid": ["logo", "screenshot", "document"]},
+  "coverPhoto": {"subject": ["the named company / person, or null"], "queries": ["the actual company / product / event, in English"], "mustHave": ["its name"], "avoid": ["screenshot", "document"]},
   "slides": [
     {
       "band": "center",

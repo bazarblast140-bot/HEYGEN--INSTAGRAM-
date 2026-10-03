@@ -18,6 +18,19 @@
 //      binary is there (free, local): a photo with words or long numbers in it
 //      is rejected. Without tesseract the metadata check stands alone.
 //
+// Named subject (Rajesh, 3 Oct): when the topic is one person, company or
+// brand (Elon Musk, Tesla, Reliance, SBI) the model sets coverPhoto.subject and
+// the cover must show THAT subject — a photo of the person, the company's
+// logo, building, product or store. The subject is a required must-have; named
+// people, logos and signage are allowed for it, and the India / foreign rules
+// do not apply (Tesla is not Indian). Commons is searched first for it. If no
+// photo of the subject passes, the closest related photo is used (tier
+// "related", the general rules), and only then the chart cover.
+//
+// General topics: any on-topic photo passes — a must-have hit OR a topic word
+// shared with the search (India itself does not count) — with the Indian
+// context rule kept for finance.
+//
 // Never blocks a post: no key, nothing found, every candidate rejected, a
 // network error — the cover keeps the v3 chart and the build goes on.
 
@@ -27,7 +40,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { FINANCE } from './categories.js';
-import { relevance } from '../render/backgrounds.js';
+import { relevance, subjectWords } from '../render/backgrounds.js';
 
 const run = promisify(execFile);
 
@@ -48,6 +61,11 @@ export const PEOPLE_EVENTS = /\b(president|prime minister|minister|chief ministe
 export const PEXELS_LICENCE = { licence: 'Pexels License', licenceUrl: 'https://www.pexels.com/license/' };
 const FREE_COMMONS = /^(cc0|public domain|pd|cc[ -]by(-sa)?( \d(\.\d)?)?)/i;
 
+// Allowed on a named-subject photo: a company's logo, store sign or banner IS the company.
+const BRAND_OK = /^(logos?|signs?|signage|banners?|icons?|labels?)$/i;
+// Place words never make a photo on-topic by themselves.
+const PLACE = new Set(['india', 'indian', 'indians', 'photo', 'image']);
+
 const clean = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
 const list = (v) => (Array.isArray(v) ? v : v ? [v] : []).map((x) => String(x).trim()).filter(Boolean);
 
@@ -60,12 +78,20 @@ export function photoRequest(spec) {
     const fallback = list(spec?.slides?.[0]?.query).filter((q) => q && q !== 'indian stock exchange');
     queries = finance ? [...fallback, 'Bombay Stock Exchange Mumbai'] : fallback;
   }
-  if (finance) queries = queries.map((q) => (/\bindia(n)?\b/i.test(q) ? q : `${q} India`));
-  queries = [...new Set(queries)].slice(0, MAX_QUERIES);
+  // The named subject: one name or a list of names for it ("SBI", "State Bank of India").
+  const subject = list(asked.subject ?? spec?.subject).map((w) => w.replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim()).filter((w) => w.length >= 2);
+  const named = (q) => subject.some((w) => hasTerm(q, w));
+  if (subject.length && !queries.some(named)) queries = [subject[0], ...queries];
+  // Finance searches carry India — except a search for a named subject (Tesla stays Tesla).
+  if (finance) queries = queries.map((q) => (/\bindia(n)?\b/i.test(q) || named(q) ? q : `${q} India`));
+  queries = [...new Set(queries)];
+  if (subject.length) queries = [...queries.filter(named), ...queries.filter((q) => !named(q))];
+  queries = queries.slice(0, MAX_QUERIES);
   return {
     finance,
+    subject: subject.map((w) => w.toLowerCase()),
     queries,
-    mustHave: list(asked.mustHave).map((w) => w.toLowerCase()),
+    mustHave: [...new Set([...subject, ...list(asked.mustHave)].map((w) => w.toLowerCase()))],
     avoid: list(asked.avoid).map((w) => w.toLowerCase()),
   };
 }
@@ -76,15 +102,39 @@ const hasTerm = (text, term) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\
  * Why this candidate may not be the cover, or null when it may.
  * candidate: { meta (all its text: alt, slug, title, description, categories), width, height, licence }
  */
-export function rejectReason(candidate, request) {
+export const tierOf = (request) => (request.subject?.length ? 'subject' : 'related');
+
+/** Does the description name the subject? */
+export const showsSubject = (meta, request) => (request.subject || []).some((w) => hasTerm(clean(meta), w));
+
+/** Topic words the photo shares with a search or the must-haves (place words do not count). */
+function onTopic(meta, request) {
+  if (request.mustHave.some((w) => hasTerm(meta, w))) return true;
+  const said = new Set(subjectWords(meta).filter((w) => !PLACE.has(w)));
+  return request.queries.some((q) => subjectWords(q).some((w) => !PLACE.has(w) && said.has(w)));
+}
+
+/**
+ * tier "subject": a photo OF the named subject (required); its logo, sign or
+ * store is fine, and named people are fine because the person is the topic.
+ * tier "related": the general rules — on-topic, Indian context for finance.
+ */
+export function rejectReason(candidate, request, tier = tierOf(request)) {
   const meta = clean(candidate?.meta);
   if (!candidate?.image) return 'no image url';
   if (!meta) return 'no description to check it against';
   if ((candidate.width || 0) && Math.max(candidate.width, candidate.height || 0) < 900) return `too small (${candidate.width}×${candidate.height})`;
-  const doc = meta.match(DOCUMENT);
-  if (doc) return `looks like a document / text image ("${doc[0]}")`;
-  const avoid = request.avoid.find((w) => hasTerm(meta, w));
+  const subjectTier = tier === 'subject' && request.subject?.length;
+  const docs = [...meta.matchAll(new RegExp(DOCUMENT.source, 'gi'))].map((m) => m[0]);
+  const doc = docs.find((d) => !(subjectTier && BRAND_OK.test(d)));
+  if (doc) return `looks like a document / text image ("${doc}")`;
+  const avoid = request.avoid.find((w) => hasTerm(meta, w) && !(subjectTier && BRAND_OK.test(w)));
   if (avoid) return `matches the avoid list ("${avoid}")`;
+  if (subjectTier) {
+    if (!showsSubject(meta, request)) return `not a photo of ${request.subject[0]}`;
+    if (candidate.licence && !candidate.licenceOk) return `licence "${candidate.licence}" is not CC0, public domain or CC BY`;
+    return null;
+  }
   if (request.finance) {
     const foreign = meta.match(FOREIGN);
     if (foreign) return `foreign context on an Indian finance cover ("${foreign[0]}")`;
@@ -92,22 +142,22 @@ export function rejectReason(candidate, request) {
     const event = meta.match(PEOPLE_EVENTS);
     if (event) return `a news photo of people or an event, not a finance scene ("${event[0]}")`;
   }
-  if (request.mustHave.length && !request.mustHave.some((w) => hasTerm(meta, w))) return `none of the must-have terms (${request.mustHave.join(', ')})`;
-  if (!request.mustHave.length && !request.queries.some((q) => relevance(meta, q) > 0)) return 'shares no subject word with the search';
+  if (!onTopic(meta, request)) return `off-topic: none of the must-have terms (${request.mustHave.join(', ') || '—'}) and no topic word shared with the search`;
   if (candidate.licence && !candidate.licenceOk) return `licence "${candidate.licence}" is not CC0, public domain or CC BY`;
   return null;
 }
 
 /** Best first: must-have hits, Indian marker (finance), relevance to its query, then source order. */
-export function rankCandidates(candidates, request) {
+export function rankCandidates(candidates, request, tier = tierOf(request)) {
   return candidates
     .map((c, i) => {
       const meta = clean(c.meta);
       const score = request.mustHave.filter((w) => hasTerm(meta, w)).length
+        + (tier === 'subject' && /commons/i.test(c.source || '') ? 0.5 : 0)
         + (request.finance && INDIAN.test(meta) ? 1 : 0)
         + Math.max(0, ...request.queries.map((q) => relevance(meta, q)))
         + ((c.height || 0) >= (c.width || 0) ? 0.2 : 0);
-      return { c, i, score, reason: rejectReason(c, request) };
+      return { c, i, score, reason: rejectReason(c, request, tier) };
     })
     .sort((a, b) => (a.reason ? 1 : 0) - (b.reason ? 1 : 0) || b.score - a.score || a.i - b.i);
 }
@@ -129,10 +179,16 @@ export function textFromTsv(tsv) {
   return { words, numbers };
 }
 
-export function visibleTextReason(found) {
+/**
+ * Numbers in a photo are always rejected (they can contradict the slide).
+ * Words are rejected at 3+, except the subject's own name (a logo or store sign).
+ */
+export function visibleTextReason(found, { subject = [] } = {}) {
   if (!found) return null;
   if (found.numbers.length) return `numbers printed in the photo (${found.numbers.slice(0, 3).join(', ')})`;
-  if (found.words.length >= 3) return `text in the photo (${found.words.slice(0, 4).join(' ')})`;
+  const own = new Set(subject.flatMap((w) => w.toLowerCase().split(/\s+/)));
+  const words = found.words.filter((w) => !own.has(w.toLowerCase()));
+  if (words.length >= 3) return `text in the photo (${words.slice(0, 4).join(' ')})`;
   return null;
 }
 
@@ -207,30 +263,40 @@ export async function attachCoverPhoto(spec, {
 } = {}) {
   const note = (m) => onNote?.(m);
   const request = photoRequest(spec);
-  const record = { used: false, queries: request.queries, mustHave: request.mustHave, avoid: request.avoid, rejected: [] };
+  const record = { used: false, subject: request.subject, queries: request.queries, mustHave: request.mustHave, avoid: request.avoid, rejected: [] };
   const done = (reason) => { record.reason = reason; note(`cover photo: ${reason} — chart cover kept`); return { spec, photo: record }; };
   try {
     if (!spec?.slides?.length) return done('no slides');
     if (!request.queries.length) return done('no photo search terms');
     const seen = new Set(); const candidates = [];
-    for (const q of request.queries) {
-      if (key) {
+    const pexels = async () => {
+      if (!key) return;
+      for (const q of request.queries) {
         try { candidates.push(...(await search.pexels(q, key))); } catch (err) { note(`cover photo: Pexels "${q}" failed (${String(err.message).slice(0, 60)})`); }
       }
-    }
-    for (const q of request.queries.slice(0, 2)) {
-      try { candidates.push(...(await search.commons(q))); } catch (err) { note(`cover photo: Commons "${q}" failed (${String(err.message).slice(0, 60)})`); }
-    }
+    };
+    const commons = async () => {
+      for (const q of request.queries.slice(0, 2)) {
+        try { candidates.push(...(await search.commons(q))); } catch (err) { note(`cover photo: Commons "${q}" failed (${String(err.message).slice(0, 60)})`); }
+      }
+    };
+    // People and companies: Wikimedia Commons first.
+    if (request.subject.length) { await commons(); await pexels(); } else { await pexels(); await commons(); }
     const unique = candidates.filter((c) => c?.id && !seen.has(c.id) && seen.add(c.id));
     record.searched = { pexels: Boolean(key), candidates: unique.length };
-    const ranked = rankCandidates(unique, request);
-    for (const r of ranked.filter((x) => x.reason).slice(0, 8)) record.rejected.push({ id: r.c.id, alt: String(r.c.alt || '').slice(0, 80), reason: r.reason });
-    const passing = ranked.filter((x) => !x.reason);
+    // Named subject first; then the closest related photo; then the chart cover.
+    const tiers = request.subject.length ? ['subject', 'related'] : ['related'];
+    const passing = [];
+    for (const tier of tiers) {
+      const ranked = rankCandidates(unique, request, tier);
+      for (const r of ranked.filter((x) => x.reason).slice(0, 8)) record.rejected.push({ id: r.c.id, tier, alt: String(r.c.alt || '').slice(0, 80), reason: r.reason });
+      for (const r of ranked.filter((x) => !x.reason)) if (!passing.some((p) => p.c.id === r.c.id)) passing.push({ ...r, tier });
+    }
     if (!passing.length) return done(unique.length ? `none of ${unique.length} candidates passed the relevance checks` : 'no candidates found');
 
     await fs.mkdir(outDir, { recursive: true });
     let textCheck = 'tesseract';
-    for (const { c } of passing.slice(0, MAX_DOWNLOADS)) {
+    for (const { c, tier } of passing.slice(0, MAX_DOWNLOADS)) {
       const dest = path.join(outDir, `cover-photo-${String(c.id).replace(/[^\w-]/g, '_')}.jpg`);
       try {
         await fetchFile(c.image, dest);
@@ -240,7 +306,7 @@ export async function attachCoverPhoto(spec, {
       }
       const found = await readText(dest);
       if (found === null) textCheck = 'unavailable (no tesseract) — metadata check only';
-      const textReason = visibleTextReason(found);
+      const textReason = visibleTextReason(found, { subject: tier === 'subject' ? request.subject : [] });
       if (textReason) {
         record.rejected.push({ id: c.id, alt: String(c.alt || '').slice(0, 80), reason: textReason });
         continue;
@@ -248,6 +314,7 @@ export async function attachCoverPhoto(spec, {
       Object.assign(record, {
         used: true, reason: null, source: c.source, page: c.page, image: c.image, licence: c.licence, licenceUrl: c.licenceUrl,
         credit: c.credit, alt: c.alt, query: c.query, file: dest, textCheck,
+        match: tier === 'subject' ? `photo of ${request.subject[0]}` : (request.subject.length ? `closest related (no usable photo of ${request.subject[0]})` : 'on-topic'),
       });
       note(`cover photo: ${c.source} — "${String(c.alt || '').slice(0, 70)}" (${c.licence}) ${c.page}`);
       const slides = spec.slides.map((s, i) => (i === 0 ? { ...s, photo: { file: dest, credit: `Photo: ${c.credit}${/pexels/i.test(c.source) ? '' : ` · ${c.licence}`}` } } : s));
