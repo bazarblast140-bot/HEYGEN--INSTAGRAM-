@@ -33,7 +33,14 @@
         "error": "Instagram rejected the video (ERROR): Error: Media upload has failed with error code 2207082",
         "at": "2026-10-04T03:59:13.523Z"
       },
-      "fb": null
+      "fb": {
+        "state": "done",
+        "id": "1417742960500156",
+        "url": "https://www.facebook.com/reel/1417742960500156",
+        "from": "release",
+        "tries": 1,
+        "at": "2026-10-04T03:59:13.523Z"
+      }
     }
   ]
 }
