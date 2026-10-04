@@ -263,6 +263,18 @@ export function slotClosedToday(slot, date) {
  * Anything else (a workflow_dispatch with no slot, an old external trigger)
  * has to be inside the slot's IST window. Outside it, the run does not post.
  */
+/**
+ * A manual dispatch with DISPATCH_LATE=true may post a slot that GitHub's cron
+ * never fired, later the same IST day (after the slot's window opened, before
+ * 23:00 IST). Every content gate still applies; the ledger still blocks repeats.
+ */
+export function lateOk(slot, now = new Date(), env = process.env) {
+  if (!/^(1|true|yes)$/i.test(String(env.DISPATCH_LATE || ''))) return false;
+  const mins = istParts(now).minutes;
+  const opens = { ai: 9 * 60, midday: 12 * 60, evening: 16 * 60 + 30 }[slot];
+  return opens !== undefined && mins >= opens && mins < 23 * 60;
+}
+
 export function resolveRun({
   event = '',
   dispatchSlot = '',
@@ -287,7 +299,7 @@ export function resolveRun({
   } else if (explicit) {
     slot = explicit;
     if (!ALL_SLOTS.includes(explicit)) reason = 'unknown';
-    else if (!inWindow(explicit, now)) reason = 'wrong-time';
+    else if (!inWindow(explicit, now) && !lateOk(explicit, now, env)) reason = 'wrong-time';
   } else {
     slot = slotFor(now, env) || '';
     if (!slot) reason = 'outside';
