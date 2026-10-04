@@ -20,6 +20,20 @@
         "tries": 2,
         "at": "2026-10-03T12:14:53.855Z"
       }
+    },
+    {
+      "igMediaId": "18102311315289964",
+      "permalink": "https://www.instagram.com/reel/DeDuGNFgbCg/",
+      "igTimestamp": "2026-10-04T03:57:46+0000",
+      "marker": "pkp:video:0oe9nuJyQLE",
+      "story": {
+        "state": "failed",
+        "tries": 1,
+        "stage": "processing",
+        "error": "Instagram rejected the video (ERROR): Error: Media upload has failed with error code 2207082",
+        "at": "2026-10-04T03:59:13.523Z"
+      },
+      "fb": null
     }
   ]
 }
