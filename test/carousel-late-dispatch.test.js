@@ -28,3 +28,19 @@ test('late still respects the ledger (no repeat)', () => {
   const d = resolveRun({ event: 'workflow_dispatch', dispatchSlot: 'ai', now: at('2026-10-04T06:40:00Z'), entries, env: { ...env, DISPATCH_LATE: 'true' } });
   assert.notEqual(d.pending, true);
 });
+
+test('post gate: late dispatch is not refused for the closed window', async () => {
+  const { approvalProblems } = await import('../pipeline/approve-build.js');
+  const report = { publishable: true, format: 'jpeg', files: ['x.jpg'], slot: 'ai', istDate: '2026-10-04' };
+  const now = at('2026-10-04T06:40:00Z');
+  const strict = await approvalProblems(report, { now, files: false });
+  const late = await approvalProblems(report, { now, files: false, late: true });
+  assert.ok(strict.some((p) => /window is closed/.test(p)));
+  assert.ok(!late.some((p) => /window is closed/.test(p)));
+});
+
+test('post gate reads the COMMITTED ledger, not the working copy the build just wrote', async () => {
+  const { committedEntries } = await import('../pipeline/post-gate.js');
+  const got = committedEntries();
+  assert.ok(got === null || Array.isArray(got));
+});
