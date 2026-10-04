@@ -287,6 +287,8 @@ jobs:
       - name: May this build be posted?
         id: postgate
         if: ${{ env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL != 'true' && steps.build.outcome == 'success' && github.event.inputs.preview != 'true' }}
+        env:
+          DISPATCH_LATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.late || 'false' }}
         run: node pipeline/post-gate.js --report pipeline/out/carousel-report.json | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Skipped — nothing posted

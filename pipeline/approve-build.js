@@ -19,7 +19,7 @@ import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-import { ALL_SLOTS, inWindow, istParts, slotClosedToday } from './src/carousel/categories.js';
+import { ALL_SLOTS, inWindow, istParts, slotClosedToday, lateOk } from './src/carousel/categories.js';
 import { readHistory, recordTopic } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
 
@@ -29,7 +29,7 @@ export async function hashFiles(files) {
   return h.digest('hex');
 }
 
-export async function approvalProblems(report, { now = new Date(), entries = [], files = true } = {}) {
+export async function approvalProblems(report, { now = new Date(), entries = [], files = true, late = false } = {}) {
   const problems = [];
   if (!report || report.skipped) return ['the build was skipped — nothing to approve'];
   if (report.publishable !== true) problems.push('the build is not publishable');
@@ -40,7 +40,7 @@ export async function approvalProblems(report, { now = new Date(), entries = [],
   if (!ALL_SLOTS.includes(slot)) problems.push(`the build has no known slot ("${slot}")`);
   const today = istParts(now).date;
   if (report.istDate !== today) problems.push(`the build is from ${report.istDate || 'an unknown day'} (IST); today is ${today} — stale builds are not posted`);
-  if (ALL_SLOTS.includes(slot) && !inWindow(slot, now)) problems.push(`the ${slot} window is closed — a missed slot is not backfilled`);
+  if (ALL_SLOTS.includes(slot) && !inWindow(slot, now) && !(late && lateOk(slot, now, { DISPATCH_LATE: 'true' }))) problems.push(`the ${slot} window is closed — a missed slot is not backfilled`);
   if (slotClosedToday(slot, today)) problems.push(`${today} is not an NSE trading day (${slotClosedToday(slot, today)}) — no market carousel`);
   if (slot === 'evening' && report.market?.date !== today) problems.push(`the market close in the build is from ${report.market?.date || 'nowhere'}, not today ${today} — no "aaj" claim on stale data`);
   const key = `${today} ${slot}`;
