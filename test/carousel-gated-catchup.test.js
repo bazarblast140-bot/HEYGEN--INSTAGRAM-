@@ -52,10 +52,10 @@ test('finds the 09:30 build from the 09:52 catch-up; nothing found → build', a
 
 test('carousel.yml: the guard runs on scheduled runs in approval mode only; manual, approve and publish paths unchanged', async () => {
   const wf = await fs.readFile(new URL('../.github/workflows/carousel.yml', import.meta.url), 'utf8');
-  const step = wf.slice(wf.indexOf('- name: Already built and awaiting approval?'), wf.indexOf('- name: Check the script-writing keys'));
+  const step = wf.slice(wf.indexOf('- name: Already built and awaiting approval?'), wf.indexOf('- name: Build attempts today'));
   assert.match(step, /if: \$\{\{ env\.APPROVE_BUILD == '' && env\.CAROUSEL_REQUIRE_APPROVAL == 'true' && env\.AUTOMATED == 'true' && steps\.slot\.outputs\.pending == 'true' \}\}/);
   assert.match(step, /continue-on-error: true/);
-  const gatedIfs = wf.match(/\(steps\.slot\.outputs\.pending == 'true' && steps\.gated\.outputs\.exists != 'true'\) \|\| github\.event\.inputs\.preview == 'true' \|\| github\.event\.inputs\.force == 'true'/g) || [];
+  const gatedIfs = wf.match(/\(steps\.slot\.outputs\.pending == 'true' && steps\.gated\.outputs\.exists != 'true' && steps\.cap\.outputs\.capped != 'true' && steps\.market\.outputs\.ok != 'false'\) \|\| github\.event\.inputs\.preview == 'true' \|\| github\.event\.inputs\.force == 'true'/g) || [];
   assert.equal(gatedIfs.length, 4, 'keys check, chromium, tesseract and build are skipped when a gated build exists');
   const publish = wf.slice(wf.indexOf('- name: Publish to Instagram'), wf.indexOf('- name: Copy to the Facebook Page'));
   assert.doesNotMatch(publish, /gated/, 'what gets published is not changed');

@@ -3,6 +3,7 @@
 // CODE computes. The model chooses the topic, the words and the structured
 // inputs (calc); it never does the arithmetic and never names a source.
 
+import { limitsPrompt } from './limits.js';
 import { marketDayNote } from './news-issue.js';
 import { SLIDES, TOPIC_SEEDS } from './categories.js';
 import { heavyWordPrompt } from './language.js';
@@ -91,6 +92,7 @@ personal-finance → EMI/SIP/inflation/lumpsum, mutual-funds → SIP/lumpsum/ste
 1. Cover — band "center", cta false, source null, calc null. One bold hook line.
 2–9. Content slides — band "bottom", cta false, source null, और हर slide पर valid "calc". सबसे strong चार्ट slide 2 पर.
 10. Last slide — cta true, source null, calc null, कोई fact नहीं. "सेव करो" और "फ़ॉलो करो" कहो.
+${limitsPrompt()}
 </structure>
 
 <output_format>

@@ -163,8 +163,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node pipeline/gated-build.js --slot "${{ steps.slot.outputs.slot }}" --run-id "${{ github.run_id }}" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Catch-ups must not loop on the script model: at most 2 builds per slot
+      # per IST day that did not post (scheduled runs; approval on or off).
+      - name: Build attempts today
+        id: cap
+        if: ${{ env.APPROVE_BUILD == '' && env.AUTOMATED == 'true' && steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node pipeline/build-cap.js --slot "${{ steps.slot.outputs.slot }}" --run-id "${{ github.run_id }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Evening market slot: today's close must be verified before any model call.
+      - name: Market close verified for today?
+        id: market
+        if: ${{ env.APPROVE_BUILD == '' && steps.slot.outputs.slot == 'evening' && steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' }}
+        run: node pipeline/market-check.js | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Check the script-writing keys
-        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' && steps.market.outputs.ok != 'false') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -197,17 +213,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Chromium for Playwright
-        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' && steps.market.outputs.ok != 'false') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         run: npx playwright install --with-deps chromium
 
       - name: Install tesseract (cover photo text check)
-        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' && steps.market.outputs.ok != 'false') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         continue-on-error: true
         run: sudo apt-get install -y --no-install-recommends tesseract-ocr >/dev/null
 
       - name: Build the carousel
         id: build
-        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
+        if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' && steps.market.outputs.ok != 'false') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
@@ -261,6 +277,23 @@ jobs:
             echo "\`approve_build=${{ github.run_id }}\` (inside the slot's IST window, same IST day)."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Direct posting (CAROUSEL_REQUIRE_APPROVAL off): every gate is a hard
+      # block. A refused build skips the slot: no IG post, no Story, no FB copy.
+      - name: May this build be posted?
+        id: postgate
+        if: ${{ env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL != 'true' && steps.build.outcome == 'success' && github.event.inputs.preview != 'true' }}
+        run: node pipeline/post-gate.js --report pipeline/out/carousel-report.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Skipped — nothing posted
+        if: ${{ always() && env.APPROVE_BUILD == '' && steps.build.outcome == 'failure' }}
+        run: |
+          {
+            echo '## Skipped — the build was refused, nothing posted (no IG post, no Story, no FB copy)'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' carousel.log | grep -E 'REJECTED|refused|failed|soft skip|limit' | tail -n 15 || true
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: What would be posted
         if: env.APPROVE_BUILD == '' && env.AUTOMATED != 'true' && github.event.inputs.publish != 'true'
         continue-on-error: true
@@ -282,7 +315,7 @@ jobs:
       # reaches this step; force/publish/schedule alone do not.
       - name: Publish to Instagram
         id: publish
-        if: ${{ (env.APPROVE_BUILD != '' && steps.approve.outputs.ok == 'true' && steps.approveslot.outputs.pending == 'true') || (env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL != 'true' && github.event.inputs.preview != 'true' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true')) || github.event.inputs.force == 'true')) }}
+        if: ${{ (env.APPROVE_BUILD != '' && steps.approve.outputs.ok == 'true' && steps.approveslot.outputs.pending == 'true') || (env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL != 'true' && github.event.inputs.preview != 'true' && ((steps.slot.outputs.pending == 'true' && (env.AUTOMATED == 'true' || github.event.inputs.publish == 'true') && steps.postgate.outputs.ok == 'true') || github.event.inputs.force == 'true')) }}
         env:
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
