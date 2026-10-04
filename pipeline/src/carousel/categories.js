@@ -1,12 +1,13 @@
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS } from '../publish/flags.js';
+import { marketClosed } from './market.js';
 
 // Instagram carousel categories for @rajesh_technical_trader.
-// Two finance carousels a day stay on:
-//   midday   → optional finance post, aimed at 12:30 IST
-//   evening  → the main finance post, aimed at 19:30 IST
-// Two more slots exist but publish only when ENABLE_AI_NEWS_CAROUSELS is on:
-//   ai       → latest AI update, aimed at 09:30 IST
-//   news     → latest big news, aimed at 16:30 IST
+// Three topic-wise carousels a day, fed by the daily news issue (grok-news):
+//   ai       → Big AI news + crypto, 09:30 IST (only when ENABLE_AI_NEWS_CAROUSELS is on)
+//   midday   → Mutual funds explainer (code-computed numbers), 12:30 IST
+//   evening  → Market close: NIFTY/SENSEX close verified in code + finance /
+//              technical news, 16:45 IST, NSE trading days only (market.js)
+// The old 16:30 news and 19:30 finance slots are gone.
 // A story goes out with the evening post. Other slots get a cover Story only
 // when ENABLE_CAROUSEL_STORY is on, and never a second Story for the same post.
 
@@ -24,10 +25,11 @@ export const SLIDES = 10;
 // and stays off the next five mornings.
 export const SLOT_OFFSET = 3;
 export const SLOTS = ['midday', 'evening'];
-export const OPTIONAL_SLOTS = ['ai', 'news'];
+export const OPTIONAL_SLOTS = ['ai'];
 export const ALL_SLOTS = [...SLOTS, ...OPTIONAL_SLOTS];
 export const MAIN_SLOT = 'evening';
-export const FINANCE = POOL;
+// Finance = code-computed numbers (calc.js). mutual-funds is the midday slot.
+export const FINANCE = [...POOL, 'mutual-funds'];
 
 export const TOPIC_SEEDS = {
   fundamentals: [
@@ -118,6 +120,18 @@ export const TOPIC_SEEDS = {
     'Revenge trading के बाद position size बढ़ाना क्यों dangerous है',
     'Trading journal में कौन से numbers track करने चाहिए',
   ],
+  'mutual-funds': [
+    'SIP बनाम lumpsum: same ₹ amount, अलग समय पर अलग नतीजा',
+    'Expense ratio 1% बनाम 0.2%: 20 साल में कितना फर्क',
+    'Direct बनाम regular plan: commission का compounding असर',
+    'Step-up SIP: हर साल 10% बढ़ाने से corpus कितना बदलता है',
+    'XIRR बनाम absolute return: SIP का असली return कैसे पढ़ें',
+    'Exit load और holding period: जल्दी निकलने की cost',
+    'NAV कम होने से fund सस्ता नहीं होता — units का गणित',
+    'Index fund में tracking error का मतलब',
+    'SWP: retirement में monthly withdrawal कितने साल चलेगा',
+    'Equity MF पर LTCG tax: ₹1.25 lakh छूट के बाद हिसाब',
+  ],
   // Latest AI — model must pick CURRENT / recent AI headlines (last few days).
   'ai-news': [
     'आज की सबसे बड़ी AI खबर: OpenAI / Google / Meta / Anthropic में से जो सबसे नया हो',
@@ -151,6 +165,7 @@ export const BRIEFS = {
   'personal-finance': 'Compounding, emergency fund, inflation, loans, credit score, taxes, asset allocation और money mistakes — practical calculations के साथ.',
   business: 'Companies और business models: revenue कैसे बनता है, unit economics, margins, moats, failures, IPO/business history और famous Indian corporate case studies.',
   'risk-management': 'Capital protection: position sizing, drawdown math, risk-reward, leverage, stop-loss mechanics, diversification और trading psychology. कोई guaranteed outcome नहीं.',
+  'mutual-funds': 'Mutual funds की practical education: SIP, lumpsum, step-up SIP, SWP, expense ratio, direct vs regular, NAV, exit load, XIRR/CAGR, index funds और MF tax. आज की MF ख़बर से angle ले सकते हो, पर हर number code वाले example से. कोई fund recommend मत करो.',
   'ai-news': 'LATEST AI news only (last 1–7 days). OpenAI, Google, Meta, Anthropic, Microsoft, Apple, Indian AI startups, models, agents, regulation, chips. हर slide पर concrete fact + source-worthy detail. Evergreen theory मत लिखो — आज/इस हफ्ते की खबर. Hindi, clear, no hype promises.',
   'latest-news': 'LATEST news digest (last 1–3 days): Indian markets, tech, policy, startups, gadgets, global events that matter to Indian audience. 3–5 short facts with context. Stale or undated claims avoid करो. Hindi, neutral, educational tone.',
 };
@@ -164,28 +179,26 @@ export function dayNumber(date = new Date()) {
 // The :00 entries are the publish times and stay put. Later entries are
 // retries for when GitHub drops a schedule. New retries use minutes other
 // than :00 and :30, and none of them sit in the 22:30–01:30 UTC band.
-//   midday  12:30, 12:37, 12:52, 13:11 IST → 07:00, 07:07, 07:22, 07:41 UTC
-//   evening 19:30, 19:37, 19:52, 20:11 IST → 14:00, 14:07, 14:22, 14:41 UTC
 //   ai      09:30, 09:37, 09:52, 10:11 IST → 04:00, 04:07, 04:22, 04:41 UTC
-//   news    16:30, 16:37, 16:52, 17:11 IST → 11:00, 11:07, 11:22, 11:41 UTC
-// ai and news no-op unless ENABLE_AI_NEWS_CAROUSELS is on.
+//   midday  12:30, 12:37, 12:52, 13:11 IST → 07:00, 07:07, 07:22, 07:41 UTC
+//   evening 16:45, 16:52, 17:07, 17:26 IST → 11:15, 11:22, 11:37, 11:56 UTC
+// ai no-ops unless ENABLE_AI_NEWS_CAROUSELS is on; evening only on NSE trading days.
 export const CRON_SLOTS = {
-  '0 7 * * *': 'midday', '7 7 * * *': 'midday', '22 7 * * *': 'midday', '41 7 * * *': 'midday',
-  '0 14 * * *': 'evening', '7 14 * * *': 'evening', '22 14 * * *': 'evening', '41 14 * * *': 'evening',
   '0 4 * * *': 'ai', '7 4 * * *': 'ai', '22 4 * * *': 'ai', '41 4 * * *': 'ai',
-  '0 11 * * *': 'news', '7 11 * * *': 'news', '22 11 * * *': 'news', '41 11 * * *': 'news',
+  '0 7 * * *': 'midday', '7 7 * * *': 'midday', '22 7 * * *': 'midday', '41 7 * * *': 'midday',
+  '15 11 * * *': 'evening', '22 11 * * *': 'evening', '37 11 * * *': 'evening', '56 11 * * *': 'evening',
 };
 
 // Posting windows in minutes from midnight IST. A run that does not name a
 // slot, and an explicit slot, may post only inside one of these. Ends are
 // exclusive. Each window now runs past the catch-up times so a late clock
-// still fills that slot, without swallowing the gap before the next one:
-// 15:00 IST is not midday, 06:07 IST is before AI, and 17:07 IST is not evening.
+// still fills that slot (and an approve_build has time), without swallowing
+// the gap before the next one: 15:00 IST is not midday, 06:07 IST is before
+// AI, and 16:15 IST (before the close data settles) is not evening.
 export const WINDOWS = {
-  midday: { start: 12 * 60, end: 14 * 60 + 30 },
-  evening: { start: 19 * 60, end: 22 * 60 },
   ai: { start: 9 * 60, end: 11 * 60 + 45 },
-  news: { start: 16 * 60, end: 18 * 60 + 45 },
+  midday: { start: 12 * 60, end: 14 * 60 + 30 },
+  evening: { start: 16 * 60 + 30, end: 20 * 60 },
 };
 
 export function istParts(date = new Date()) {
@@ -222,17 +235,23 @@ export function slotFor(date = new Date(), env = process.env) {
   return null;
 };
 
-// Both remaining slots are finance. Midday is not an AI step and afternoon
-// is not a news step; counting those used to pin both finance posts together.
-const FINANCE_SLOTS = ['midday', 'evening'];
-
+// Topic-wise slots. POOL rotation stays available for a finance preview of
+// another category (poolCategory); the scheduled slots no longer rotate.
 export function categoryFor(date = new Date(), slot = 'evening') {
   if (slot === 'ai') return 'ai-news';
-  if (slot === 'news') return 'latest-news';
-  const index = FINANCE_SLOTS.indexOf(slot);
-  if (index === -1) throw new Error('Unknown slot ' + slot + ' — ' + SLOTS.join(' or ') + '.');
-  return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
+  if (slot === 'midday') return 'mutual-funds';
+  if (slot === 'evening') return 'latest-news';
+  throw new Error('Unknown slot ' + slot + ' — ' + ALL_SLOTS.join(', ') + '.');
 };
+
+export function poolCategory(date = new Date(), index = 0) {
+  return POOL[(dayNumber(date) * STRIDE + index * SLOT_OFFSET) % POOL.length];
+}
+
+/** The evening slot is a market-close post: NSE trading days only. */
+export function slotClosedToday(slot, date) {
+  return slot === 'evening' ? marketClosed(date) : null;
+}
 
 /**
  * Decide whether this run may publish.
@@ -275,6 +294,9 @@ export function resolveRun({
   }
 
   const key = slot ? `${date} ${slot}` : '';
+  if (reason === 'due' && slotClosedToday(slot, date)) {
+    return { date, slot, key, pending: false, reason: 'market-closed', why: slotClosedToday(slot, date), posted: null };
+  }
   if (OPTIONAL_SLOTS.includes(slot) && !flagOn(ENABLE_AI_NEWS_CAROUSELS, env)) {
     return { date, slot, key, pending: false, reason: 'disabled', posted: null };
   }

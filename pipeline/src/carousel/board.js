@@ -16,7 +16,7 @@ export const HANDLE = '@rajesh_technical_trader';
 
 const KICKERS = {
   fundamentals: 'Fundamentals', options: 'Options', intraday: 'Intraday', stocks: 'Stocks',
-  'market-history': 'Market history', 'personal-finance': 'Personal finance', business: 'Business',
+  'market-history': 'Market history', 'personal-finance': 'Personal finance', 'mutual-funds': 'Mutual funds', business: 'Business',
   'risk-management': 'Risk management', 'ai-news': 'AI update', 'latest-news': 'Market news',
 };
 

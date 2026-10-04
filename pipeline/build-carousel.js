@@ -31,7 +31,9 @@ import { istParts } from './src/carousel/categories.js';
 import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
 import { ALL_SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
 import { clock } from './src/publish/same-day.js';
-import { generateSourcedCarousel } from './src/carousel/sourced.js';
+import { generateSourcedCarousel, gatherSources, selectFresh } from './src/carousel/sourced.js';
+import { digestStories } from './src/carousel/news-issue.js';
+import { marketCloseStories } from './src/carousel/market.js';
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS, ENABLE_CAROUSEL_STORY } from './src/publish/flags.js';
 import { ACCOUNT_BRAND } from './src/publish/allow.js';
 import { framesToPost } from './src/carousel/story.js';
@@ -157,6 +159,8 @@ async function main() {
   let sourceFresh = false;
   let sourcedSlot = false;
   let fetchedStories = null;
+  let topicSource = null;
+  let market = null;
 
   let spec;
   // Re-render a reviewed preview's generated spec with reviewer edits — no
@@ -211,7 +215,7 @@ async function main() {
     console.log(args.preview ? 'Preview — writing a carousel without posting' : 'Writing today\'s carousel');
     const now = clock();
     const requested = args.preview
-      ? ((!args.slot || args.slot === 'auto') ? 'evening' : args.slot)
+      ? ((!args.slot || args.slot === 'auto') ? 'midday' : args.slot)
       : (args.slot || slotFor(now));
     const slot = requested;
     slotUsed = slot || '';
@@ -222,11 +226,40 @@ async function main() {
       console.log(`${slot} skipped — ENABLE_AI_NEWS_CAROUSELS is off. Nothing will be published.`);
       process.exit(0);
     } else try {
-      sourcedSlot = slot === 'ai' || slot === 'news';
+      sourcedSlot = slot === 'ai' || slot === 'news' || slot === 'evening';
+      // Evening = market close: only with today's close verified in code
+      // (NSE trading day, latest candle dated today IST). Otherwise skip.
+      if (slot === 'evening') {
+        market = await marketCloseStories({ now: now.getTime(), onNote: note });
+        if (!market.ok) {
+          const skipReport = {
+            skipped: true, publishable: false, generated: false, fallback: false,
+            category: 'latest-news', slot, reason: market.reason, files: [], stories: [], notes: [market.reason],
+          };
+          await fs.mkdir(path.join(HERE, 'out'), { recursive: true });
+          await fs.writeFile(path.join(HERE, 'out', 'carousel-report.json'), JSON.stringify(skipReport, null, 2));
+          console.log(`soft skip — ${market.reason}. Nothing will be published.`);
+          process.exit(args.preview ? 1 : 0);
+        }
+      }
+      // Topic candidates from today's / yesterday's daily news issue (grok-news).
+      // None → the usual source: RSS fetch for ai/evening, topic seeds for midday.
+      const digest = await digestStories({ slot, now: now.getTime(), onNote: note });
+      const digestFresh = digest ? selectFresh(digest.stories, now.getTime()) : [];
+      topicSource = digestFresh.length
+        ? { from: 'daily-news-issue', issue: digest.issue, headlines: digestFresh.length }
+        : { from: sourcedSlot ? 'rss-fetch' : 'topic-seeds' };
+      if (market) topicSource.marketClose = market.indices.map(({ name, date, close, changePct }) => ({ name, date, close, changePct }));
+      const kind = slot === 'evening' ? 'market' : slot;
+      const baseStories = digestFresh.length
+        ? digestFresh
+        : (slot === 'evening' ? await gatherSources({ kind: 'news', now: now.getTime(), onNote: note }).catch(() => []) : null);
+      const sourcedStories = market ? [...market.stories, ...(baseStories || [])] : baseStories;
       const written = sourcedSlot
         ? await generateSourcedCarousel({
           slot,
-          kind: slot,
+          kind,
+          ...(sourcedStories ? { stories: sourcedStories } : {}),
           record: !args.preview,
           onNote: note,
           onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
@@ -234,6 +267,7 @@ async function main() {
         })
         : await generateCarousel({
           slot,
+          headlines: digestFresh,
           record: !args.preview,
           onNote: note,
           onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
@@ -458,6 +492,8 @@ async function main() {
     slot: slotUsed || null,
     preview: args.preview === true || Boolean(rerender),
     rerender,
+    topicSource,
+    market: market?.ok ? { date: market.date, indices: market.indices } : null,
     coverPhoto,
     builtAt: new Date().toISOString(),
     istDate: istParts(new Date()).date,
@@ -472,8 +508,10 @@ async function main() {
     verifiedSource,
     sourceFresh,
     publishable: quality.ok && ((generated && FINANCE.includes(spec.category))
-      || (generated && verifiedSource && sourceFresh && flagOn(ENABLE_AI_NEWS_CAROUSELS)
-        && (spec.category === 'ai-news' || spec.category === 'latest-news'))),
+      || (generated && verifiedSource && sourceFresh && (
+        (spec.category === 'ai-news' && flagOn(ENABLE_AI_NEWS_CAROUSELS))
+        // The evening market post needs today's verified close, not the AI flag.
+        || (spec.category === 'latest-news' && (slotUsed === 'evening' ? market?.ok === true : flagOn(ENABLE_AI_NEWS_CAROUSELS)))))),
     quality,
     stories,
     lines: (ready.slides || []).map((s, i) => ({

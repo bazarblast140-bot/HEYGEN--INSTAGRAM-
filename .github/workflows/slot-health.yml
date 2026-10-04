@@ -7,8 +7,9 @@ name: Slot health
 # Times are UTC. IST is UTC+5:30. Minutes stay off :00 and :30.
 #   AI      09:30 IST → check 10:07 IST (04:37 UTC)   only if the flag is on
 #   Midday  12:30 IST → check 13:07 IST (07:37 UTC)
-#   News    16:30 IST → check 17:07 IST (11:37 UTC)   only if the flag is on
-#   Evening 19:30 IST → check 20:07 IST (14:37 UTC)
+#   Evening 16:45 IST → check 20:07 IST (14:37 UTC), after its 16:30–20:00
+#           window; NSE trading days only (no alert on weekends/holidays).
+#           The 17:07 IST (11:37 UTC) run is before its grace ends and reports nothing for it.
 #   Reel    any Reel on Instagram today (Paise Ki Pathshala or the own 21:47 IST
 #           fallback) → checked at 23:07 IST (17:37 UTC), after the fallback's
 #           last catch-up (22:41 IST). Earlier checks never report the Reel.

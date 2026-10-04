@@ -1,8 +1,9 @@
 // Open or update one health-alert issue when an enabled slot is still
 // unpublished 30 minutes after its time, and close that issue once the slot
-// has a successful publish. Disabled AI/news slots are not checked.
+// has a successful publish. A disabled AI slot, and the evening market slot on a
+// non-trading day, are not checked.
 
-import { istParts, inWindow } from '../carousel/categories.js';
+import { istParts, inWindow, slotClosedToday } from '../carousel/categories.js';
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS } from '../publish/flags.js';
 import { istDate, isCarouselMedia, resolveReelPublish } from '../publish/same-day.js';
 
@@ -16,9 +17,8 @@ export const ALERT_LABEL = 'health-alert';
 export const SLOT_TIMES = {
   reel: { label: 'Reel (any Reel today; own fallback 21:47 IST)', ist: '21:47', minute: 21 * 60 + 47, grace: 78 },
   ai: { label: 'AI carousel', ist: '09:30', minute: 9 * 60 + 30 },
-  midday: { label: 'Midday carousel', ist: '12:30', minute: 12 * 60 + 30 },
-  news: { label: 'News carousel', ist: '16:30', minute: 16 * 60 + 30 },
-  evening: { label: 'Evening carousel', ist: '19:30', minute: 19 * 60 + 30 },
+  midday: { label: 'Midday carousel (mutual funds)', ist: '12:30', minute: 12 * 60 + 30 },
+  evening: { label: 'Evening carousel (market close, trading days)', ist: '16:45', minute: 16 * 60 + 45 },
 };
 
 export function alertTitle(date) {
@@ -28,7 +28,6 @@ export function alertTitle(date) {
 export function enabledPublishSlots(env = process.env) {
   const slots = ['reel', 'midday', 'evening'];
   if (flagOn(ENABLE_AI_NEWS_CAROUSELS, env)) slots.splice(1, 0, 'ai');
-  if (flagOn(ENABLE_AI_NEWS_CAROUSELS, env)) slots.splice(slots.indexOf('evening'), 0, 'news');
   return slots;
 }
 
@@ -54,6 +53,7 @@ export function missedSlots({
   const missed = [];
   for (const slot of enabledPublishSlots(env)) {
     if (minutes < SLOT_TIMES[slot].minute + (SLOT_TIMES[slot].grace ?? GRACE_MINUTES)) continue;
+    if (slotClosedToday(slot, date)) continue; // no market carousel on a non-trading day
     if (slot === 'reel') {
       const decision = resolveReelPublish({ now, publishEntries: reelPublishEntries, media });
       if (!decision.pending) continue;
