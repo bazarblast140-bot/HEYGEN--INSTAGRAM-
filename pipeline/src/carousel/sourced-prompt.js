@@ -1,3 +1,4 @@
+import { limitsPrompt } from './limits.js';
 import { marketDayNote } from './news-issue.js';
 import { SLIDES } from './categories.js';
 import { heavyWordPrompt } from './language.js';
@@ -60,6 +61,7 @@ Headline 8 शब्द तक, subline 14 शब्द तक. ज़्या�
   2-${SLIDES - 1}. fact slides — band "bottom", source में नाम और तारीख़
   ${SLIDES}. follow card — cta true, source null
 आख़िरी fact slide पर स्रोत ज़रूर हो. Caption की एक पंक्ति "स्रोत: नाम, YYYY-MM-DD" हो.
+${limitsPrompt()}
 </structure>
 
 <output_format>

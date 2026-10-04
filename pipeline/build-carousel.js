@@ -34,6 +34,9 @@ import { clock } from './src/publish/same-day.js';
 import { generateSourcedCarousel, gatherSources, selectFresh } from './src/carousel/sourced.js';
 import { digestStories } from './src/carousel/news-issue.js';
 import { marketCloseStories } from './src/carousel/market.js';
+import { enforceLimits } from './src/carousel/limits.js';
+import { resolveProvider, callOpenAICompatible } from './src/script/providers.js';
+import { z } from 'zod';
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS, ENABLE_CAROUSEL_STORY } from './src/publish/flags.js';
 import { ACCOUNT_BRAND } from './src/publish/allow.js';
 import { framesToPost } from './src/carousel/story.js';
@@ -389,6 +392,28 @@ async function main() {
     if (dropped) note(`dropped ${dropped} news chart(s) whose inputs do not compute or are not in the fetched items`);
   }
 
+  // Fixed per-field character limits (limits.js): one shorten call to the model
+  // for the fields that are over, then a safe word-boundary trim, else the
+  // gate refuses it and the slot is skipped.
+  let limitProblems = [];
+  {
+    let provider = null;
+    try { provider = generated && !rerender ? resolveProvider() : null; } catch { provider = null; }
+    const shorten = provider?.kind === 'openai-compatible' && provider.model
+      ? async (user) => (await callOpenAICompatible({
+        provider,
+        system: 'You shorten Instagram carousel text fields to a character limit. Keep the meaning, every number and the Hinglish (Devanagari + Roman). Respond only in valid JSON. The response format is json.',
+        user,
+        schema: z.object({ fields: z.array(z.object({ n: z.coerce.number(), text: z.string() })) }),
+      })).output
+      : null;
+    const limited = await enforceLimits(spec, { shorten });
+    spec = limited.spec;
+    limitProblems = limited.problems;
+    limited.actions.forEach((a) => note(`limits: ${a}`));
+    limitProblems.forEach((p) => note(`limits: ${p}`));
+  }
+
   // v3 chart-board: chart, figure strip and footnote come from calc.js. Inner
   // slides never get a photo. The COVER may get one topic photo that passed the
   // relevance, document/foreign and visible-text checks (cover-photo.js); if
@@ -464,7 +489,12 @@ async function main() {
   const caption = composeCaption(spec, BRAND.tag);
 
   // Final pre-publish gate. Any hard problem keeps this carousel off the feed.
-  const gate = [...hardQualityProblems(ready, { stories: fetchedStories, caption }), ...layout];
+  const gate = [
+    ...hardQualityProblems(ready, { stories: fetchedStories, caption }),
+    ...layout,
+    ...limitProblems,
+    ...([...caption].length > 2200 ? [`caption is ${[...caption].length} characters (Instagram max 2200)`] : []),
+  ];
   const quality = {
     ok: gate.length === 0,
     problems: gate,
