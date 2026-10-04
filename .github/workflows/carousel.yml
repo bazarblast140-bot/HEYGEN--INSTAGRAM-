@@ -74,6 +74,10 @@ on:
         description: Generate this slot now for review. Does not publish and does not use the posting queue.
         type: boolean
         default: false
+      late:
+        description: "Manual only: post a slot GitHub's cron missed, later the same IST day (all gates still apply)"
+        type: boolean
+        default: false
       approve_build:
         description: "Run id of a reviewed build (carousel.yml or carousel-preview.yml) to publish exactly as built. Leave empty to build."
         default: ''
@@ -147,6 +151,7 @@ jobs:
           SCHEDULED_CRON: ${{ github.event.schedule }}
           DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
           FORCE: ${{ github.event.inputs.force }}
+          DISPATCH_LATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.late || 'false' }}
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_SURFACE: ${{ vars.IG_SURFACE }}
