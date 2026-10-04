@@ -1,0 +1,31 @@
+name: Daily news
+
+# 07:15 IST digest of public RSS headlines → one issue "Daily news YYYY-MM-DD"
+# (IST) with label grok-news. No paid API (no DeepSeek, no Grok). Skips if
+# today's issue already exists; a dead feed is a note, never a failed run.
+on:
+  schedule:
+    - cron: '45 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: daily-news
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Create today's Daily news issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node pipeline/daily-news.js | tee -a "$GITHUB_STEP_SUMMARY"
