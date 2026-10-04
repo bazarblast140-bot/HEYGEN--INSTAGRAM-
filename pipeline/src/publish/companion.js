@@ -1,5 +1,5 @@
-// Reel companion: a Story and a Facebook Reel for every public Reel this repo
-// did not make itself.
+// Reel companion: a Story and a Facebook Reel for every Paise Ki Pathshala Reel
+// (marker pkp:video:<YouTube id>, video public on YouTube); never our own Reels.
 //
 // Paise Ki Pathshala (another repo) posts its YouTube Shorts to the same
 // Instagram account as Reels. It posts no Story and nothing to Facebook. This
@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 
 import { isReelMedia } from './same-day.js';
 import { ENGAGEMENT } from './caption.js';
@@ -155,6 +156,54 @@ export function markerOf(caption) {
   return m ? m[0] : '';
 }
 
+/**
+ * The Paise Ki Pathshala YouTube video id this Reel is for, or ''. Only a
+ * Reel that names one is handled: the marker pkp:video:<id>, or a caption that
+ * says Paise Ki Pathshala and links the YouTube video. Anything else (our own
+ * Reels included) is never touched.
+ */
+export function paiseVideoId(caption) {
+  const text = String(caption || '');
+  const marker = text.match(/\bpkp:video:([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
+  if (marker) return marker[1];
+  if (/paise\s*ki\s*pathshala/i.test(text)) {
+    const yt = text.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
+    if (yt) return yt[1];
+  }
+  return '';
+}
+
+// ---------------------------------------------------------------- Story length
+
+// Instagram refuses Stories over 60 s (error 2207082). A longer video gets a
+// sped-up copy for the Story only (the Facebook Reel keeps the original).
+export const STORY_MAX_SECONDS = 59.5;
+export const STORY_TARGET_SECONDS = 59;
+export const MAX_SPEEDUP = 1.25;
+
+/** none | speed (factor) | trim (to 59 s) for a video of this many seconds. */
+export function storyPlan(duration) {
+  const d = Number(duration);
+  if (!Number.isFinite(d) || d <= 0) return { action: 'unknown' };
+  if (d <= STORY_MAX_SECONDS) return { action: 'none' };
+  const factor = Math.ceil((d / STORY_TARGET_SECONDS) * 1000) / 1000;
+  if (factor <= MAX_SPEEDUP) return { action: 'speed', factor };
+  return { action: 'trim', seconds: STORY_TARGET_SECONDS };
+}
+
+/** ffmpeg arguments for that plan (audio only when the file has an audio stream). */
+export function ffmpegArgs(plan, input, output, { hasAudio = true } = {}) {
+  const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
+  const aenc = hasAudio ? ['-c:a', 'aac', '-b:a', '128k'] : ['-an'];
+  if (plan.action === 'speed') {
+    const f = plan.factor;
+    const graph = hasAudio ? `[0:v]setpts=PTS/${f}[v];[0:a]atempo=${f}[a]` : `[0:v]setpts=PTS/${f}[v]`;
+    return ['-y', '-i', input, '-filter_complex', graph, '-map', '[v]', ...(hasAudio ? ['-map', '[a]'] : []), ...enc, ...aenc, output];
+  }
+  if (plan.action === 'trim') return ['-y', '-i', input, '-t', String(plan.seconds), ...enc, ...aenc, output];
+  throw new Error(`no ffmpeg step for "${plan.action}"`);
+}
+
 // ---------------------------------------------------------------- planning
 
 function when(item) {
@@ -199,13 +248,15 @@ export function planCompanion({
       const id = String(item.id);
       const own = ownReason(item, { ownIds, fbLedger });
       if (own) return { id, item, action: 'skip', reason: `own Reel (${own})`, story: 'own', fb: 'own', doStory: false, doFb: false };
+      const yt = paiseVideoId(item.caption);
+      if (!yt) return { id, item, action: 'skip', reason: 'not a Paise Ki Pathshala Reel (no pkp:video:<id> marker)', story: 'other', fb: 'other', doStory: false, doFb: false };
       const entry = companion.find((e) => String(e.igMediaId) === id);
       const story = partState(entry, 'story', { fbLedger, id });
       const fb = fbEnabled ? partState(entry, 'fb', { fbLedger, id }) : 'off';
       const doStory = story === 'todo' || story === 'retry';
       const doFb = fb === 'todo' || fb === 'retry';
       return {
-        id, item,
+        id, item, yt,
         action: doStory || doFb ? 'handle' : 'skip',
         reason: doStory || doFb ? '' : 'already handled',
         story, fb, doStory, doFb,
@@ -329,6 +380,59 @@ export function realApi({ fetchImpl = globalThis.fetch } = {}) {
       });
       if (!up.ok) throw new Error(`asset upload ${up.status}`);
       return (await up.json()).browser_download_url || '';
+    },
+
+    /** true = public/unlisted (oEmbed 200), false = private/removed (401/403/404), null = unknown. */
+    async youtubePublic(videoId) {
+      try {
+        const res = await fetchImpl(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`, { signal: AbortSignal.timeout(15000) });
+        await res.body?.cancel?.().catch(() => {});
+        if (res.status === 200) return true;
+        if ([400, 401, 403, 404].includes(res.status)) return false;
+        return null;
+      } catch {
+        return null;
+      }
+    },
+
+    /**
+     * The video to post as the Story: the original when it is ≤ 59.5 s, else a
+     * copy sped up by duration/59 (≤ 1.25x) or trimmed to 59 s, uploaded once to
+     * companion-media as ig-<id>-story.mp4 and reused from there afterwards.
+     */
+    async storyVideo({ repo, token, id, video, log = () => {} }) {
+      const name = `ig-${id}-story.mp4`;
+      const rel0 = await companionRelease({ repo, token, create: false }).catch(() => null);
+      const pinned = (rel0?.assets || []).find((x) => x.name === name);
+      if (pinned) return { url: pinned.browser_download_url, from: 'story-copy' };
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'story-'));
+      try {
+        const input = path.join(dir, 'in.mp4');
+        const src = await fetchImpl(video.url, { redirect: 'follow', signal: AbortSignal.timeout(120000) });
+        if (!src.ok) throw new Error(`video download ${src.status}`);
+        fs.writeFileSync(input, Buffer.from(await src.arrayBuffer()));
+        const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', input], { encoding: 'utf8' }));
+        const duration = Number(probe?.format?.duration);
+        const hasAudio = (probe?.streams || []).some((st) => st.codec_type === 'audio');
+        const plan = storyPlan(duration);
+        if (plan.action === 'unknown') throw new Error('could not read the video duration');
+        if (plan.action === 'none') return video;
+        const output = path.join(dir, name);
+        execFileSync('ffmpeg', ffmpegArgs(plan, input, output, { hasAudio }), { stdio: ['ignore', 'ignore', 'pipe'], timeout: 600000 });
+        log(`  ${id}: video is ${duration.toFixed(1)} s — Story copy ${plan.action === 'speed' ? `sped up ${plan.factor}x` : `trimmed to ${plan.seconds} s`}`);
+        if (!repo || !token) throw new Error('no repo token to host the Story copy');
+        const rel = await companionRelease({ repo, token, create: true });
+        const up = await fetchImpl(`https://uploads.github.com/repos/${repo}/releases/${rel.id}/assets?name=${name}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'video/mp4', Accept: 'application/vnd.github+json', 'User-Agent': 'reel-companion' },
+          body: fs.readFileSync(output),
+          signal: AbortSignal.timeout(120000),
+        });
+        if (!up.ok) throw new Error(`story copy upload ${up.status}`);
+        return { url: (await up.json()).browser_download_url, from: `story-copy (${plan.action === 'speed' ? `${plan.factor}x` : 'trimmed 59 s'})` };
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     },
 
     async postStory({ igUserId, token, surface = 'facebook', videoUrl, onStage }) {
@@ -489,6 +593,13 @@ export async function runCompanion({
     if (dryRun) return result;
 
     for (const p of plan.filter((x) => x.action === 'handle')) {
+      if (api.youtubePublic) {
+        const pub = await api.youtubePublic(p.yt);
+        if (pub === false) {
+          say(`  ${p.id}: YouTube video ${p.yt} is not public (oEmbed refused) — skipped, nothing posted.`);
+          continue;
+        }
+      }
       let video = null;
       const resolveVideo = async () => {
         if (video) return video;
@@ -526,8 +637,12 @@ export async function runCompanion({
           const tries = (prev?.tries || 0) + 1;
           let stage = '';
           try {
-            const v = await resolveVideo();
-            if (!v) throw new Error('no fetchable video (media_url and release mp4 both unavailable)');
+            const original = await resolveVideo();
+            if (!original) throw new Error('no fetchable video (media_url and release mp4 both unavailable)');
+            // Stories max out at 60 s: a longer video gets a sped-up / trimmed copy (Story only).
+            const v = api.storyVideo
+              ? await api.storyVideo({ repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN, id: p.item.id, video: original, log: say })
+              : original;
             const id = await api.postStory({ igUserId, token, surface, videoUrl: v.url, onStage: (s) => { stage = s; } });
             updatePart(files.companion, p.item, 'story', { state: 'done', id: String(id), from: v.from, tries, at: new Date(now).toISOString() });
             result.stories.push({ igMediaId: p.id, storyId: String(id), from: v.from });

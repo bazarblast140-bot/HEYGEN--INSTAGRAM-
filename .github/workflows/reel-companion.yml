@@ -2,7 +2,12 @@ name: Reel companion
 
 # Paise Ki Pathshala (another repo) posts each public YouTube Short to this
 # Instagram account as a Reel, and nothing else. This job adds what it does not:
-# an Instagram Story of that Reel and a copy on the Facebook Page. It never
+# an Instagram Story of that Reel and a copy on the Facebook Page. Runs
+# automatically, no OK needed. Only Reels marked pkp:video:<YouTube id> (or a
+# caption naming Paise Ki Pathshala + the YouTube link) whose video is public
+# (YouTube oEmbed 200) are handled. A video over 59.5 s gets a Story-only copy
+# sped up by duration/59 (max 1.25x, else trimmed to 59 s), hosted on the
+# companion-media release as ig-<mediaId>-story.mp4; the FB Reel keeps the original. It never
 # touches the Reel itself or its caption, never handles this repo's own Reels
 # (reel-publish-history.json), and never posts twice for one media id
 # (reel-companion-history.json + fb-crosspost-history.json, keyed on the IG
@@ -54,6 +59,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --omit=dev --ignore-scripts
+
+      # Stories max out at 60 s: longer Paise videos get a sped-up/trimmed Story copy.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg >/dev/null
 
       - name: Story and Facebook copy for Paise Reels
         continue-on-error: true

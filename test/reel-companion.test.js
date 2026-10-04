@@ -3,14 +3,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 import {
   runCompanion, planCompanion, fbCaption, readCompanion, readFbLedger, mergeCompanion,
-  ownReason, markerOf, redact, MAX_TRIES, SOURCE,
+  ownReason, markerOf, redact, MAX_TRIES, SOURCE, paiseVideoId, storyPlan, ffmpegArgs,
 } from '../pipeline/src/publish/companion.js';
 import { BROKER_CTA, hasBioCta } from '../pipeline/src/publish/cta.js';
 import { ENGAGEMENT } from '../pipeline/src/publish/caption.js';
 
+const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
 const NOW = Date.parse('2026-10-03T12:00:00Z'); // 17:30 IST
 
 const PAISE = {
@@ -20,13 +22,13 @@ const PAISE = {
   timestamp: '2026-10-03T03:01:00+0000', // 08:31 IST
   permalink: 'https://www.instagram.com/reel/AAA/',
   media_url: 'https://scontent.cdninstagram.com/v/paise1.mp4',
-  caption: 'SIP ka jaadu\n\nयह सिर्फ़ शिक्षा के लिए है — निवेश सलाह नहीं।\n\n#sip #nifty50\n\npkp:sip-magic:abc123',
+  caption: 'SIP ka jaadu\n\nयह सिर्फ़ शिक्षा के लिए है — निवेश सलाह नहीं।\n\n#sip #nifty50\n\npkp:video:KVmMkKG5gzk',
 };
 const PAISE_WITH_CTA = {
   ...PAISE,
   id: '18000000000000002',
   timestamp: '2026-10-03T10:31:00+0000',
-  caption: 'Demat / invest account chahiye ho to profile bio me link dekho. यह referral link है।\n\npkp:x:1',
+  caption: 'Demat / invest account chahiye ho to profile bio me link dekho. यह referral link है।\n\npkp:video:0oe9nuJyQLE',
 };
 const OWN = {
   id: '17980532652088741',
@@ -103,7 +105,7 @@ test('a Paise Reel gets one Story and one Facebook Reel, recorded on both ledger
   const entry = readCompanion(files.companion).find((e) => e.igMediaId === PAISE.id);
   assert.equal(entry.story.state, 'done');
   assert.equal(entry.fb.state, 'done');
-  assert.equal(entry.marker, 'pkp:sip-magic:abc123');
+  assert.equal(entry.marker, 'pkp:video:KVmMkKG5gzk');
   const fb = readFbLedger(files.fb);
   assert.equal(fb.length, 1);
   assert.equal(fb[0].igMediaId, PAISE.id);
@@ -267,7 +269,7 @@ test('Facebook caption: CTA appended once, never duplicated, kept inside the lim
 });
 
 test('marker and redaction helpers', () => {
-  assert.equal(markerOf(PAISE.caption), 'pkp:sip-magic:abc123');
+  assert.equal(markerOf(PAISE.caption), 'pkp:video:KVmMkKG5gzk');
   assert.equal(markerOf('none'), '');
   assert.equal(redact('GET x?access_token=abc&y=1'), 'GET x?access_token=***&y=1');
   assert.equal(redact('token SECRETSECRET here', ['SECRETSECRET']), 'token *** here');
@@ -301,4 +303,79 @@ test('never hands a Meta CDN media_url to Graph: pinned, then release, then re-h
   assert.equal(calls.story.length, 1);
   assert.ok( calls.story.every((u) => u.includes('ig-pinned.mp4')));
   assert.ok(calls.fb.every((c) => c.videoUrl.includes('ig-pinned.mp4')));
+});
+
+// ---------------------------------------------------------------- Paise only + Story 60 s
+
+test('only Reels that name a Paise Ki Pathshala YouTube video are handled', () => {
+  assert.equal(paiseVideoId('Gold vs FD\n\npkp:video:0oe9nuJyQLE'), '0oe9nuJyQLE');
+  assert.equal(paiseVideoId('Paise Ki Pathshala ka naya short https://youtube.com/shorts/KVmMkKG5gzk'), 'KVmMkKG5gzk');
+  assert.equal(paiseVideoId('https://youtube.com/shorts/KVmMkKG5gzk'), '', 'a YouTube link alone is not enough');
+  assert.equal(paiseVideoId('pkp:sip-magic:abc123'), '', 'an old marker without a video id is not enough');
+  assert.equal(paiseVideoId('pkp:video:short'), '');
+  const unmarked = { ...PAISE, id: '18000000000000077', caption: 'Some other Reel, no marker' };
+  const plan = planCompanion({ media: [PAISE, unmarked, OWN], now: NOW, fbEnabled: true });
+  const action = (id) => plan.find((p) => p.id === id)?.action;
+  assert.equal(action(PAISE.id), 'handle');
+  assert.equal(action(OWN.id), 'skip');
+  assert.equal(action(unmarked.id), 'skip');
+  assert.match(plan.find((p) => p.id === unmarked.id).reason, /not a Paise Ki Pathshala Reel/);
+  assert.match(plan.find((p) => p.id === OWN.id).reason, /own Reel/);
+  assert.equal(plan.find((p) => p.id === PAISE.id).yt, 'KVmMkKG5gzk');
+});
+
+test('Story length plan: ≤ 59.5 s as is; longer sped up by duration/59 up to 1.25x; beyond that trimmed to 59 s', () => {
+  assert.deepEqual(storyPlan(45), { action: 'none' });
+  assert.deepEqual(storyPlan(59.5), { action: 'none' });
+  assert.deepEqual(storyPlan(63.5), { action: 'speed', factor: 1.077 }); // 0oe9nuJyQLE
+  assert.ok(63.5 / storyPlan(63.5).factor <= 59);
+  assert.deepEqual(storyPlan(73.75), { action: 'speed', factor: 1.25 });
+  assert.deepEqual(storyPlan(80), { action: 'trim', seconds: 59 });
+  assert.deepEqual(storyPlan(NaN), { action: 'unknown' });
+  assert.deepEqual(ffmpegArgs({ action: 'speed', factor: 1.077 }, 'in.mp4', 'out.mp4').slice(0, 6), ['-y', '-i', 'in.mp4', '-filter_complex', '[0:v]setpts=PTS/1.077[v];[0:a]atempo=1.077[a]', '-map']);
+  assert.ok(!ffmpegArgs({ action: 'speed', factor: 1.1 }, 'i', 'o', { hasAudio: false }).join(' ').includes('atempo'));
+  assert.ok(ffmpegArgs({ action: 'trim', seconds: 59 }, 'i', 'o').join(' ').includes('-t 59'));
+});
+
+test('the Story uses the shortened copy; the Facebook Reel keeps the original', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  const asked = [];
+  api.storyVideo = async ({ id, video }) => { asked.push(id); return { url: `https://github.com/x/y/releases/download/companion-media/ig-${id}-story.mp4`, from: 'story-copy (1.077x)', original: video.url }; };
+  api.youtubePublic = async () => true;
+  await runCompanion({ env: { ...ENV, GITHUB_REPOSITORY: 'x/y', GITHUB_TOKEN: 't' }, api, now: NOW, files, log: quiet });
+  assert.deepEqual(asked, [PAISE.id]);
+  assert.match(calls.story[0], new RegExp(`ig-${PAISE.id}-story\\.mp4$`));
+  assert.equal(calls.fb.length, 1);
+  assert.doesNotMatch(calls.fb[0].videoUrl, /-story\.mp4$/, 'FB gets the original');
+  assert.equal(readCompanion(files.companion)[0].story.from, 'story-copy (1.077x)');
+});
+
+test('a YouTube video that is not public is skipped and nothing is recorded', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  api.youtubePublic = async (id) => (id === 'KVmMkKG5gzk' ? false : true);
+  const lines = [];
+  await runCompanion({ env: ENV, api, now: NOW, files, log: (l) => lines.push(l) });
+  assert.equal(calls.story.length, 0);
+  assert.equal(calls.fb.length, 0);
+  assert.deepEqual(readCompanion(files.companion), []);
+  assert.ok(lines.some((l) => /KVmMkKG5gzk is not public/.test(l)));
+  api.youtubePublic = async () => null; // oEmbed unreachable: not a reason to skip
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.story.length, 1);
+});
+
+test('ffmpeg: a 63.5 s clip becomes a ≤ 59.5 s Story copy', { skip: !hasFfmpeg }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ff-'));
+  const input = path.join(dir, 'in.mp4'); const output = path.join(dir, 'out.mp4');
+  execFileSync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'color=c=black:s=128x228:r=15:d=63.5', '-f', 'lavfi', '-i', 'sine=f=440:d=63.5', '-shortest', '-c:v', 'libx264', '-c:a', 'aac', input], { stdio: 'ignore' });
+  execFileSync('ffmpeg', ffmpegArgs(storyPlan(63.5), input, output), { stdio: 'ignore' });
+  const d = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', output], { encoding: 'utf8' }));
+  assert.ok(d <= 59.5 && d > 58, `story copy is ${d} s`);
+});
+
+test('reel-companion.yml installs ffmpeg', async () => {
+  const wf = fs.readFileSync(new URL('../.github/workflows/reel-companion.yml', import.meta.url), 'utf8');
+  assert.match(wf, /apt-get install[^\n]*ffmpeg/);
 });
