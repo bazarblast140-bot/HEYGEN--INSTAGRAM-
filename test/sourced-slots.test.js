@@ -29,27 +29,29 @@ test('the three new flags default to off', () => {
   assert.equal(flagOn(ENABLE_AI_NEWS_CAROUSELS, on), true);
 });
 
-test('ai and news slots no-op unless the flag is on, and finance slots do not move', () => {
+test('the ai slot no-ops unless the flag is on; midday is mutual funds, evening the market close', () => {
   const morning = new Date('2026-10-01T04:00:00Z'); // 09:30 IST
-  const afternoon = new Date('2026-10-01T11:00:00Z'); // 16:30 IST
+  const afternoon = new Date('2026-10-01T11:15:00Z'); // 16:45 IST
   const midday = new Date('2026-10-01T07:00:00Z'); // 12:30 IST
   assert.equal(slotFor(morning, {}), null);
-  assert.equal(slotFor(afternoon, {}), null);
+  assert.equal(slotFor(afternoon, {}), 'evening');
   assert.equal(slotFor(morning, on), 'ai');
-  assert.equal(slotFor(afternoon, on), 'news');
+  assert.equal(slotFor(afternoon, on), 'evening');
   assert.equal(slotFor(midday, on), 'midday');
   assert.equal(categoryFor('2026-10-01', 'ai'), 'ai-news');
-  assert.equal(categoryFor('2026-10-01', 'news'), 'latest-news');
+  assert.equal(categoryFor('2026-10-01', 'midday'), 'mutual-funds');
+  assert.equal(categoryFor('2026-10-01', 'evening'), 'latest-news');
+  assert.throws(() => categoryFor('2026-10-01', 'news'), /Unknown slot/);
 
   const disabled = resolveRun({ event: 'schedule', cron: '0 4 * * *', now: morning, env: {} });
   assert.equal(disabled.pending, false);
   assert.equal(disabled.reason, 'disabled');
   assert.equal(disabled.slot, 'ai');
 
-  const due = resolveRun({ event: 'schedule', cron: '0 11 * * *', now: afternoon, env: on });
+  const due = resolveRun({ event: 'schedule', cron: '15 11 * * *', now: afternoon, env: on });
   assert.equal(due.pending, true);
-  assert.equal(due.slot, 'news');
-  assert.equal(due.key, '2026-10-01 news');
+  assert.equal(due.slot, 'evening');
+  assert.equal(due.key, '2026-10-01 evening');
 
   const again = resolveRun({
     event: 'schedule', cron: '22 11 * * *', now: afternoon, env: on,
@@ -59,7 +61,8 @@ test('ai and news slots no-op unless the flag is on, and finance slots do not mo
   assert.equal(CRON_SLOTS['0 4 * * *'], 'ai');
   assert.equal(CRON_SLOTS['22 4 * * *'], 'ai');
   assert.equal(CRON_SLOTS['0 7 * * *'], 'midday');
-  assert.equal(CRON_SLOTS['0 14 * * *'], 'evening');
+  assert.equal(CRON_SLOTS['15 11 * * *'], 'evening');
+  assert.equal(CRON_SLOTS['0 14 * * *'], undefined);
 });
 
 test('a verified fresh AI or news carousel may publish, and junk still may not', () => {
@@ -156,7 +159,7 @@ test('a slot with no fresh source is skipped instead of filled with a generic ca
 test('the sourced prompt teaches a finance angle and forbids invented facts', () => {
   const text = buildSourcedPrompt({ kind: 'ai', stories: [freshItem], date: '2026-10-01' });
   assert.match(SYSTEM, /संख्या मत गढ़ो/);
-  assert.match(text, /latest AI update/);
+  assert.match(text, /latest AI \+ crypto update/);
   assert.match(text, /Indian investors/);
   assert.match(text, /Reuters/);
   assert.match(text, /2026-10-01/);
@@ -170,6 +173,11 @@ test('the sourced prompt teaches a finance angle and forbids invented facts', ()
   assert.match(news, /"caption"/);
   assert.match(news, /"hashtags"/);
   assert.match(text, /"headline"/);
+  assert.match(text, /crypto/);
+  const market = buildSourcedPrompt({ kind: 'market', stories: [freshItem], date: '2026-10-01' });
+  assert.match(market, /market close/);
+  assert.match(market, /sell-off/);
+  assert.match(market, /target ख़ुद मत गढ़ो/);
   assert.match(text, /title मत लिखो/);
 });
 
@@ -213,15 +221,16 @@ test('carousel cover stories do not double the evening frame, and preview still 
   assert.equal(framesToPost(spec, { slot: 'news', preview: true })[0].headline, 'hook');
 });
 
-test('workflows keep finance live, leave the new paths disabled, and accept ai and news previews', async () => {
+test('workflows run the three topic slots, leave the flags to repository variables, and accept their previews', async () => {
   const carousel = await readFile('.github/workflows/carousel.yml', 'utf8');
   assert.match(carousel, /cron: '0 7 \* \* \*'/);
-  assert.match(carousel, /cron: '0 14 \* \* \*'/);
+  assert.match(carousel, /cron: '15 11 \* \* \*'/);
   assert.match(carousel, /cron: '0 4 \* \* \*'/);
-  assert.match(carousel, /cron: '0 11 \* \* \*'/);
+  assert.doesNotMatch(carousel, /cron: '0 14 \* \* \*'/);
+  assert.doesNotMatch(carousel, /cron: '0 11 \* \* \*'/);
   assert.match(carousel, /ENABLE_AI_NEWS_CAROUSELS/);
   assert.match(carousel, /ENABLE_CAROUSEL_STORY/);
-  assert.match(carousel, /midday\|evening\|ai\|news/);
+  assert.match(carousel, /midday\|evening\|ai\)/);
   assert.equal(carousel.includes("ENABLE_AI_NEWS_CAROUSELS: 'true'"), false);
   assert.equal(carousel.includes('ENABLE_AI_NEWS_CAROUSELS: "true"'), false);
 

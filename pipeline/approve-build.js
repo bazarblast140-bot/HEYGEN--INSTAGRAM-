@@ -19,7 +19,7 @@ import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-import { ALL_SLOTS, inWindow, istParts } from './src/carousel/categories.js';
+import { ALL_SLOTS, inWindow, istParts, slotClosedToday } from './src/carousel/categories.js';
 import { readHistory, recordTopic } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
 
@@ -41,6 +41,8 @@ export async function approvalProblems(report, { now = new Date(), entries = [],
   const today = istParts(now).date;
   if (report.istDate !== today) problems.push(`the build is from ${report.istDate || 'an unknown day'} (IST); today is ${today} — stale builds are not posted`);
   if (ALL_SLOTS.includes(slot) && !inWindow(slot, now)) problems.push(`the ${slot} window is closed — a missed slot is not backfilled`);
+  if (slotClosedToday(slot, today)) problems.push(`${today} is not an NSE trading day (${slotClosedToday(slot, today)}) — no market carousel`);
+  if (slot === 'evening' && report.market?.date !== today) problems.push(`the market close in the build is from ${report.market?.date || 'nowhere'}, not today ${today} — no "aaj" claim on stale data`);
   const key = `${today} ${slot}`;
   if (entries.some((e) => e.date === key)) problems.push(`${key} is already posted`);
   if (files && report.contentHash) {

@@ -51,19 +51,24 @@ test('each carousel slot has at least three crons, and new ones avoid :00 and :3
     (bySlot[slot] ||= []).push(cron);
     assert.equal(inBusyBand(cron), false, cron);
   }
-  for (const slot of ['midday', 'evening', 'ai', 'news']) {
+  for (const slot of ['ai', 'midday', 'evening']) {
     assert.ok(bySlot[slot].length >= 3, slot);
   }
-  const primaries = new Set(['0 7 * * *', '0 14 * * *', '0 4 * * *', '0 11 * * *']);
+  assert.deepEqual(Object.keys(bySlot).sort(), ['ai', 'evening', 'midday'], 'three slots a day');
+  const primaries = new Set(['0 7 * * *', '0 4 * * *']);
   for (const cron of crons) {
     if (primaries.has(cron)) continue;
     const minute = Number(cron.split(' ')[0]);
     assert.equal(minute === 0 || minute === 30, false, cron);
   }
-  assert.equal(CRON_SLOTS['0 7 * * *'], 'midday');
-  assert.equal(CRON_SLOTS['0 14 * * *'], 'evening');
-  assert.equal(CRON_SLOTS['0 4 * * *'], 'ai');
-  assert.equal(CRON_SLOTS['0 11 * * *'], 'news');
+  assert.equal(CRON_SLOTS['0 4 * * *'], 'ai');      // 09:30 IST
+  assert.equal(CRON_SLOTS['0 7 * * *'], 'midday');  // 12:30 IST
+  assert.equal(CRON_SLOTS['15 11 * * *'], 'evening'); // 16:45 IST
+  // The old 16:30 news and 19:30 finance slots are gone.
+  for (const gone of ['0 11 * * *', '7 11 * * *', '41 11 * * *', '0 14 * * *', '7 14 * * *', '22 14 * * *', '41 14 * * *']) {
+    assert.equal(crons.includes(gone), false, gone);
+    assert.equal(CRON_SLOTS[gone], undefined, gone);
+  }
 });
 
 test('the Reel is an evening fallback at 21:47 IST with catch-ups before 23:00 IST', async () => {
@@ -101,7 +106,7 @@ test('a late clock still fills the slot, and 06:07 IST still does not', () => {
   const evening = resolveRun({
     event: 'workflow_dispatch',
     dispatchSlot: 'evening',
-    now: new Date('2026-10-01T11:37:00Z'),
+    now: new Date('2026-10-01T10:37:00Z'), // 16:07 IST, before the 16:30 window
   });
   assert.equal(evening.reason, 'wrong-time');
   assert.equal(evening.pending, false);

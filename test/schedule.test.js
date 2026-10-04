@@ -24,17 +24,19 @@ test('12:30 IST is the optional midday post', () => {
   assert.equal(decision.reason, 'due');
 });
 
-test('19:30 IST is the main evening post', () => {
-  const decision = resolveRun({ now: at('2026-10-01T14:00:00Z') });
+test('16:45 IST is the main evening (market close) post', () => {
+  const decision = resolveRun({ now: at('2026-10-01T11:15:00Z') });
   assert.equal(decision.slot, 'evening');
   assert.equal(decision.pending, true);
 });
 
-test('an explicit evening slot at 17:07 IST is the wrong time', () => {
+test('an explicit evening slot at 16:07 IST (or 20:07) is the wrong time', () => {
+  const late = resolveRun({ event: 'workflow_dispatch', dispatchSlot: 'evening', now: at('2026-10-01T14:37:00Z') });
+  assert.equal(late.reason, 'wrong-time');
   const decision = resolveRun({
     event: 'workflow_dispatch',
     dispatchSlot: 'evening',
-    now: at('2026-10-01T11:37:00Z'),
+    now: at('2026-10-01T10:37:00Z'),
   });
   assert.equal(decision.pending, false);
   assert.equal(decision.reason, 'wrong-time');
@@ -43,7 +45,7 @@ test('an explicit evening slot at 17:07 IST is the wrong time', () => {
 test('a scheduled run keeps its slot even when the clock is hours off, but a stale slot is not backfilled', () => {
   const decision = resolveRun({
     event: 'schedule',
-    cron: '0 14 * * *',
+    cron: '15 11 * * *',
     now: at('2026-10-01T00:37:00Z'),
   });
   assert.equal(decision.slot, 'evening');
@@ -52,7 +54,7 @@ test('a scheduled run keeps its slot even when the clock is hours off, but a sta
 });
 
 test('a second run in the same window does not post again', () => {
-  const now = at('2026-10-01T14:00:00Z');
+  const now = at('2026-10-01T11:15:00Z');
   const first = resolveRun({ now, entries: [] });
   const second = resolveRun({
     now,
@@ -64,7 +66,7 @@ test('a second run in the same window does not post again', () => {
 
 test('the build uses the resolved slot, not the raw auto input', async () => {
   const text = await readFile(new URL('../.github/workflows/carousel.yml', import.meta.url), 'utf8');
-  assert.match(text, /options: \['auto', 'midday', 'evening', 'ai', 'news'\]/);
+  assert.match(text, /options: \['auto', 'ai', 'midday', 'evening'\]/);
   assert.match(text, /default: 'auto'/);
   assert.equal(text.includes("format('--slot {0}', github.event.inputs.slot)"), false);
   assert.match(text, /RESOLVED="\$\{\{ steps\.slot\.outputs\.slot \}\}"/);

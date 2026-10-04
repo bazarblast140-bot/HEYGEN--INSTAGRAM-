@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Should this run publish?
 //
-// Two finance slots a day: midday (about 12:30 IST) and evening (about 19:30 IST).
-// Ledger key is "YYYY-MM-DD <slot>" in IST. A second run in the same window is
+// Three slots a day: ai (09:30 IST), midday (12:30 IST, mutual funds) and
+// evening (16:45 IST, market close; NSE trading days only). Ledger key is "YYYY-MM-DD <slot>" in IST. A second run in the same window is
 // a no-op. A run with no slot publishes only inside one of those windows.
 
 import fs from 'node:fs/promises';
@@ -53,6 +53,8 @@ if (decision.reason === 'duplicate') {
   console.log(`soft skip — ${label} — ${decision.slot} is outside its IST window. Skipping.`);
 } else if (decision.reason === 'outside') {
   console.log(`soft skip — ${label} — no slot, and the clock is outside both posting windows. Skipping.`);
+} else if (decision.reason === 'market-closed') {
+  console.log(`soft skip — ${label} — ${decision.date} is not an NSE trading day (${decision.why}). No market carousel.`);
 } else if (decision.reason === 'disabled') {
   console.log(`soft skip — ${label} — ${decision.slot} is off until ENABLE_AI_NEWS_CAROUSELS is true. Skipping.`);
 } else if (decision.reason === 'forced') {

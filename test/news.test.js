@@ -6,7 +6,15 @@ import assert from 'node:assert/strict';
 
 import { checkSources } from '../pipeline/src/carousel/generate.js';
 import { fetchStories, ON_TOPIC, OFF_TOPIC } from '../pipeline/src/carousel/news.js';
-import { slotFor, categoryFor, POOL, SLOT_OFFSET } from '../pipeline/src/carousel/categories.js';
+import { slotFor, poolCategory, POOL, SLOT_OFFSET } from '../pipeline/src/carousel/categories.js';
+
+// The scheduled slots are topic-wise now (ai / mutual-funds / market close);
+// the finance POOL rotation lives on as poolCategory (index 0 = the old
+// midday step, 1 = the old evening step) and is still checked here.
+const categoryFor = (d, slot = 'evening') => {
+  if (!['midday', 'evening'].includes(slot)) throw new Error('Unknown slot ' + slot);
+  return poolCategory(d, slot === 'midday' ? 0 : 1);
+};
 
 const sites = new Set(['arstechnica.com', 'nature.com', 'theverge.com']);
 

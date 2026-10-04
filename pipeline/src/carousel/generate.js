@@ -351,6 +351,7 @@ export async function generateCarousel({
   onReject,
   onNote,
   record = true,
+  headlines = [],
 } = {}) {
   const provider = resolveProvider();
   if (!provider) {
@@ -372,7 +373,7 @@ export async function generateCarousel({
 
   const maxAttempts = MAX_MODEL_ATTEMPTS;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    let userPrompt = buildUserPrompt({ category, date, recentTopics });
+    let userPrompt = buildUserPrompt({ category, date, recentTopics, headlines });
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर content slide (2–9) पर valid "calc", source null, और text की हर संख्या calc से निकलनी चाहिए.`;
     }

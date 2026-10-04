@@ -5,7 +5,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { POOL, STRIDE, SLOT_OFFSET, SLOTS, categoryFor, slotFor, dayNumber } from '../pipeline/src/carousel/categories.js';
+import { POOL, STRIDE, SLOT_OFFSET, slotFor, dayNumber, poolCategory } from '../pipeline/src/carousel/categories.js';
+
+const SLOTS = ['midday', 'evening'];
+
+// The scheduled slots are topic-wise now (ai / mutual-funds / market close);
+// the finance POOL rotation lives on as poolCategory (index 0 = the old
+// midday step, 1 = the old evening step) and is still checked here.
+const categoryFor = (d, slot = 'evening') => {
+  if (!['midday', 'evening'].includes(slot)) throw new Error('Unknown slot ' + slot);
+  return poolCategory(d, slot === 'midday' ? 0 : 1);
+};
 
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 
@@ -120,12 +130,16 @@ test('the slot offset clears the longest block of one category', () => {
   assert.ok(circular(STRIDE - SLOT_OFFSET) >= longest, 'the next midday lands inside the evening\'s block');
 });
 
-test('the slot is read from the two IST windows', () => {
-  assert.equal(slotFor(new Date('2026-10-01T00:37:00Z')), null);   // 06:07 IST
-  assert.equal(slotFor(new Date('2026-10-01T07:00:00Z')), 'midday'); // 12:30 IST
-  assert.equal(slotFor(new Date('2026-10-01T07:37:00Z')), 'midday'); // 13:07 IST
-  assert.equal(slotFor(new Date('2026-10-01T11:37:00Z')), null);   // 17:07 IST
-  assert.equal(slotFor(new Date('2026-10-01T14:00:00Z')), 'evening'); // 19:30 IST
+test('the slot is read from the IST windows', () => {
+  const on = { ENABLE_AI_NEWS_CAROUSELS: 'true' };
+  assert.equal(slotFor(new Date('2026-10-01T00:37:00Z'), on), null);   // 06:07 IST
+  assert.equal(slotFor(new Date('2026-10-01T04:00:00Z'), on), 'ai');   // 09:30 IST
+  assert.equal(slotFor(new Date('2026-10-01T07:00:00Z'), on), 'midday'); // 12:30 IST
+  assert.equal(slotFor(new Date('2026-10-01T07:37:00Z'), on), 'midday'); // 13:07 IST
+  assert.equal(slotFor(new Date('2026-10-01T10:45:00Z'), on), null);   // 16:15 IST
+  assert.equal(slotFor(new Date('2026-10-01T11:15:00Z'), on), 'evening'); // 16:45 IST
+  assert.equal(slotFor(new Date('2026-10-01T14:00:00Z'), on), 'evening'); // 19:30 IST
+  assert.equal(slotFor(new Date('2026-10-01T14:30:00Z'), on), null);   // 20:00 IST
 });
 
 test('an unknown slot is refused rather than silently treated as evening', () => {

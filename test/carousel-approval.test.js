@@ -19,22 +19,41 @@ async function build(over = {}) {
   await fs.writeFile(files[1], 'b');
   return {
     files, stories: [], format: 'jpeg', publishable: true, quality: { ok: true, problems: [] },
-    slot: 'evening', istDate: '2026-10-03', topic: 'EMI', category: 'personal-finance',
+    slot: 'midday', istDate: '2026-10-03', topic: 'SIP', category: 'mutual-funds',
     contentHash: await hashFiles(files), ...over,
   };
 }
-const evening = new Date('2026-10-03T14:05:00Z'); // 19:35 IST
+const evening = new Date('2026-10-03T07:05:00Z'); // 12:35 IST, inside the midday window
 
 test('a reviewed, publishable build inside its window is approved', async () => {
   assert.deepEqual(await approvalProblems(await build(), { now: evening }), []);
 });
 
+// Approve windows: ai 09:00–11:45, midday 12:00–14:30, evening 16:30–20:00 IST.
+test('the evening market build is approved only on a trading day, in 16:30–20:00 IST, with today\'s close', async () => {
+  const market = { date: '2026-10-05', indices: [{ name: 'NIFTY 50', close: 22500 }] };
+  const ok = { slot: 'evening', istDate: '2026-10-05', category: 'latest-news', market };
+  assert.deepEqual(await approvalProblems(await build(ok), { now: new Date('2026-10-05T12:00:00Z') }), []); // 17:30 IST
+  const late = await approvalProblems(await build(ok), { now: new Date('2026-10-05T14:35:00Z') }); // 20:05 IST
+  assert.match(late.join(' '), /evening window is closed/);
+  const stale = await approvalProblems(await build({ ...ok, market: { date: '2026-10-01' } }), { now: new Date('2026-10-05T12:00:00Z') });
+  assert.match(stale.join(' '), /market close in the build is from 2026-10-01/);
+  const none = await approvalProblems(await build({ ...ok, market: null }), { now: new Date('2026-10-05T12:00:00Z') });
+  assert.match(none.join(' '), /market close in the build is from nowhere/);
+  const holiday = await approvalProblems(await build({ ...ok, istDate: '2026-10-20', market: { date: '2026-10-20' } }), { now: new Date('2026-10-20T12:00:00Z') });
+  assert.match(holiday.join(' '), /not an NSE trading day \(NSE holiday\)/);
+  const ai = await approvalProblems(await build({ slot: 'ai', category: 'ai-news', istDate: '2026-10-05' }), { now: new Date('2026-10-05T06:20:00Z') }); // 11:50 IST
+  assert.match(ai.join(' '), /ai window is closed/);
+});
+
 test('stale, closed-window, already-posted, failed-gate and altered builds are refused', async () => {
   const stale = await approvalProblems(await build({ istDate: '2026-10-02' }), { now: evening });
   assert.match(stale.join(' '), /stale builds are not posted/);
+  const closed = await approvalProblems(await build(), { now: new Date('2026-10-03T09:05:00Z') }); // 14:35 IST
+  assert.match(closed.join(' '), /midday window is closed — a missed slot is not backfilled/);
   const news = await approvalProblems(await build({ slot: 'news' }), { now: evening });
-  assert.match(news.join(' '), /news window is closed — a missed slot is not backfilled/);
-  const posted = await approvalProblems(await build(), { now: evening, entries: [{ date: '2026-10-03 evening' }] });
+  assert.match(news.join(' '), /no known slot \("news"\)/, 'the old news slot is gone');
+  const posted = await approvalProblems(await build(), { now: evening, entries: [{ date: '2026-10-03 midday' }] });
   assert.match(posted.join(' '), /already posted/);
   const refused = await approvalProblems(await build({ publishable: false, quality: { ok: false, problems: ['slide 4: "₹52 लाख"'] } }), { now: evening });
   assert.match(refused.join(' '), /quality gate refused/);

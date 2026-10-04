@@ -7,7 +7,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { POOL, FINANCE, STRIDE, SLOT_OFFSET, BRIEFS, categoryFor } from '../pipeline/src/carousel/categories.js';
+import { POOL, FINANCE, STRIDE, SLOT_OFFSET, BRIEFS, poolCategory } from '../pipeline/src/carousel/categories.js';
+
+// The scheduled slots are topic-wise now (ai / mutual-funds / market close);
+// the finance POOL rotation lives on as poolCategory (index 0 = the old
+// midday step, 1 = the old evening step) and is still checked here.
+const categoryFor = (d, slot = 'evening') => {
+  if (!['midday', 'evening'].includes(slot)) throw new Error('Unknown slot ' + slot);
+  return poolCategory(d, slot === 'midday' ? 0 : 1);
+};
 
 const day = (n) => new Date(Date.UTC(2026, 8, 10 + n)).toISOString().slice(0, 10);
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
@@ -38,14 +46,14 @@ test('over one cycle every finance subject gets exactly one midday', () => {
   }
 });
 
-// The evening is money, and it walks its own shorter list.
+// The evening pool step walks the whole pool once per cycle too.
 test('over one finance cycle every money subject gets exactly one evening', () => {
   const evenings = {};
-  for (let d = 0; d < FINANCE.length; d += 1) {
+  for (let d = 0; d < POOL.length; d += 1) {
     const c = categoryFor(day(d), 'evening');
     evenings[c] = (evenings[c] || 0) + 1;
   }
-  for (const category of FINANCE) {
+  for (const category of POOL) {
     assert.equal(evenings[category], 1, `${category} got ${evenings[category] || 0} evenings`);
   }
 });

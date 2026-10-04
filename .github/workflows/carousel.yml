@@ -1,12 +1,15 @@
 name: Build carousel
 
-# Two finance carousels a day stay on. Publish times do not move.
-#   midday   optional, 12:30 IST
-#   evening  the main post, 19:30 IST, plus one Story
-# Two more slots exist and no-op unless the repository variable
-# ENABLE_AI_NEWS_CAROUSELS is true:
-#   ai       latest AI update, 09:30 IST
-#   news     latest big news, 16:30 IST
+# Three topic-wise carousels a day, fed by the latest grok-news issue
+# (daily-news.yml, 07:15 IST):
+#   ai       09:30 IST  Big AI news + crypto (no-op unless ENABLE_AI_NEWS_CAROUSELS is true)
+#   midday   12:30 IST  Mutual funds explainer, numbers computed by code
+#   evening  16:45 IST  Market close: today's NIFTY/SENSEX close fetched and
+#                       verified in code + finance/technical news, plus one
+#                       Story. NSE trading days only (weekends and the 2026
+#                       NSE holiday list); skipped when the latest candle is
+#                       not dated today (IST).
+# The old 16:30 news and 19:30 finance slots are removed.
 # Each slot has the publish cron plus three catch-ups (odd minutes, never
 # :00/:30, outside the 22:30–01:30 UTC band). slot-status keeps the cron's
 # slot even when GitHub is late, and the ledger (YYYY-MM-DD <slot>, IST)
@@ -29,26 +32,21 @@ on:
     types: [carousel]
 
   schedule:
-    # midday 12:30 IST, then 12:37, 12:52, 13:11
-    - cron: '0 7 * * *'
-    - cron: '7 7 * * *'
-    - cron: '22 7 * * *'
-    - cron: '41 7 * * *'
-    # evening 19:30 IST, then 19:37, 19:52, 20:11
-    - cron: '0 14 * * *'
-    - cron: '7 14 * * *'
-    - cron: '22 14 * * *'
-    - cron: '41 14 * * *'
     # ai 09:30 IST, then 09:37, 09:52, 10:11 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
     - cron: '0 4 * * *'
     - cron: '7 4 * * *'
     - cron: '22 4 * * *'
     - cron: '41 4 * * *'
-    # news 16:30 IST, then 16:37, 16:52, 17:11 — no-op unless ENABLE_AI_NEWS_CAROUSELS=true
-    - cron: '0 11 * * *'
-    - cron: '7 11 * * *'
+    # midday (mutual funds) 12:30 IST, then 12:37, 12:52, 13:11
+    - cron: '0 7 * * *'
+    - cron: '7 7 * * *'
+    - cron: '22 7 * * *'
+    - cron: '41 7 * * *'
+    # evening (market close) 16:45 IST, then 16:52, 17:07, 17:26 — NSE trading days only
+    - cron: '15 11 * * *'
     - cron: '22 11 * * *'
-    - cron: '41 11 * * *'
+    - cron: '37 11 * * *'
+    - cron: '56 11 * * *'
 
   workflow_dispatch:
     inputs:
@@ -66,7 +64,7 @@ on:
       slot:
         description: auto derives the slot from the IST clock, or skips outside the windows
         type: choice
-        options: ['auto', 'midday', 'evening', 'ai', 'news']
+        options: ['auto', 'ai', 'midday', 'evening']
         default: 'auto'
       publish:
         description: "POST IT TO INSTAGRAM — this is public and cannot be undone"
@@ -102,6 +100,7 @@ jobs:
     permissions:
       contents: write
       actions: read
+      issues: read     # topic candidates from the daily news issue (grok-news)
 
     steps:
       - uses: actions/checkout@v4
@@ -213,6 +212,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}   # read-only: the daily news issue
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
@@ -225,8 +225,8 @@ jobs:
           SLOT_ARG=""
           if [ "$PREVIEW" = "true" ]; then
             case "$CHOSEN" in
-              midday|evening|ai|news) SLOT="$CHOSEN" ;;
-              *) SLOT="evening" ;;
+              midday|evening|ai) SLOT="$CHOSEN" ;;
+              *) SLOT="midday" ;;
             esac
             SLOT_ARG="--preview --require-generated --slot $SLOT"
           elif [ -n "$RESOLVED" ]; then
@@ -277,7 +277,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Either finance slot may publish. A story is attached only to the evening post.
+      # Any slot may publish. A story is attached only to the evening post.
       # With CAROUSEL_REQUIRE_APPROVAL=true only an approved build (approve_build)
       # reaches this step; force/publish/schedule alone do not.
       - name: Publish to Instagram

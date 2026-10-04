@@ -1,3 +1,4 @@
+import { marketDayNote } from './news-issue.js';
 import { SLIDES } from './categories.js';
 import { heavyWordPrompt } from './language.js';
 
@@ -16,12 +17,14 @@ export const SYSTEM = `तुम "Rajesh Technical Traders" के लिए ए
 7. Respond only in valid JSON. The response format is json.`;
 
 export function buildSourcedPrompt({ kind, stories, date, recentTopics = [] }) {
-  const subject = kind === 'ai'
-    ? 'latest AI update'
-    : 'latest big news';
-  const angle = kind === 'ai'
-    ? 'AI ख़बर को Indian investors के नज़रिए से समझाओ: IT stocks, tool cost, regulation, या productivity — जो ख़बर से निकलता हो. ख़बर में न हो तो असर को संख्या बनाए बिना समझाओ.'
-    : 'ख़बर का finance angle निकालो: बाज़ार, रुपये, ब्याज, कंपनियों, या भारतीय निवेशकों पर असर. सिर्फ़ वही असर जो दी गई ख़बर से निकलता हो.';
+  const subject = {
+    ai: 'latest AI + crypto update',
+    market: 'आज का market close (NIFTY / SENSEX + finance और technical ख़बरें)',
+  }[kind] || 'latest big news';
+  const angle = {
+    ai: 'सबसे बड़ी AI या crypto ख़बर चुनो और उसे Indian investors के नज़रिए से समझाओ: IT stocks, tool cost, regulation, crypto tax/rules, या productivity — जो ख़बर से निकलता हो. ख़बर में न हो तो असर को संख्या बनाए बिना समझाओ. Crypto में buy/sell या price prediction नहीं.',
+    market: 'पहली ख़बरें आज के market close का data हैं (Yahoo Finance, code ने आज की तारीख़ और numbers जाँचे हैं). Cover और पहली fact slides इसी close पर हों: close, पिछला close, points/% बदलाव, day high/low — सिर्फ़ यही numbers. बाकी finance/technical ख़बरें बताओ कि बाज़ार क्यों हिला. Support/resistance या target ख़ुद मत गढ़ो; ख़बर में लिखा हो तो उसी स्रोत के नाम से. buy/sell/hold नहीं.',
+  }[kind] || 'ख़बर का finance angle निकालो: बाज़ार, रुपये, ब्याज, कंपनियों, या भारतीय निवेशकों पर असर. सिर्फ़ वही असर जो दी गई ख़बर से निकलता हो.';
 
   const list = stories.map((story, i) => (
     `${i + 1}. ${story.title}\n   स्रोत: ${story.site}  ·  तारीख़: ${story.date}\n   ${story.url || ''}`
@@ -31,7 +34,7 @@ export function buildSourcedPrompt({ kind, stories, date, recentTopics = [] }) {
     ? `\n<already_covered>\n${recentTopics.map((t) => `- ${t.date}: ${t.topic}`).join('\n')}\n</already_covered>\n`
     : '';
 
-  const direction = kind === 'news'
+  const direction = kind === 'news' || kind === 'market'
     ? `
 <market_direction>
 Yield और bond price उल्टी दिशा में चलते हैं.
@@ -42,7 +45,7 @@ Rally तभी, जब कीमत बढ़े या yield गिरे. Yie
     : '';
 
   return `<task>
-आज (${date}) का ${subject} carousel. ${angle}
+आज (${date}) का ${subject} carousel. ${angle}${marketDayNote(date)}
 नीचे सिर्फ़ वे ख़बरें हैं जो build के समय fetch हुईं और 48 घंटे से नई हैं. इनमें से चुनो. कोई और घटना मत लिखो.
 </task>
 ${already}

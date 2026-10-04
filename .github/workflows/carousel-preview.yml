@@ -17,8 +17,9 @@ on:
       slot:
         description: Which slot to preview
         type: choice
-        options: ['evening', 'midday', 'news', 'ai']
-        default: 'evening'
+        # ai 09:30 AI + crypto · midday 12:30 mutual funds · evening 16:45 market close (trading days, after 15:30 IST)
+        options: ['midday', 'evening', 'ai']
+        default: 'midday'
       spec_from_run:
         description: "Re-render the spec of this earlier preview run id with the edits below — NO model call. Empty = generate a new one."
         default: ''
@@ -33,6 +34,7 @@ concurrency:
 permissions:
   contents: read
   actions: read   # download the reviewed run's artifact for spec_from_run
+  issues: read    # topic candidates from the daily news issue (grok-news)
 
 jobs:
   preview:
@@ -92,6 +94,7 @@ jobs:
         if: ${{ github.event.inputs.spec_from_run == '' }}
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}   # read-only: the daily news issue
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SCRIPT_PROVIDER: deepseek
           SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
