@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Story + Facebook Reel for every public Reel this repo did not make itself
-// (Paise Ki Pathshala's Shorts). See src/publish/companion.js.
+// Story + Facebook Reel for every Paise Ki Pathshala Reel (pkp:video:<id>)
+// on the account, never our own Reels. See src/publish/companion.js.
 //
 //   node pipeline/reel-companion.js --dry-run          # print the plan only
 //   node pipeline/reel-companion.js --commit --branch B
