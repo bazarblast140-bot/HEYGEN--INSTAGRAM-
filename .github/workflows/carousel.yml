@@ -372,6 +372,30 @@ jobs:
           done
           echo "Could not record the Facebook cross-post." >> "$GITHUB_STEP_SUMMARY"
 
+      # The same Story on the Facebook Page (photo story per IG Story frame).
+      # Runs after the IG post, the IG Story and the FB copy; it can never fail
+      # this job or change any of them. Ledger: fb-story-history.json.
+      - name: Story to the Facebook Page
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          node pipeline/fb-story.js --stories pipeline/out/stories.json 2>&1 | tee fbstory.log || true
+          { echo '## Facebook Page Story'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' fbstory.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/fb-story-history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record $(date -u +'%Y-%m-%d %H:%M') Facebook Page Story"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the Facebook Page Story ledger." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record the approved build's topic
         if: ${{ steps.publish.outcome == 'success' && env.APPROVE_BUILD != '' }}
         run: node pipeline/approve-build.js --report pipeline/out/carousel-report.json --record

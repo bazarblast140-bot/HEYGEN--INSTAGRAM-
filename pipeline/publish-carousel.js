@@ -175,6 +175,15 @@ async function main() {
   // nothing below here is allowed to change the exit code.
   if (storyUrls.length) {
     console.log('\nStory');
+    // For the Facebook Page Story step (fb-story.js), which runs after this
+    // step and only reads: each IG Story id with its re-hosted image URL.
+    const postedStories = [];
+    const notePosted = async () => {
+      try {
+        await fs.writeFile(path.join(path.dirname(reportPath), 'stories.json'),
+          `${JSON.stringify({ igMediaId: mediaId, stories: postedStories }, null, 2)}\n`);
+      } catch { /* the Story is up; a missing note only skips the FB Story */ }
+    };
     for (const [i, imageUrl] of storyUrls.entries()) {
       try {
         const { mediaId: storyId } = await publishStory({
@@ -183,6 +192,8 @@ async function main() {
           onStatus: (stage, value) => console.log(`  ${i + 1}/${storyUrls.length} ${stage}: ${value}`),
         });
         console.log(`  ${ok(`story ${i + 1}/${storyUrls.length} published`)} ${storyId}`);
+        postedStories.push({ igStoryId: String(storyId), imageUrl });
+        await notePosted();
       } catch (err) {
         // One frame failing does not cancel the next: two half-stories is worse
         // than one, but no story at all is worse than either.
