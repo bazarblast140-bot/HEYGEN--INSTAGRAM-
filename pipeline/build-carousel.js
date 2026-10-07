@@ -28,7 +28,9 @@ import { applyEdits } from './src/carousel/edits.js';
 import { attachCoverPhoto } from './src/carousel/cover-photo.js';
 import { repairHeavyWords } from './src/carousel/language.js';
 import { istParts } from './src/carousel/categories.js';
-import { generateCarousel, normalizeSpec } from './src/carousel/generate.js';
+import { generateCarousel, normalizeSpec, LEDGER } from './src/carousel/generate.js';
+import { recordTopic } from './src/script/topics.js';
+import { settleNumbers } from './src/carousel/sanitize.js';
 import { ALL_SLOTS, slotFor, FINANCE } from './src/carousel/categories.js';
 import { clock } from './src/publish/same-day.js';
 import { generateSourcedCarousel, gatherSources, selectFresh } from './src/carousel/sourced.js';
@@ -258,24 +260,43 @@ async function main() {
         ? digestFresh
         : (slot === 'evening' ? await gatherSources({ kind: 'news', now: now.getTime(), onNote: note }).catch(() => []) : null);
       const sourcedStories = market ? [...market.stories, ...(baseStories || [])] : baseStories;
-      const written = sourcedSlot
-        ? await generateSourcedCarousel({
+      // The topic is recorded below, after the number sanitizer and the one
+      // retry have settled which spec this build uses (never twice).
+      const write = (extra = {}) => (sourcedSlot
+        ? generateSourcedCarousel({
           slot,
           kind,
           ...(sourcedStories ? { stories: sourcedStories } : {}),
-          record: !args.preview,
+          record: false,
           onNote: note,
           onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
           onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
+          ...extra,
         })
-        : await generateCarousel({
+        : generateCarousel({
           slot,
           headlines: digestFresh,
-          record: !args.preview,
+          record: false,
           onNote: note,
           onAttempt: (n, model, category) => console.log(`  ${category} · ${model}, attempt ${n}`),
           onReject: (n, problems) => problems.forEach((p) => console.log(`      attempt ${n} rejected: ${p}`)),
+          ...extra,
+        }));
+      let written = await write();
+      if (!written.skipped) {
+        // Only code-computed numbers: take out what the code did not compute,
+        // then at most ONE more model call if numbers still fail (or charts had
+        // to be redrawn). The hard gate below and the post gate still decide.
+        const settled = await settleNumbers(written, {
+          sourced: sourcedSlot,
+          retry: (feedback, previousExample) => write({ maxAttempts: 1, feedback, ...(sourcedSlot ? { stories: written.stories } : { previousExample }) }),
+          onNote: note,
         });
+        written = settled.written;
+        if (!args.preview) {
+          await recordTopic({ topic: written.spec.topic, angle: written.category, date: `${istParts(now).date} ${written.slot}`, file: LEDGER });
+        }
+      }
       if (written.skipped) {
         const skipReport = {
           skipped: true,

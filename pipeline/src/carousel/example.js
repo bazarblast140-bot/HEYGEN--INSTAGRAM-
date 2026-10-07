@@ -25,6 +25,7 @@ export const LEVERS = {
   sip: [/^years$/],
   lumpsum: [/^years$/],
   inflation: [/^years$/],
+  expense_ratio: [/^years$/],
   drawdown: [/^loss\d+$/],
 };
 

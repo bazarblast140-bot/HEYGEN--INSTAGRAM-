@@ -352,6 +352,9 @@ export async function generateCarousel({
   onNote,
   record = true,
   headlines = [],
+  maxAttempts: attemptCap = MAX_MODEL_ATTEMPTS,
+  feedback = [],
+  previousExample = null,
 } = {}) {
   const provider = resolveProvider();
   if (!provider) {
@@ -366,14 +369,18 @@ export async function generateCarousel({
 
   const recentTopics = await readHistory(LEDGER);
 
-  let lastProblems = [];
+  // `feedback` = problems left after an earlier build's number sanitizer (the
+  // one in-build retry); `previousExample` = that build's worked example, so
+  // its code-computed figures are listed in the prompt.
+  let lastProblems = [...feedback];
   let lastOutput = null;
   let lastUsed = chosenModel;
   let best = null;
 
-  const maxAttempts = MAX_MODEL_ATTEMPTS;
+  const maxAttempts = Math.max(1, Math.min(MAX_MODEL_ATTEMPTS, Number(attemptCap) || MAX_MODEL_ATTEMPTS));
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    let userPrompt = buildUserPrompt({ category, date, recentTopics, headlines });
+    const example = lastOutput?.example || previousExample || null;
+    let userPrompt = buildUserPrompt({ category, date, recentTopics, headlines, example });
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो.\nज़रूरी: ठीक ${SLIDES} slides, सिर्फ़ slide 1 band "center", बाकी "bottom", आख़िरी slide cta true, हर content slide (2–9) पर valid "calc", source null, और text की हर संख्या calc से निकलनी चाहिए.`;
     }

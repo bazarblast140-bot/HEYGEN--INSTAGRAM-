@@ -269,6 +269,42 @@ const TYPES = {
       note: `Calculation: compound growth at ${formatPct(R, 2)} a year`,
     };
   },
+  // Expense ratio: the same money at the same gross return, minus two expense
+  // ratios (e.g. 1% regular vs 0.2% direct). Code computes the net returns,
+  // both final values and the gap; the model only names the inputs.
+  expense_ratio(c) {
+    need(c, 'rate', 'years');
+    const sip = finite(num(c.monthly)) && !finite(num(c.amount));
+    const base = sip ? num(c.monthly) : num(c.amount);
+    if (!finite(base)) throw new Error('expense_ratio needs amount (lumpsum) or monthly (SIP)');
+    const R = num(c.rate); const Y = num(c.years);
+    const exp = (Array.isArray(c.expenses) ? c.expenses : [c.expense0, c.expense1]).map(num).filter(finite).slice(0, 3);
+    if (exp.length < 2) throw new Error('expense_ratio needs expenses: [higher, lower] (percent a year)');
+    range('rate', R, 1, 30); range('years', Y, 1, 50); range(sip ? 'monthly' : 'amount', base, 100, 1e10);
+    exp.forEach((e) => range('expense ratio', e, 0, 3));
+    if (new Set(exp).size !== exp.length) throw new Error('expense ratios must differ');
+    const grow = (net, y) => (sip ? (y === 0 ? 0 : sipFutureValue(base, net, y)) : lumpsum(base, net, y));
+    const nets = exp.map((e) => R - e);
+    const values = nets.map((n) => grow(n, Y));
+    const hi = values.indexOf(Math.max(...values)); const lo = values.indexOf(Math.min(...values));
+    const tag = (e) => `${trim(e, 2)}% expense`;
+    const series = exp.map((e, i) => {
+      const points = []; for (let y = 0; y <= Y; y += 1) points.push([y, grow(nets[i], y)]);
+      return { name: tag(e), color: i === lo ? 'red' : i === hi ? 'green' : 'blue', points };
+    });
+    const invested = sip ? base * 12 * Y : base;
+    return {
+      inputs: [inr(sip ? 'monthly' : 'amount', sip ? 'Monthly SIP' : 'Amount', base), pct('rate', 'Gross return', R, 2),
+        plain('years', 'Years', Y, UNITS.YEARS, `${Y} saal`), ...exp.map((e, i) => pct(`expense${i}`, 'Expense ratio', e, 2))],
+      figures: [...nets.map((n, i) => pct(`net${i}`, 'Net return', n, 2)),
+        ...values.map((v, i) => inr(`value${i}`, `Value @${trim(exp[i], 2)}%`, v)),
+        inr('gap', 'Difference', values[hi] - values[lo]), pct('gapPct', 'Extra corpus', ((values[hi] - values[lo]) / values[lo]) * 100),
+        inr('invested', 'Invested', invested)],
+      highlight: [`value${lo}`, `value${hi}`, 'gap'],
+      chart: { kind: 'line', title: 'Expense ratio ka asar', xLabel: 'year', unit: 'INR', series },
+      note: `Calculation: ${sip ? 'SIP future value' : 'compound growth'} at (assumed ${formatPct(R, 2)} − expense ratio) a year (not guaranteed)`,
+    };
+  },
   cagr(c) {
     need(c, 'start', 'end', 'years');
     const S = num(c.start); const E = num(c.end); const Y = num(c.years);
