@@ -36,6 +36,7 @@ import { withBioCta } from './cta.js';
 import { flagOn } from './flags.js';
 import { enabled as fbFlagOn, crossPostReel, istDay } from './facebook.js';
 import { call, waitForContainer } from './instagram.js';
+import { fbStory, FB_STORY_LEDGER, readStoryLedger, writeStoryLedger, mergeStoryLedger } from './fb-story.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const COMPANION_LEDGER = path.resolve(HERE, '..', '..', 'reel-companion-history.json');
@@ -476,6 +477,8 @@ export function gitLedgerSync({ branch, files, log = () => {} }) {
       if (file.endsWith('reel-companion-history.json')) {
         const merged = mergeCompanion(Array.isArray(remote?.entries) ? remote.entries : [], readCompanion(file));
         writeCompanion(file, merged);
+      } else if (file.endsWith('fb-story-history.json') && Array.isArray(remote)) {
+        writeStoryLedger(file, mergeStoryLedger(remote, readStoryLedger(file)));
       } else if (Array.isArray(remote)) {
         const merged = mergeFbLedger(remote, readFbLedger(file));
         fs.writeFileSync(file, `${JSON.stringify(merged.slice(-200), null, 2)}\n`);
@@ -505,6 +508,7 @@ export function gitLedgerSync({ branch, files, log = () => {} }) {
             files.forEach((f, i) => {
               const mine = JSON.parse(ours[i]);
               if (f.endsWith('reel-companion-history.json')) writeCompanion(f, mergeCompanion(readCompanion(f), mine.entries || []));
+              else if (f.endsWith('fb-story-history.json')) writeStoryLedger(f, mergeStoryLedger(readStoryLedger(f), Array.isArray(mine) ? mine : []));
               else fs.writeFileSync(f, `${JSON.stringify(mergeFbLedger(readFbLedger(f), mine).slice(-200), null, 2)}\n`);
             });
             continue;
@@ -541,12 +545,13 @@ export async function runCompanion({
   api = realApi(),
   now = Date.now(),
   dryRun = false,
-  files = { companion: COMPANION_LEDGER, fb: FB_LEDGER, own: OWN_LEDGER },
+  files = { companion: COMPANION_LEDGER, fb: FB_LEDGER, own: OWN_LEDGER, fbStory: FB_STORY_LEDGER },
+  storyFetch = globalThis.fetch,
   sync = async () => {},
   commit = async () => true,
   log = (line) => console.log(line),
 } = {}) {
-  const result = { plan: [], stories: [], fb: [], failures: [], skipped: false };
+  const result = { plan: [], stories: [], fb: [], fbStories: [], failures: [], skipped: false };
   const igUserId = env.IG_USER_ID;
   const token = env.IG_ACCESS_TOKEN;
   const surface = env.IG_SURFACE || 'facebook';
@@ -648,6 +653,18 @@ export async function runCompanion({
             updatePart(files.companion, p.item, 'story', { state: 'done', id: String(id), from: v.from, tries, at: new Date(now).toISOString() });
             result.stories.push({ igMediaId: p.id, storyId: String(id), from: v.from });
             say(`  ${p.id}: Story published ${id} (video from ${v.from})`);
+            // The same Story on the Facebook Page (video story, re-hosted URL).
+            // Its own try: a failure is a logged line and can never mark the
+            // IG Story failed or stop the Facebook Reel below.
+            try {
+              const fbs = await fbStory({
+                kind: 'video', igStoryId: String(id), igMediaId: p.id, url: v.url, source: SOURCE, env,
+                file: files.fbStory || FB_STORY_LEDGER, fetchImpl: storyFetch, now, log: (l) => say(`  ${p.id}: ${l}`),
+              });
+              result.fbStories.push({ igMediaId: p.id, igStoryId: String(id), ...fbs });
+            } catch (e) {
+              say(`  ${p.id}: Facebook Story error (ignored): ${redact(e?.message, secrets)}`);
+            }
             await commit(`Record reel companion Story for ${p.id}`);
           } catch (err) {
             const uncertain = stage === 'publish' && !err.status;

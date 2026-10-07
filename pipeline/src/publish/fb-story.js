@@ -115,7 +115,19 @@ export function readStoryLedger(file = FB_STORY_LEDGER) {
   } catch { return []; }
 }
 
-function writeStoryLedger(file, rows, keep = 400) {
+/** Merge two copies of the ledger: one row per IG Story, a done/uncertain row wins over a failed one. */
+export function mergeStoryLedger(a = [], b = []) {
+  const rank = (r) => (['done', 'uncertain'].includes(r?.state) ? 2 : 1);
+  const by = new Map();
+  const order = [];
+  for (const row of [...a, ...b]) {
+    const key = String(row?.igStoryId || JSON.stringify(row));
+    if (!by.has(key)) { by.set(key, row); order.push(key); } else if (rank(row) > rank(by.get(key))) by.set(key, row);
+  }
+  return order.map((k) => by.get(k));
+}
+
+export function writeStoryLedger(file, rows, keep = 400) {
   fs.writeFileSync(file, `${JSON.stringify(rows.slice(-keep), null, 2)}\n`);
 }
 

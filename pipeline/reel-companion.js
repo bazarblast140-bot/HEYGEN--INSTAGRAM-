@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import {
   runCompanion, gitLedgerSync, COMPANION_LEDGER, FB_LEDGER,
 } from './src/publish/companion.js';
+import { FB_STORY_LEDGER } from './src/publish/fb-story.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -30,7 +31,7 @@ async function main() {
   const lines = [];
   const log = (line) => { lines.push(line); console.log(line); };
   const git = a.commit && a.branch && !dryRun
-    ? gitLedgerSync({ branch: a.branch, files: [COMPANION_LEDGER, FB_LEDGER], log })
+    ? gitLedgerSync({ branch: a.branch, files: [COMPANION_LEDGER, FB_LEDGER, FB_STORY_LEDGER], log })
     : null;
   const result = await runCompanion({
     dryRun,
@@ -46,6 +47,7 @@ async function main() {
     skipped: result.plan.filter((p) => p.action === 'skip').map((p) => ({ igMediaId: p.id, reason: p.reason })),
     stories: result.stories,
     fb: result.fb,
+    fbStories: result.fbStories,
     failures: result.failures,
   };
   fs.mkdirSync('pipeline/out', { recursive: true });
