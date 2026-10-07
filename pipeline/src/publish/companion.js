@@ -451,6 +451,11 @@ export function realApi({ fetchImpl = globalThis.fetch } = {}) {
     async postFbReel({ pageId, token, videoUrl, caption, onStage }) {
       return crossPostReel({ pageId, token, videoUrl, caption, onStage, fetchImpl });
     },
+
+    /** Facebook Page video story for an IG Story just posted (never throws). */
+    async fbStory(args) {
+      return fbStory({ ...args, fetchImpl });
+    },
   };
 }
 
@@ -546,7 +551,6 @@ export async function runCompanion({
   now = Date.now(),
   dryRun = false,
   files = { companion: COMPANION_LEDGER, fb: FB_LEDGER, own: OWN_LEDGER, fbStory: FB_STORY_LEDGER },
-  storyFetch = globalThis.fetch,
   sync = async () => {},
   commit = async () => true,
   log = (line) => console.log(line),
@@ -657,11 +661,13 @@ export async function runCompanion({
             // Its own try: a failure is a logged line and can never mark the
             // IG Story failed or stop the Facebook Reel below.
             try {
-              const fbs = await fbStory({
-                kind: 'video', igStoryId: String(id), igMediaId: p.id, url: v.url, source: SOURCE, env,
-                file: files.fbStory || FB_STORY_LEDGER, fetchImpl: storyFetch, now, log: (l) => say(`  ${p.id}: ${l}`),
-              });
-              result.fbStories.push({ igMediaId: p.id, igStoryId: String(id), ...fbs });
+              if (api.fbStory) {
+                const fbs = await api.fbStory({
+                  kind: 'video', igStoryId: String(id), igMediaId: p.id, url: v.url, source: SOURCE, env,
+                  file: files.fbStory || FB_STORY_LEDGER, now, log: (l) => say(`  ${p.id}: ${l}`),
+                });
+                result.fbStories.push({ igMediaId: p.id, igStoryId: String(id), ...fbs });
+              }
             } catch (e) {
               say(`  ${p.id}: Facebook Story error (ignored): ${redact(e?.message, secrets)}`);
             }
