@@ -31,7 +31,12 @@ export async function postProblems(reportPath, { now = new Date(), entries } = {
   let report;
   try { report = JSON.parse(await fs.readFile(reportPath, 'utf8')); } catch { return ['no build report — nothing was built']; }
   if (report.skipped) return [`the build skipped: ${report.reason || 'no reason given'}`];
-  return approvalProblems(report, { now, late: /^(1|true|yes)$/i.test(String(process.env.DISPATCH_LATE || '')), entries: entries ?? committedEntries() ?? await readHistory(LEDGER) });
+  return approvalProblems(report, {
+    now,
+    late: /^(1|true|yes)$/i.test(String(process.env.DISPATCH_LATE || '')),
+    startedAt: process.env.SLOT_STARTED_AT || null,
+    entries: entries ?? committedEntries() ?? await readHistory(LEDGER),
+  });
 }
 
 async function main() {

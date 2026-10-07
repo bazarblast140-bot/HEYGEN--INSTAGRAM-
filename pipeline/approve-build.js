@@ -29,7 +29,20 @@ export async function hashFiles(files) {
   return h.digest('hex');
 }
 
-export async function approvalProblems(report, { now = new Date(), entries = [], files = true, late = false } = {}) {
+// A run that started inside its slot's window may still post a few minutes
+// after the window closes (the build takes 2–10 min): same IST day, before
+// 23:00 IST, at most this long after the run started.
+export const POST_GRACE_MINUTES = 20;
+
+export function startedInWindow(slot, startedAt, now = new Date()) {
+  const started = startedAt ? new Date(startedAt) : null;
+  if (!started || Number.isNaN(started.getTime())) return false;
+  const age = (now.getTime() - started.getTime()) / 60000;
+  return inWindow(slot, started) && age >= 0 && age <= POST_GRACE_MINUTES
+    && istParts(started).date === istParts(now).date && istParts(now).minutes < 23 * 60;
+}
+
+export async function approvalProblems(report, { now = new Date(), entries = [], files = true, late = false, startedAt = null } = {}) {
   const problems = [];
   if (!report || report.skipped) return ['the build was skipped — nothing to approve'];
   if (report.publishable !== true) problems.push('the build is not publishable');
@@ -40,7 +53,7 @@ export async function approvalProblems(report, { now = new Date(), entries = [],
   if (!ALL_SLOTS.includes(slot)) problems.push(`the build has no known slot ("${slot}")`);
   const today = istParts(now).date;
   if (report.istDate !== today) problems.push(`the build is from ${report.istDate || 'an unknown day'} (IST); today is ${today} — stale builds are not posted`);
-  if (ALL_SLOTS.includes(slot) && !inWindow(slot, now) && !(late && lateOk(slot, now, { DISPATCH_LATE: 'true' }))) problems.push(`the ${slot} window is closed — a missed slot is not backfilled`);
+  if (ALL_SLOTS.includes(slot) && !inWindow(slot, now) && !startedInWindow(slot, startedAt, now) && !(late && lateOk(slot, now, { DISPATCH_LATE: 'true' }))) problems.push(`the ${slot} window is closed — a missed slot is not backfilled`);
   if (slotClosedToday(slot, today)) problems.push(`${today} is not an NSE trading day (${slotClosedToday(slot, today)}) — no market carousel`);
   if (slot === 'evening' && report.market?.date !== today) problems.push(`the market close in the build is from ${report.market?.date || 'nowhere'}, not today ${today} — no "aaj" claim on stale data`);
   const key = `${today} ${slot}`;

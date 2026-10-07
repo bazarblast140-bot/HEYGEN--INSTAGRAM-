@@ -9,6 +9,7 @@ import fs from 'node:fs/promises';
 
 import { readHistory } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
+import { readLedger } from './src/publish/facebook.js';
 import { resolveRun } from './src/carousel/categories.js';
 import {
   clock, truthy, loadReelMedia, carouselOnInstagram,
@@ -29,7 +30,10 @@ if (force && decision.reason === 'duplicate' && decision.slot) {
   decision = { ...decision, pending: true, reason: 'forced', posted: decision.posted };
 } else if (decision.pending && decision.slot) {
   const listed = await loadReelMedia();
-  const ig = carouselOnInstagram({ media: listed.items, slot: decision.slot, now });
+  // Slot-aware: another slot's recorded post (ledger mediaId, FB copy ledger
+  // slot) never makes this slot look posted, even where windows overlap.
+  const fbEntries = readLedger(process.env.FB_LEDGER_FILE || 'pipeline/fb-crosspost-history.json');
+  const ig = carouselOnInstagram({ media: listed.items, slot: decision.slot, now, entries, fbEntries: Array.isArray(fbEntries) ? fbEntries : [] });
   if (ig) {
     decision = {
       ...decision,
@@ -66,6 +70,6 @@ if (decision.reason === 'duplicate') {
 if (process.env.GITHUB_OUTPUT) {
   await fs.appendFile(
     process.env.GITHUB_OUTPUT,
-    `pending=${decision.pending ? 'true' : 'false'}\nslot=${decision.pending ? decision.slot : ''}\nreason=${decision.reason}\n`,
+    `pending=${decision.pending ? 'true' : 'false'}\nslot=${decision.pending ? decision.slot : ''}\nreason=${decision.reason}\nstarted=${now.toISOString()}\n`,
   );
 }

@@ -3,9 +3,9 @@
 // has a successful publish. A disabled AI slot, and the evening market slot on a
 // non-trading day, are not checked.
 
-import { istParts, inWindow, slotClosedToday } from '../carousel/categories.js';
+import { istParts, slotClosedToday } from '../carousel/categories.js';
 import { flagOn, ENABLE_AI_NEWS_CAROUSELS } from '../publish/flags.js';
-import { istDate, isCarouselMedia, resolveReelPublish } from '../publish/same-day.js';
+import { postedSlots, resolveReelPublish } from '../publish/same-day.js';
 
 export const GRACE_MINUTES = 30;
 export const ALERT_LABEL = 'health-alert';
@@ -31,15 +31,10 @@ export function enabledPublishSlots(env = process.env) {
   return slots;
 }
 
-function carouselPublished({ slot, date, carouselEntries = [], media = [] }) {
-  const key = `${date} ${slot}`;
-  if ((carouselEntries || []).some((entry) => entry?.date === key)) return true;
-  return (media || []).some((item) => {
-    if (!isCarouselMedia(item) || !item.timestamp) return false;
-    const when = new Date(item.timestamp);
-    if (Number.isNaN(when.getTime())) return false;
-    return istDate(when) === date && inWindow(slot, when);
-  });
+// Slot-aware (same-day.js postedSlots): a late AI post inside the ai/midday
+// overlap does not mark midday as published, or the reverse.
+function carouselPublished({ slot, now, carouselEntries = [], fbEntries = [], media = [] }) {
+  return Boolean(postedSlots({ media, entries: carouselEntries, fbEntries, now })[slot]);
 }
 
 export function missedSlots({
@@ -47,6 +42,7 @@ export function missedSlots({
   env = process.env,
   reelPublishEntries = [],
   carouselEntries = [],
+  fbEntries = [],
   media = [],
 } = {}) {
   const { date, minutes } = istParts(now);
@@ -57,7 +53,7 @@ export function missedSlots({
     if (slot === 'reel') {
       const decision = resolveReelPublish({ now, publishEntries: reelPublishEntries, media });
       if (!decision.pending) continue;
-    } else if (carouselPublished({ slot, date, carouselEntries, media })) {
+    } else if (carouselPublished({ slot, now, carouselEntries, fbEntries, media })) {
       continue;
     }
     missed.push(slot);

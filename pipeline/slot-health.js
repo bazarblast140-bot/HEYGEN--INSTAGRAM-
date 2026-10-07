@@ -30,6 +30,9 @@ const date = istDate(now);
 const env = process.env;
 const reelPublishEntries = await readReelPublishes(env.REEL_PUBLISH_FILE || undefined);
 const carouselEntries = await readEntries(path.join(HERE, 'carousel-history.json'));
+let fbEntries = [];
+try { fbEntries = JSON.parse(await fs.readFile(path.join(HERE, 'fb-crosspost-history.json'), 'utf8')); } catch { fbEntries = []; }
+if (!Array.isArray(fbEntries)) fbEntries = [];
 const listed = await loadReelMedia({ env });
 const media = listed.items;
 
@@ -38,6 +41,7 @@ const missed = missedSlots({
   env,
   reelPublishEntries,
   carouselEntries,
+  fbEntries,
   media,
 });
 const openIssues = await listOpenAlerts({

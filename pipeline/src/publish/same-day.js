@@ -15,7 +15,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { istParts, inWindow } from '../carousel/categories.js';
+import { istParts, WINDOWS, ALL_SLOTS } from '../carousel/categories.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REEL_PUBLISH_LEDGER = path.resolve(HERE, '..', '..', 'reel-publish-history.json');
@@ -99,14 +99,82 @@ export function resolveReelPublish({
   return { date, pending: true, reason: 'due', posted: null, via: '' };
 }
 
-export function carouselOnInstagram({ media = [], slot, now = new Date() } = {}) {
-  if (!slot) return null;
+// A post goes up a few minutes after its run started, so a carousel counts
+// toward a slot up to this long after the slot's window closes. Matches the
+// post gate's grace (approve-build.js POST_GRACE_MINUTES): a run may publish
+// at most 20 min after it started inside its window.
+export const ATTRIBUTION_GRACE_MINUTES = 20;
+
+function minutesIst(item) {
+  const when = new Date(item?.timestamp);
+  return Number.isNaN(when.getTime()) ? null : istParts(when).minutes;
+}
+
+function attributable(slot, item) {
+  const w = WINDOWS[slot];
+  const m = minutesIst(item);
+  return Boolean(w) && m !== null && m >= w.start && m < w.end + ATTRIBUTION_GRACE_MINUTES;
+}
+
+/**
+ * Which slots already have a carousel today (IST), decided per slot.
+ *
+ * 1. Ledger (pipeline/carousel-history.json, committed only after publish):
+ *    an entry `YYYY-MM-DD <slot>` means that slot posted. Its `mediaId`, when
+ *    recorded, claims that Instagram post for that slot.
+ * 2. Facebook copy ledger (fb-crosspost-history.json): a carousel row with a
+ *    `slot` and `igMediaId` claims that post for that slot too (it is committed
+ *    by a separate step, so it covers a lost topic commit).
+ * 3. Instagram media list: a carousel from today that no ledger row claims
+ *    (a publish whose ledger commit did not land) counts for the slot whose
+ *    window (+grace) holds its time. Inside the ai/midday overlap it is
+ *    ambiguous and counts for EVERY open candidate slot — fail closed: a slot
+ *    may be skipped, never posted twice.
+ *    Ledger entries without a mediaId (older rows) claim the first unclaimed
+ *    post in their own window, so an old row and its post are not counted twice.
+ *
+ * Returns { [slot]: { via: 'ledger'|'fb-ledger'|'instagram', mediaId, ambiguous? } }.
+ */
+export function postedSlots({ media = [], entries = [], fbEntries = [], now = new Date(), slots = ALL_SLOTS } = {}) {
   const date = istDate(now);
-  return (media || []).find((item) => {
-    if (!isCarouselMedia(item) || !onIstDay(item, date)) return false;
-    const when = new Date(item.timestamp);
-    return inWindow(slot, when);
-  }) || null;
+  const out = {};
+  const claimed = new Set();
+  const legacy = [];
+  for (const e of entries || []) {
+    const [day, slot] = String(e?.date || '').split(' ');
+    if (day !== date || !slots.includes(slot)) continue;
+    out[slot] = { via: 'ledger', mediaId: e.mediaId ? String(e.mediaId) : '' };
+    if (e.mediaId) claimed.add(String(e.mediaId)); else legacy.push(slot);
+  }
+  for (const f of fbEntries || []) {
+    if (String(f?.date || '').slice(0, 10) !== date || f?.kind !== 'carousel' || !slots.includes(f?.slot)) continue;
+    if (f.igMediaId) claimed.add(String(f.igMediaId));
+    if (!out[f.slot]) out[f.slot] = { via: 'fb-ledger', mediaId: String(f.igMediaId || '') };
+  }
+  let unclaimed = (media || []).filter((item) => isCarouselMedia(item) && onIstDay(item, date) && !claimed.has(String(item.id || '')))
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  for (const slot of legacy) {
+    const i = unclaimed.findIndex((item) => attributable(slot, item));
+    if (i >= 0) unclaimed = unclaimed.filter((_, k) => k !== i);
+  }
+  for (const item of unclaimed) {
+    const candidates = slots.filter((slot) => !out[slot] && attributable(slot, item));
+    for (const slot of candidates) {
+      out[slot] = { via: 'instagram', mediaId: String(item.id || ''), ...(candidates.length > 1 ? { ambiguous: true } : {}) };
+    }
+  }
+  return out;
+}
+
+/**
+ * The Instagram/ledger evidence that `slot` already posted today, or null.
+ * Slot-aware: another slot's recorded post never counts for this one.
+ */
+export function carouselOnInstagram({ media = [], slot, now = new Date(), entries = [], fbEntries = [] } = {}) {
+  if (!slot) return null;
+  const hit = postedSlots({ media, entries, fbEntries, now })[slot];
+  if (!hit || hit.via !== 'instagram') return null;
+  return (media || []).find((item) => String(item.id || '') === hit.mediaId) || { id: hit.mediaId };
 }
 
 /**
