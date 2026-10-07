@@ -295,7 +295,7 @@ test('the workflow serialises runs, never cancels one, and offers a dry run', ()
   }
 });
 
-test('never hands a Meta CDN media_url to Graph: pinned, then release, then re-host', async () => {
+test('never hands a Meta CDN media_url to Graph: pinned, then re-host, then release', async () => {
   const files = tmpFiles();
   const { api, calls } = fakeApi();
   api.pinnedVideo = async () => 'https://github.com/x/y/releases/download/companion-media/ig-pinned.mp4';
@@ -309,7 +309,7 @@ test('never hands a Meta CDN media_url to Graph: pinned, then release, then re-h
 
 test('only Reels that name a Paise Ki Pathshala YouTube video are handled', () => {
   assert.equal(paiseVideoId('Gold vs FD\n\npkp:video:0oe9nuJyQLE'), '0oe9nuJyQLE');
-  assert.equal(paiseVideoId('Paise Ki Pathshala ka naya short https://youtube.com/shorts/KVmMkKG5gzk'), 'KVmMkKG5gzk');
+  assert.equal(paiseVideoId('Paise Ki Pathshala ka naya short https://youtube.com/shorts/KVmMkKG5gzk'), '', 'naming Paise + a YouTube link is not the marker');
   assert.equal(paiseVideoId('https://youtube.com/shorts/KVmMkKG5gzk'), '', 'a YouTube link alone is not enough');
   assert.equal(paiseVideoId('pkp:sip-magic:abc123'), '', 'an old marker without a video id is not enough');
   assert.equal(paiseVideoId('pkp:video:short'), '');
@@ -378,4 +378,45 @@ test('ffmpeg: a 63.5 s clip becomes a ≤ 59.5 s Story copy', { skip: !hasFfmpeg
 test('reel-companion.yml installs ffmpeg', async () => {
   const wf = fs.readFileSync(new URL('../.github/workflows/reel-companion.yml', import.meta.url), 'utf8');
   assert.match(wf, /apt-get install[^\n]*ffmpeg/);
+});
+
+// ---------------------------------------------------------------- 7 Oct audit
+
+test('audit: only Paise Reels with the pkp:video marker — never carousels, feed videos, own or unmarked Reels', () => {
+  const t = new Date(NOW - 3600 * 1000).toISOString();
+  const media = [
+    PAISE,
+    { ...PAISE, id: '18000000000000101', media_type: 'CAROUSEL_ALBUM', media_product_type: 'FEED', timestamp: t },
+    { ...PAISE, id: '18000000000000102', media_type: 'VIDEO', media_product_type: 'FEED', timestamp: t },
+    { ...PAISE, id: '18000000000000103', caption: 'Paise Ki Pathshala https://youtu.be/KVmMkKG5gzk', timestamp: t },
+    { ...PAISE, id: '18000000000000104', caption: 'pkp:video:KVmMkKG5gzk', media_type: 'IMAGE', media_product_type: 'STORY', timestamp: t },
+  ];
+  const plan = planCompanion({ media, now: NOW, fbEnabled: true });
+  assert.deepEqual(plan.filter((p) => p.action === 'handle').map((p) => p.id), [PAISE.id]);
+  assert.equal(plan.find((p) => p.id === '18000000000000103').action, 'skip');
+  assert.ok(!plan.some((p) => p.id === '18000000000000101' || p.id === '18000000000000102' || p.id === '18000000000000104'), 'non-Reels are not even planned');
+});
+
+test('audit: the copy is this Reel\'s own video — re-hosted media_url is used before a time-matched release mp4', async () => {
+  const files = tmpFiles();
+  const release = 'https://github.com/o/r/releases/download/ig-reel-2026-10-03/paise-short-1-1-abc.mp4';
+  const { api, calls } = fakeApi({ release });
+  const out = await runCompanion({ env: { ...ENV, GITHUB_REPOSITORY: 'x/y', GITHUB_TOKEN: 't' }, api, now: NOW, files, log: quiet });
+  assert.equal(calls.release, 0, 'release lookup not needed');
+  assert.match(calls.story[0], /companion-media/);
+  assert.equal(out.stories[0].from, 'rehost');
+});
+
+test('audit: a handled Reel is never posted again — second run, other run\'s ledger row, FB ledger row', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  await runCompanion({ env: ENV, api, now: NOW + 3600 * 1000, files, log: quiet });
+  assert.equal(calls.story.length, 1);
+  assert.equal(calls.fb.length, 1);
+  const files2 = tmpFiles();
+  fs.writeFileSync(files2.fb, JSON.stringify([{ date: '2026-10-03', kind: 'reel', igMediaId: PAISE.id, fbId: '1', source: SOURCE }]));
+  const two = fakeApi();
+  await runCompanion({ env: ENV, api: two.api, now: NOW, files: files2, log: quiet });
+  assert.equal(two.calls.fb.length, 0, 'FB copy already in fb-crosspost-history.json');
 });

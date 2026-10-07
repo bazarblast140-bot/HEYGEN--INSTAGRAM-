@@ -46,6 +46,7 @@ export const ENABLE_REEL_COMPANION = 'ENABLE_REEL_COMPANION';
 export const SOURCE = 'reel-companion';
 export const WINDOW_HOURS = 36;
 export const MAX_TRIES = 3;
+export const RELEASE_MATCH_MINUTES = 90;
 export const FB_CAPTION_LIMIT = 2200;
 export const MEDIA_FIELDS = 'id,media_type,media_product_type,timestamp,permalink,media_url,caption';
 
@@ -158,19 +159,14 @@ export function markerOf(caption) {
 
 /**
  * The Paise Ki Pathshala YouTube video id this Reel is for, or ''. Only a
- * Reel that names one is handled: the marker pkp:video:<id>, or a caption that
- * says Paise Ki Pathshala and links the YouTube video. Anything else (our own
- * Reels included) is never touched.
+ * Reel whose caption carries the marker pkp:video:<11-char id> is handled
+ * (Paise writes it on every Reel). A caption that merely names Paise Ki
+ * Pathshala or links a YouTube video is NOT enough (7 Oct audit: anyone's Reel
+ * could say that). Anything else (our own Reels included) is never touched.
  */
 export function paiseVideoId(caption) {
-  const text = String(caption || '');
-  const marker = text.match(/\bpkp:video:([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
-  if (marker) return marker[1];
-  if (/paise\s*ki\s*pathshala/i.test(text)) {
-    const yt = text.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
-    if (yt) return yt[1];
-  }
-  return '';
+  const marker = String(caption || '').match(/\bpkp:video:([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
+  return marker ? marker[1] : '';
 }
 
 // ---------------------------------------------------------------- Story length
@@ -344,7 +340,9 @@ export function realApi({ fetchImpl = globalThis.fetch } = {}) {
             if (!/^paise-short-.*\.mp4$/i.test(String(asset.name || ''))) continue;
             const at = new Date(asset.created_at || asset.updated_at || '').getTime();
             if (Number.isNaN(at)) continue;
-            if (at > t + 10 * 60000 || at < t - 3 * 3600000) continue;
+            // Paise uploads the mp4 minutes before the Reel goes live; its slots
+            // are 5h+ apart, so 90 min cannot reach another slot's video.
+            if (at > t + 10 * 60000 || at < t - RELEASE_MATCH_MINUTES * 60000) continue;
             candidates.push({ url: asset.browser_download_url, gap: Math.abs(t - at) });
           }
         } catch { /* try the next tag */ }
@@ -605,12 +603,19 @@ export async function runCompanion({
         if (video) return video;
         // Meta refuses its own CDN URLs ("First-party Meta-hosted URLs are not
         // permitted"), so never hand media_url to Graph directly. Order:
-        // 1) companion-media/ig-<id>.mp4 on this repo, 2) Paise's release mp4,
-        // 3) re-host media_url bytes onto companion-media and use that.
+        // 1) companion-media/ig-<id>.mp4 on this repo (pinned for this media id),
+        // 2) re-host THIS Reel's media_url bytes onto companion-media,
+        // 3) only then Paise's release mp4, matched by upload time — the one
+        //    source that could be a different Paise video, so it is last
+        //    (7 Oct audit: never post another video as this Reel's copy).
         const repo = env.GITHUB_REPOSITORY;
         const token = env.GITHUB_TOKEN;
         const pinned = api.pinnedVideo ? await api.pinnedVideo({ repo, token, id: p.item.id }).catch(() => '') : '';
         if (pinned && await api.probeVideo(pinned)) video = { url: pinned, from: 'pinned' };
+        if (!video && p.item.media_url && api.rehostVideo) {
+          const url = await api.rehostVideo({ repo, token, id: p.item.id, sourceUrl: p.item.media_url }).catch((e) => { say(`  ${p.item.id}: re-host failed: ${String(e?.message || e).slice(0, 160)}`); return ''; });
+          if (url && await api.probeVideo(url)) video = { url, from: 'rehost' };
+        }
         if (!video) {
           const url = await api.releaseVideo({
             repo: env.PAISE_MEDIA_REPO || repo,
@@ -618,10 +623,6 @@ export async function runCompanion({
             timestamp: p.item.timestamp,
           }).catch(() => '');
           if (url && await api.probeVideo(url)) video = { url, from: 'release' };
-        }
-        if (!video && p.item.media_url && api.rehostVideo) {
-          const url = await api.rehostVideo({ repo, token, id: p.item.id, sourceUrl: p.item.media_url }).catch((e) => { say(`  ${p.item.id}: re-host failed: ${String(e?.message || e).slice(0, 160)}`); return ''; });
-          if (url && await api.probeVideo(url)) video = { url, from: 'rehost' };
         }
         return video;
       };
