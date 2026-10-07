@@ -29,7 +29,7 @@ test('a reviewed, publishable build inside its window is approved', async () => 
   assert.deepEqual(await approvalProblems(await build(), { now: evening }), []);
 });
 
-// Approve windows: ai 09:00–11:45, midday 12:00–14:30, evening 16:30–20:00 IST.
+// Approve windows: ai 09:00–12:30, midday 12:00–15:30, evening 16:30–20:00 IST.
 test('the evening market build is approved only on a trading day, in 16:30–20:00 IST, with today\'s close', async () => {
   const market = { date: '2026-10-05', indices: [{ name: 'NIFTY 50', close: 22500 }] };
   const ok = { slot: 'evening', istDate: '2026-10-05', category: 'latest-news', market };
@@ -42,14 +42,14 @@ test('the evening market build is approved only on a trading day, in 16:30–20:
   assert.match(none.join(' '), /market close in the build is from nowhere/);
   const holiday = await approvalProblems(await build({ ...ok, istDate: '2026-10-20', market: { date: '2026-10-20' } }), { now: new Date('2026-10-20T12:00:00Z') });
   assert.match(holiday.join(' '), /not an NSE trading day \(NSE holiday\)/);
-  const ai = await approvalProblems(await build({ slot: 'ai', category: 'ai-news', istDate: '2026-10-05' }), { now: new Date('2026-10-05T06:20:00Z') }); // 11:50 IST
+  const ai = await approvalProblems(await build({ slot: 'ai', category: 'ai-news', istDate: '2026-10-05' }), { now: new Date('2026-10-05T07:05:00Z') }); // 12:35 IST (ai window ends 12:30)
   assert.match(ai.join(' '), /ai window is closed/);
 });
 
 test('stale, closed-window, already-posted, failed-gate and altered builds are refused', async () => {
   const stale = await approvalProblems(await build({ istDate: '2026-10-02' }), { now: evening });
   assert.match(stale.join(' '), /stale builds are not posted/);
-  const closed = await approvalProblems(await build(), { now: new Date('2026-10-03T09:05:00Z') }); // 14:35 IST
+  const closed = await approvalProblems(await build(), { now: new Date('2026-10-03T10:05:00Z') }); // 15:35 IST (midday window ends 15:30)
   assert.match(closed.join(' '), /midday window is closed — a missed slot is not backfilled/);
   const news = await approvalProblems(await build({ slot: 'news' }), { now: evening });
   assert.match(news.join(' '), /no known slot \("news"\)/, 'the old news slot is gone');

@@ -7,8 +7,9 @@
 //
 //   node pipeline/build-cap.js --slot midday --run-id <this run> [--max 2]   # sets capped=true|false
 //
-// Any API error → capped=false (the check must not cost a slot; there are at
-// most four crons per slot, so this can never loop without end).
+// Any API error → capped=false (the check must not cost a slot). The 20-min
+// fallback crons are still bounded: each run that gets this far re-checks the
+// ledger first, and the cap stops the model after 2 builds.
 
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -33,9 +34,34 @@ export function slotRunsToday(runs, { slot, currentRunId, istDate }) {
     });
 }
 
+// The workflow names the build step "Build the carousel (<slot>)", so a run
+// is counted for the slot it actually built, even where the ai and midday
+// windows overlap (12:00–12:30 IST). An older run named just "Build the
+// carousel" falls back to the window its run started in.
+const STEP_RE = /^Build the carousel(?: \(([a-z]*)\))?$/;
+
+/** The slot whose build step ran in these jobs: a slot name, '' (unnamed, older run), or null (no build ran). */
+export function builtSlot(jobs) {
+  for (const j of jobs?.jobs || []) {
+    for (const s of j.steps || []) {
+      const m = String(s.name || '').match(STEP_RE);
+      if (m && ['success', 'failure'].includes(s.conclusion)) return m[1] || '';
+    }
+  }
+  return null;
+}
+
 /** Did this run's build step run (it called the model)? */
 export function built(jobs) {
-  return (jobs?.jobs || []).some((j) => (j.steps || []).some((s) => s.name === BUILD_STEP && ['success', 'failure'].includes(s.conclusion)));
+  return builtSlot(jobs) !== null;
+}
+
+/** Whether a run's build counts toward `slot`'s cap. */
+export function countsFor(slot, jobs, run) {
+  const got = builtSlot(jobs);
+  if (got === null) return false;
+  if (got) return got === slot;
+  return inWindow(slot, new Date(run?.run_started_at || run?.created_at));
 }
 
 export async function countBuilds({ repo, slot, currentRunId, now = new Date(), api = gh }) {
@@ -44,7 +70,7 @@ export async function countBuilds({ repo, slot, currentRunId, now = new Date(), 
   const list = JSON.parse(await api(['api', `repos/${repo}/actions/workflows/carousel.yml/runs?created=>=${since}&per_page=50`]));
   let n = 0;
   for (const r of slotRunsToday(list.workflow_runs, { slot, currentRunId, istDate })) {
-    if (built(JSON.parse(await api(['api', `repos/${repo}/actions/runs/${r.id}/jobs`])))) n += 1;
+    if (countsFor(slot, JSON.parse(await api(['api', `repos/${repo}/actions/runs/${r.id}/jobs`])), r)) n += 1;
   }
   return n;
 }

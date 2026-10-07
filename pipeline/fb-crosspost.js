@@ -18,6 +18,7 @@ const { values: a } = parseArgs({
   options: {
     whoami: { type: 'boolean' }, kind: { type: 'string' }, 'ig-media': { type: 'string' },
     'video-url': { type: 'string' }, hosted: { type: 'string' }, 'caption-file': { type: 'string' },
+    slot: { type: 'string' },
     ledger: { type: 'string', default: 'pipeline/fb-crosspost-history.json' },
   },
 });
@@ -56,7 +57,7 @@ async function main() {
     } else {
       console.log(`Facebook: unknown --kind ${a.kind}`); return 0;
     }
-    record(a.ledger, { date: istDay(), kind: a.kind, igMediaId, fbId: out.id });
+    record(a.ledger, { date: istDay(), kind: a.kind, ...(a.slot ? { slot: a.slot } : {}), igMediaId, fbId: out.id });
     console.log(`Facebook cross-post published ${out.id} ${out.url}`);
   } catch (err) {
     console.log(`Facebook cross-post FAILED (Instagram unaffected): ${String(err.message).slice(0, 300)}`);

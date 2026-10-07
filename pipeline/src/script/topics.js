@@ -117,6 +117,24 @@ export async function recordTopic({ topic, angle, date, file = LEDGER }) {
   );
 }
 
+/**
+ * After a carousel publishes, write Instagram's media id onto its ledger row
+ * (`date` = "YYYY-MM-DD <slot>"). The already-posted check then knows which
+ * post belongs to which slot (same-day.js postedSlots). No row → nothing done.
+ */
+export async function attachMediaId({ key, mediaId, file = LEDGER }) {
+  if (!key || !/^\d{6,}$/.test(String(mediaId || ''))) return false;
+  let parsed;
+  try { parsed = JSON.parse(await fs.readFile(file, 'utf8')); } catch { return false; }
+  const entries = Array.isArray(parsed.entries) ? [...parsed.entries] : [];
+  let i = -1;
+  entries.forEach((e, k) => { if (e?.date === key) i = k; });
+  if (i < 0) return false;
+  entries[i] = { ...entries[i], mediaId: String(mediaId) };
+  await fs.writeFile(file, `${JSON.stringify({ ...parsed, entries }, null, 2)}\n`);
+  return true;
+}
+
 /** Story keys posted within the last `days` days. */
 export async function readUsedStories(file = LEDGER, { days = STORY_DAYS, now = new Date() } = {}) {
   let used = [];

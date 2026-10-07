@@ -19,6 +19,8 @@ import { publishStory } from './src/publish/story.js';
 import { whoami } from './src/publish/instagram.js';
 import { env } from '../src/config.js';
 import { publishDecision } from './src/publish/allow.js';
+import { attachMediaId } from './src/script/topics.js';
+import { LEDGER } from './src/carousel/generate.js';
 
 const ok = (s) => `\x1b[32m${s}\x1b[0m`;
 const bad = (s) => `\x1b[31m${s}\x1b[0m`;
@@ -162,6 +164,11 @@ async function main() {
     await fs.writeFile(path.join(path.dirname(reportPath), 'hosted.json'),
       `${JSON.stringify({ mediaId, imageUrls }, null, 2)}\n`);
   } catch { /* the post is up; a missing copy note only skips Facebook */ }
+
+  // Slot-aware already-posted check: this post's id on its ledger row.
+  try {
+    if (report.slot && report.istDate) await attachMediaId({ key: `${report.istDate} ${report.slot}`, mediaId, file: LEDGER });
+  } catch { /* the post is up; the ledger row and the Instagram list still guard */ }
 
   // After the post, never instead of it. A story that fails is a story that
   // did not go out; a post that fails because of a story is a day lost, so

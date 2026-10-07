@@ -11,9 +11,13 @@ name: Build carousel
 #                       not dated today (IST).
 # The old 16:30 news and 19:30 finance slots are removed.
 # Each slot has the publish cron plus three catch-ups (odd minutes, never
-# :00/:30, outside the 22:30–01:30 UTC band). slot-status keeps the cron's
-# slot even when GitHub is late, and the ledger (YYYY-MM-DD <slot>, IST)
-# stops a second copy. A dispatch with no slot, or outside every window,
+# :00/:30, outside the 22:30–01:30 UTC band); ai and midday also have a
+# fallback cron every 20 min through their window (GitHub schedules arrive
+# hours late or not at all). Windows (IST): ai 09:00–12:30, midday
+# 12:00–15:30, evening 16:30–20:00. slot-status keeps the cron's slot even when
+# GitHub is late; the ledger (YYYY-MM-DD <slot>, IST, with the posted media id)
+# and the slot-aware Instagram check stop a second copy, and build-cap stops
+# the model after 2 builds per slot. A dispatch with no slot, or outside every window,
 # is a soft skip (exit 0). It does not call the script model.
 #
 # A scheduled run PUBLISHES — unless the repository variable
@@ -37,11 +41,13 @@ on:
     - cron: '7 4 * * *'
     - cron: '22 4 * * *'
     - cron: '41 4 * * *'
+    - cron: '13,33,53 4-6 * * *'   # ai fallback, 09:43–12:23 IST every 20 min
     # midday (mutual funds) 12:30 IST, then 12:37, 12:52, 13:11
     - cron: '0 7 * * *'
     - cron: '7 7 * * *'
     - cron: '22 7 * * *'
     - cron: '41 7 * * *'
+    - cron: '16,36,56 7-9 * * *'   # midday fallback, 12:46–15:26 IST every 20 min
     # evening (market close) 16:45 IST, then 16:52, 17:07, 17:26 — NSE trading days only
     - cron: '15 11 * * *'
     - cron: '22 11 * * *'
@@ -226,7 +232,8 @@ jobs:
         continue-on-error: true
         run: sudo apt-get install -y --no-install-recommends tesseract-ocr >/dev/null
 
-      - name: Build the carousel
+      # The slot in the step name lets build-cap.js count builds per slot.
+      - name: Build the carousel (${{ steps.slot.outputs.slot }})
         id: build
         if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' && steps.market.outputs.ok != 'false') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
@@ -289,6 +296,7 @@ jobs:
         if: ${{ env.APPROVE_BUILD == '' && env.CAROUSEL_REQUIRE_APPROVAL != 'true' && steps.build.outcome == 'success' && github.event.inputs.preview != 'true' }}
         env:
           DISPATCH_LATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.late || 'false' }}
+          SLOT_STARTED_AT: ${{ steps.slot.outputs.started }}
         run: node pipeline/post-gate.js --report pipeline/out/carousel-report.json | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Skipped — nothing posted
@@ -350,7 +358,7 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
         run: |
           ID=$(jq -r '.mediaId // empty' pipeline/out/hosted.json 2>/dev/null || true)
-          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" \
+          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" --slot "${{ steps.slot.outputs.slot || steps.approve.outputs.slot }}" \
             --hosted pipeline/out/hosted.json --caption-file pipeline/out/caption.txt 2>&1 | tee fb.log
           sed -e 's/\x1b\[[0-9;]*m//g' fb.log >> "$GITHUB_STEP_SUMMARY"
           git config user.name  "github-actions[bot]"

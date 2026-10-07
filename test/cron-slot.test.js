@@ -89,8 +89,11 @@ test('three slots: ai 09:30, midday 12:30, evening 16:45 IST, each with catch-up
   const by = {};
   for (const [cron, slot] of Object.entries(CRON_SLOTS)) (by[slot] ||= []).push(cron);
   const ist = (cron) => { const [m, h] = cron.split(' ').map(Number); const t = (h * 60 + m + 330) % 1440; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
-  assert.deepEqual(by.ai.map(ist), ['09:30', '09:37', '09:52', '10:11']);
-  assert.deepEqual(by.midday.map(ist), ['12:30', '12:37', '12:52', '13:11']);
+  const single = (list) => list.filter((c) => !c.includes(','));
+  assert.deepEqual(single(by.ai).map(ist), ['09:30', '09:37', '09:52', '10:11']);
+  assert.deepEqual(single(by.midday).map(ist), ['12:30', '12:37', '12:52', '13:11']);
+  assert.deepEqual(by.ai.filter((c) => c.includes(',')), ['13,33,53 4-6 * * *']);
+  assert.deepEqual(by.midday.filter((c) => c.includes(',')), ['16,36,56 7-9 * * *']);
   assert.deepEqual(by.evening.map(ist), ['16:45', '16:52', '17:07', '17:26']);
   assert.deepEqual(Object.keys(by).sort(), ['ai', 'evening', 'midday']);
   assert.ok(SLOTS.includes('midday') && SLOTS.includes('evening'));

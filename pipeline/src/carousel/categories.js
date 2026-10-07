@@ -186,6 +186,13 @@ export function dayNumber(date = new Date()) {
 export const CRON_SLOTS = {
   '0 4 * * *': 'ai', '7 4 * * *': 'ai', '22 4 * * *': 'ai', '41 4 * * *': 'ai',
   '0 7 * * *': 'midday', '7 7 * * *': 'midday', '22 7 * * *': 'midday', '41 7 * * *': 'midday',
+  // Fallback triggers, every 20 min through each window (GitHub schedules on
+  // 6-7 Oct arrived ~7h late or not at all). Guarded like every other run:
+  // ledger / Instagram already-posted check (slot-aware), 2-builds cap.
+  //   ai:     04:13 … 06:53 UTC = 09:43 … 12:23 IST
+  //   midday: 07:16 … 09:56 UTC = 12:46 … 15:26 IST
+  '13,33,53 4-6 * * *': 'ai',
+  '16,36,56 7-9 * * *': 'midday',
   '15 11 * * *': 'evening', '22 11 * * *': 'evening', '37 11 * * *': 'evening', '56 11 * * *': 'evening',
 };
 
@@ -193,13 +200,22 @@ export const CRON_SLOTS = {
 // slot, and an explicit slot, may post only inside one of these. Ends are
 // exclusive. Each window now runs past the catch-up times so a late clock
 // still fills that slot (and an approve_build has time), without swallowing
-// the gap before the next one: 15:00 IST is not midday, 06:07 IST is before
+// the gap before the next one: 15:45 IST is not midday, 06:07 IST is before
 // AI, and 16:15 IST (before the close data settles) is not evening.
+//
+// 7 Oct: ai and midday accept a build up to 3h after the slot time (ai 09:30 →
+// 12:30, midday 12:30 → 15:30 IST), same IST day, never past 23:00 and never
+// across midnight. ai and midday overlap 12:00–12:30, so "already posted" is
+// decided per slot from the ledger key / recorded media id (same-day.js), not
+// by matching a post's time to a window.
 export const WINDOWS = {
-  ai: { start: 9 * 60, end: 11 * 60 + 45 },
-  midday: { start: 12 * 60, end: 14 * 60 + 30 },
+  ai: { start: 9 * 60, end: 12 * 60 + 30 },
+  midday: { start: 12 * 60, end: 15 * 60 + 30 },
   evening: { start: 16 * 60 + 30, end: 20 * 60 },
 };
+
+/** Slot time (IST minutes) — the publish cron. */
+export const SLOT_MINUTE = { ai: 9 * 60 + 30, midday: 12 * 60 + 30, evening: 16 * 60 + 45 };
 
 export function istParts(date = new Date()) {
   const when = date instanceof Date ? date : new Date(date);
@@ -226,13 +242,17 @@ export function enabledSlots(env = process.env) {
   return flagOn(ENABLE_AI_NEWS_CAROUSELS, env) ? ALL_SLOTS : SLOTS;
 }
 
-export function slotFor(date = new Date(), env = process.env) {
+/** Enabled slots whose window contains `date`, earliest slot first. */
+export function slotsAt(date = new Date(), env = process.env) {
   const when = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(when.getTime())) return null;
-  for (const slot of enabledSlots(env)) {
-    if (inWindow(slot, when)) return slot;
-  }
-  return null;
+  if (Number.isNaN(when.getTime())) return [];
+  return enabledSlots(env)
+    .filter((slot) => inWindow(slot, when))
+    .sort((a, b) => WINDOWS[a].start - WINDOWS[b].start);
+}
+
+export function slotFor(date = new Date(), env = process.env) {
+  return slotsAt(date, env)[0] || null;
 };
 
 // Topic-wise slots. POOL rotation stays available for a finance preview of
@@ -301,7 +321,10 @@ export function resolveRun({
     if (!ALL_SLOTS.includes(explicit)) reason = 'unknown';
     else if (!inWindow(explicit, now) && !lateOk(explicit, now, env)) reason = 'wrong-time';
   } else {
-    slot = slotFor(now, env) || '';
+    // No slot named: inside the ai/midday overlap take the earliest slot that
+    // the ledger does not show as posted (both posted → the first, duplicate).
+    const open = slotsAt(now, env);
+    slot = open.find((s) => !entries.some((e) => e.date === `${date} ${s}`)) || open[0] || '';
     if (!slot) reason = 'outside';
   }
 
