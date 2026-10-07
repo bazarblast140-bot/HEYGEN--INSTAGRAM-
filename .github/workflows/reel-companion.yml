@@ -15,7 +15,9 @@ name: Reel companion
 # media id, re-read and merged with origin before every post).
 #
 # Off unless the repository variable ENABLE_REEL_COMPANION is true. The
-# Facebook half also needs FB_CROSSPOST=true. Any error is logged to the
+# Facebook half also needs FB_CROSSPOST=true. With FB_CROSSPOST=true each new
+# IG Story is also posted as a Facebook Page video story (FB_PAGE_TOKEN only,
+# re-hosted URL, ledger fb-story-history.json; a failure is only logged). Any error is logged to the
 # summary and the job still succeeds.
 #
 # Paise publishes at 08:30, 16:00 and 21:00 IST. Runs ~25–85 minutes later
@@ -96,7 +98,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pipeline/reel-companion-history.json pipeline/fb-crosspost-history.json
+          git add pipeline/reel-companion-history.json pipeline/fb-crosspost-history.json pipeline/fb-story-history.json
           git diff --cached --quiet && exit 0
           git commit -m "Record $(date -u +'%Y-%m-%d %H:%M') reel companion"
           for attempt in 1 2 3; do
