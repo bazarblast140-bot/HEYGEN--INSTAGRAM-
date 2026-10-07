@@ -63,16 +63,23 @@ export function parseFigures(text) {
         break;
       }
     }
+    let unitEnd = end;
     for (const [re, k] of UNIT_AFTER) {
       const hit = tail.match(re);
       if (!hit) continue;
       if (k === 'INR') kind = 'INR';
       else if (kind === 'NUM') kind = k;
+      unitEnd = end + (rest.length - tail.length) + hit[0].length;
       break;
     }
     if (kind === 'NUM' && INDEX_BEFORE.test(before)) kind = 'INDEX';
-    const lead = CURRENCY_BEFORE.test(before) ? '₹' : '';
-    out.push({ raw: `${lead}${t.slice(m.index, end)}`, value, kind, step });
+    const currency = before.match(CURRENCY_BEFORE);
+    const lead = currency ? '₹' : '';
+    // start/stop: the whole written figure ("₹1.2 लाख", "11.8%", "20 साल"),
+    // for the sanitizer that removes a figure the code did not compute.
+    // latinDigits() keeps string length, so these index the original text.
+    const start = currency ? m.index - currency[0].length : m.index;
+    out.push({ raw: `${lead}${t.slice(m.index, end)}`, value, kind, step, digits: digits.replace(/\.0+$/, ''), start, stop: unitEnd });
   }
   return out;
 }

@@ -12,6 +12,7 @@ import {
   candidateFor, betterCandidate,
 } from './generate.js';
 import { SYSTEM, buildSourcedPrompt } from './sourced-prompt.js';
+import { storyNumbers } from './quality.js';
 
 export const MAX_SOURCE_AGE_MS = 48 * 60 * 60 * 1000;
 
@@ -120,6 +121,8 @@ export async function generateSourcedCarousel({
   onReject,
   onNote,
   record = true,
+  maxAttempts: attemptCap = MAX_MODEL_ATTEMPTS,
+  feedback = [],
 } = {}) {
   const category = categoryForKind(kind);
   const found = selectFresh(stories || await gatherSources({ kind, now, onNote }), now);
@@ -139,15 +142,18 @@ export async function generateSourcedCarousel({
 
   const recentTopics = await readHistory(LEDGER);
   const sites = new Set(found.map((item) => item.site.toLowerCase()));
-  let lastProblems = [];
+  let lastProblems = [...feedback];
   let lastOutput = null;
   let lastUsed = chosenModel;
   let best = null;
   const prepare = (out) => applySourceCitation(normalizeSpec(out, { sourced: true }), found[0]);
+  // The only numbers a news slide may carry: the ones in the fetched items.
+  const allowed = [...storyNumbers(found)].slice(0, 80);
+  const numbersNote = `\n\n<allowed_numbers>\nSlides और caption में सिर्फ़ ये numbers (fetched items से) लिखो, कोई और digit या % नहीं: ${allowed.join(', ') || '(कोई नहीं — numbers मत लिखो)'}\n</allowed_numbers>`;
 
-  const maxAttempts = MAX_MODEL_ATTEMPTS;
+  const maxAttempts = Math.max(1, Math.min(MAX_MODEL_ATTEMPTS, Number(attemptCap) || MAX_MODEL_ATTEMPTS));
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    let userPrompt = buildSourcedPrompt({ kind, stories: found, date, recentTopics });
+    let userPrompt = buildSourcedPrompt({ kind, stories: found, date, recentTopics }) + numbersNote;
     if (lastProblems.length) {
       userPrompt += `\n\nपिछली कोशिश ठुकरा दी गई:\n${lastProblems.map((p) => `- ${p}`).join('\n')}\nसिर्फ़ यही ठीक करके पूरा spec दोबारा भेजो. संख्या मत जोड़ो.`;
     }

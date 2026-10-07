@@ -7,6 +7,7 @@ import { limitsPrompt } from './limits.js';
 import { marketDayNote } from './news-issue.js';
 import { SLIDES, TOPIC_SEEDS } from './categories.js';
 import { heavyWordPrompt } from './language.js';
+import { numberSheetPrompt } from './number-sheet.js';
 
 export const SYSTEM = `तुम @rajesh_technical_trader के लिए रोज़ एक simple Hinglish finance carousel लिखते हो — ठीक ${SLIDES} slides.
 हर content slide एक dark chart-board है: ऊपर short headline, नीचे एक chart जो code तुम्हारे दिए "calc" inputs से बनाता है.
@@ -31,6 +32,7 @@ CALC TYPES (exact keys; amounts रुपये में plain numbers, rates %
 - {"type":"lumpsum","amount":100000,"rate":12,"years":10}
 - {"type":"cagr","start":100,"end":250,"years":5,"unit":"INR"|"points"}
 - {"type":"inflation","amount":100000,"rate":6,"years":10}
+- {"type":"expense_ratio","amount":100000,"rate":12,"years":20,"expenses":[1,0.2]}   या "monthly":10000 (SIP). code निकालेगा net return (12 − 1 = 11%), दोनों final value और फ़र्क़. Expense ratio / direct बनाम regular topic पर यही type दो.
 - {"type":"change","from":100,"to":80,"fromLabel":"Before","toLabel":"After","unit":"INR"|"%"|"num"}
 - {"type":"drawdown","losses":[10,20,50]}
 - {"type":"position","capital":100000,"riskPct":1,"entry":500,"stop":490}
@@ -66,7 +68,7 @@ LANGUAGE — simple Hinglish
 - Respond only in valid JSON. The response format is json.
 `;
 
-export function buildUserPrompt({ category, date, recentTopics = [], headlines = [] }) {
+export function buildUserPrompt({ category, date, recentTopics = [], headlines = [], example = null }) {
   // Today's headlines (daily news issue) are topic candidates only: the angle
   // may come from one, but every number still comes from the worked example.
   const todays = headlines.length
@@ -84,8 +86,8 @@ export function buildUserPrompt({ category, date, recentTopics = [], headlines =
 आज के idea seeds: ${seedList}
 इनमें से एक को inspiration बनाओ, exact wording copy मत करो. Category के अंदर calculation वाला angle चुनो
 (options → payoff/breakeven, intraday/risk → position size/expectancy/drawdown, fundamentals/stocks → operating_leverage/margin/CAGR/change,
-personal-finance → EMI/SIP/inflation/lumpsum, mutual-funds → SIP/lumpsum/step-up SIP/expense ratio का change/CAGR, market-history → drawdown/CAGR/change).
-</task>${alreadyCovered}${todays}${marketDayNote(date)}
+personal-finance → EMI/SIP/inflation/lumpsum, mutual-funds → SIP/lumpsum/expense_ratio/inflation, market-history → drawdown/CAGR/change).
+</task>${alreadyCovered}${todays}${marketDayNote(date)}${numberSheetPrompt(category, { example })}
 
 <structure>
 ठीक ${SLIDES} slides:
