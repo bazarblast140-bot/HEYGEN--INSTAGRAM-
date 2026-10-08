@@ -6,6 +6,7 @@
 // a no-op. A run with no slot publishes only inside one of those windows.
 
 import fs from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 
 import { readHistory } from './src/script/topics.js';
 import { LEDGER } from './src/carousel/generate.js';
@@ -15,7 +16,31 @@ import {
   clock, truthy, loadReelMedia, carouselOnInstagram,
 } from './src/publish/same-day.js';
 
-const entries = await readHistory(LEDGER);
+// A run held for the ai window (ai-wait.js) checked out its commit hours ago.
+// Read the branch's current ledgers too, so a post that landed meanwhile counts.
+// Read-only (git fetch + git show); never fatal.
+let fetched = null;
+function remoteJson(file) {
+  const ref = process.env.LEDGER_REFRESH_REF;
+  if (!ref || fetched === false) return null;
+  try {
+    if (fetched === null) {
+      fetched = false;
+      execFileSync('git', ['fetch', '--quiet', '--depth=1', 'origin', ref], { stdio: 'ignore', timeout: 60000 });
+      fetched = true;
+    }
+    return JSON.parse(execFileSync('git', ['show', `FETCH_HEAD:${file}`], { encoding: 'utf8', timeout: 30000 }));
+  } catch (err) {
+    console.log(`(could not read the branch's current ${file}: ${String(err.message).split('\n')[0].slice(0, 100)} — using the checkout)`);
+    return null;
+  }
+}
+const sameRow = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const union = (a, b) => [...a, ...b.filter((row) => !a.some((x) => sameRow(x, row)))];
+
+const remoteCarousel = remoteJson('pipeline/carousel-history.json');
+const entries = union(await readHistory(LEDGER), Array.isArray(remoteCarousel?.entries) ? remoteCarousel.entries : []);
+const remoteFb = remoteJson('pipeline/fb-crosspost-history.json');
 const now = clock();
 let decision = resolveRun({
   event: process.env.GITHUB_EVENT_NAME || '',
@@ -32,7 +57,8 @@ if (force && decision.reason === 'duplicate' && decision.slot) {
   const listed = await loadReelMedia();
   // Slot-aware: another slot's recorded post (ledger mediaId, FB copy ledger
   // slot) never makes this slot look posted, even where windows overlap.
-  const fbEntries = readLedger(process.env.FB_LEDGER_FILE || 'pipeline/fb-crosspost-history.json');
+  const localFb = readLedger(process.env.FB_LEDGER_FILE || 'pipeline/fb-crosspost-history.json');
+  const fbEntries = union(Array.isArray(localFb) ? localFb : [], Array.isArray(remoteFb) ? remoteFb : []);
   const ig = carouselOnInstagram({ media: listed.items, slot: decision.slot, now, entries, fbEntries: Array.isArray(fbEntries) ? fbEntries : [] });
   if (ig) {
     decision = {

@@ -88,15 +88,49 @@ on:
         description: "Run id of a reviewed build (carousel.yml or carousel-preview.yml) to publish exactly as built. Leave empty to build."
         default: ''
 
-concurrency:
-  # Preview must not sit in the same queue as a scheduled publish.
-  group: ${{ github.event.inputs.preview == 'true' && 'carousel-preview' || 'carousel' }}
-  cancel-in-progress: false
-
 jobs:
+  # Issue #61: the outside dispatcher fires at 06:07 IST, before the ai window
+  # (09:00–12:30). A publishing dispatch with slot auto/ai that arrives
+  # 06:00–09:00 IST is held here until 09:02 IST (never past 09:10, same IST
+  # day); every other run passes straight through in a few seconds. Nothing is
+  # decided here: the build job reads the ledger and Instagram, checks the
+  # build cap and the post gate after the wait.
+  wait:
+    name: Hold an early ai dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    outputs:
+      waited: ${{ steps.plan.outputs.wait }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wait for the ai window?
+        id: plan
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
+          DISPATCH_PUBLISH: ${{ github.event.inputs.publish }}
+          DISPATCH_PREVIEW: ${{ github.event.inputs.preview }}
+          DISPATCH_LATE: ${{ github.event.inputs.late }}
+          APPROVE_BUILD: ${{ github.event.inputs.approve_build }}
+          ENABLE_AI_NEWS_CAROUSELS: ${{ vars.ENABLE_AI_NEWS_CAROUSELS }}
+        run: node pipeline/ai-wait.js | tee -a "$GITHUB_STEP_SUMMARY"
+
   build:
+    needs: wait
+    # Runs after the wait job however it ended (a failed or timed-out wait
+    # must not cost the midday or evening post); only a cancelled run stops it.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # Preview must not sit in the same queue as a scheduled publish. On the
+    # job, so a run held by the wait job does not block other runs' queue.
+    concurrency:
+      group: ${{ github.event.inputs.preview == 'true' && 'carousel-preview' || 'carousel' }}
+      cancel-in-progress: false
 
     env:
       AUTOMATED: ${{ github.event_name == 'schedule' || github.event_name == 'repository_dispatch' }}
@@ -158,6 +192,8 @@ jobs:
           DISPATCH_SLOT: ${{ github.event.client_payload.slot || github.event.inputs.slot }}
           FORCE: ${{ github.event.inputs.force }}
           DISPATCH_LATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.late || 'false' }}
+          # Read the branch's current ledgers too (a held run checked out hours ago).
+          LEDGER_REFRESH_REF: ${{ github.ref_name }}
           IG_USER_ID: ${{ vars.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_SURFACE: ${{ vars.IG_SURFACE }}
@@ -178,7 +214,7 @@ jobs:
       # per IST day that did not post (scheduled runs; approval on or off).
       - name: Build attempts today
         id: cap
-        if: ${{ env.APPROVE_BUILD == '' && env.AUTOMATED == 'true' && steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' }}
+        if: ${{ env.APPROVE_BUILD == '' && (env.AUTOMATED == 'true' || needs.wait.outputs.waited == 'true') && steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}

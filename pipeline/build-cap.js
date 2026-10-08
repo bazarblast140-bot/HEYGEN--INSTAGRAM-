@@ -16,7 +16,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
-import { istParts, inWindow } from './src/carousel/categories.js';
+import { istParts, inWindow, EARLY_AI } from './src/carousel/categories.js';
 
 export const MAX_BUILDS_PER_SLOT = 2;
 export const BUILD_STEP = 'Build the carousel';
@@ -30,7 +30,11 @@ export function slotRunsToday(runs, { slot, currentRunId, istDate }) {
     .filter((r) => String(r.id) !== String(currentRunId) && r.status === 'completed')
     .filter((r) => {
       const at = new Date(r.run_started_at || r.created_at);
-      return istParts(at).date === istDate && inWindow(slot, at);
+      // A run held for the ai window (ai-wait.js) started 06:00–09:00 IST and
+      // built ai after 09:02; its "(ai)" step name decides (countsFor).
+      const m = istParts(at).minutes;
+      const early = slot === 'ai' && m >= EARLY_AI.from && m < EARLY_AI.until;
+      return istParts(at).date === istDate && (inWindow(slot, at) || early);
     });
 }
 
