@@ -20,6 +20,15 @@ const KICKERS = {
   'risk-management': 'Risk management', 'ai-news': 'AI update', 'latest-news': 'Market news',
 };
 
+/**
+ * Cover style. "curiosity" (repository variable CAROUSEL_COVER_STYLE) keeps the
+ * answer off the cover: no figure strip, so the reader swipes for the numbers.
+ * Anything else is the current cover (hook + computed figure strip).
+ */
+export function coverStyle(env = process.env) {
+  return String(env.CAROUSEL_COVER_STYLE || '').trim().toLowerCase() === 'curiosity' ? 'curiosity' : 'answer';
+}
+
 export function kickerFor(category) {
   return KICKERS[category] || 'Finance';
 }
@@ -29,7 +38,8 @@ export function kickerFor(category) {
  * slide. Finance slides lose any model-written source; the cover borrows the
  * first content slide's chart so the hook is a picture of the answer.
  */
-export function boardSlides(spec) {
+export function boardSlides(spec, { env = process.env } = {}) {
+  const hideAnswer = coverStyle(env) === 'curiosity';
   const slides = spec?.slides || [];
   const finance = FINANCE.includes(spec?.category);
   const total = slides.length;
@@ -52,10 +62,10 @@ export function boardSlides(spec) {
       // A verified cover photo (cover-photo.js) replaces the hero chart; the
       // computed figure strip stays. No photo → the v3 chart cover.
       if (slide.photo?.file) {
-        return { ...base, chart: null, figures: hero ? figureStrip(hero) : [], footnote: '', source: null,
+        return { ...base, chart: null, figures: hero && !hideAnswer ? figureStrip(hero) : [], footnote: '', source: null,
           photo: pathToFileURL(path.resolve(slide.photo.file)).href, photoCredit: slide.photo.credit || '' };
       }
-      return { ...base, chart: hero?.chart || null, figures: hero ? figureStrip(hero) : [], footnote: '', source: null };
+      return { ...base, chart: hero?.chart || null, figures: hero && !hideAnswer ? figureStrip(hero) : [], footnote: '', source: null };
     }
     if (finance) {
       // The gate only passes a finance compare whose values code computed from
