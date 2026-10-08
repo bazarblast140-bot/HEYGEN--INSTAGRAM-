@@ -237,6 +237,7 @@ jobs:
         id: build
         if: ${{ env.APPROVE_BUILD == '' && ((steps.slot.outputs.pending == 'true' && steps.gated.outputs.exists != 'true' && steps.cap.outputs.capped != 'true' && steps.market.outputs.ok != 'false') || github.event.inputs.preview == 'true' || github.event.inputs.force == 'true') }}
         env:
+          CAPTION_CTA_STYLE: ${{ vars.CAPTION_CTA_STYLE }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

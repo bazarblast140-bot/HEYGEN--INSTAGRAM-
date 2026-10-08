@@ -9,6 +9,14 @@
 import { BROKER_CTA, isBioCtaLine } from './cta.js';
 
 export const ENGAGEMENT = 'Save karo, share karo, comment mein apna sawal likho.';
+// CAPTION_CTA_STYLE=question: one concrete ask instead of three generic ones.
+// 0 comments on 67 posts (24 Sep–8 Oct) with the line above. It promises a
+// reply, so it only makes sense if comments are answered.
+export const QUESTION_ENGAGEMENT = 'Is hisaab par aapka sawal? Comment karo 👇 har sawal ka jawab milega. Save karo, baad mein kaam aayega.';
+
+export function engagementLine(env = process.env) {
+  return String(env.CAPTION_CTA_STYLE || '').trim().toLowerCase() === 'question' ? QUESTION_ENGAGEMENT : ENGAGEMENT;
+}
 export const LINK_IN_BIO = BROKER_CTA;
 export const MAX_HASHTAGS = 5;
 
@@ -61,7 +69,7 @@ function ctaHits(text) {
 export function isModelCtaLine(line) {
   const t = String(line || '').trim();
   if (!t) return false;
-  if (t === ENGAGEMENT) return true;
+  if (t === ENGAGEMENT || t === QUESTION_ENGAGEMENT) return true;
   if (/^link in bio\.?$/i.test(t) || isBioCtaLine(t)) return true;
   const hits = ctaHits(t);
   if (hits >= 2) return true;
@@ -131,7 +139,7 @@ export function stripReferrals(text) {
     .trim();
 }
 
-export function shapeCaption({ caption = '', hashtags = [], brandTag, limit = MAX_HASHTAGS } = {}) {
+export function shapeCaption({ caption = '', hashtags = [], brandTag, limit = MAX_HASHTAGS, env = process.env } = {}) {
   // A bio line the model (or an earlier shaping) put after its hashtags would
   // hide the tag row; drop those lines first, the CTA is re-added once below.
   const cleaned = stripReferrals(caption)
@@ -147,7 +155,7 @@ export function shapeCaption({ caption = '', hashtags = [], brandTag, limit = MA
 
   const tags = nicheHashtags([...inline, ...hashtags, brandTag], { caption: body, limit });
 
-  return [body, ENGAGEMENT, tags.length ? tags.join(' ') : null, LINK_IN_BIO]
+  return [body, engagementLine(env), tags.length ? tags.join(' ') : null, LINK_IN_BIO]
     .filter(Boolean)
     .join('\n\n');
 }
