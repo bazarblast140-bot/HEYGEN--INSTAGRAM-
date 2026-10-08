@@ -10,6 +10,11 @@ const GRAPH = 'https://graph.facebook.com';
 
 // Requested per post. Unsupported ones (code 100) are retried one at a time.
 export const IG_METRICS = ['reach', 'likes', 'comments', 'saved', 'shares', 'follows', 'profile_visits', 'views', 'total_interactions'];
+export const FB_FIELDSETS = [
+  'id,created_time,message,permalink_url,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)',
+  'id,created_time,message,permalink_url,shares,reactions.summary(total_count).limit(0)',
+  'id,created_time,message,permalink_url,shares',
+];
 export const FB_POST_METRICS = ['post_impressions_unique', 'post_clicks', 'post_reactions_by_type_total'];
 
 const PERMISSION_CODES = new Set([10, 190, 200, 3]);
@@ -154,13 +159,20 @@ export async function buildReport({ env = process.env, fetchImpl = fetch, now = 
   // Facebook Page posts: public counts plus whatever post insights the Page token may read.
   if (pageId && pageToken) {
     try {
-      const res = await get(`${pageId}/posts`, {
-        params: {
-          fields: 'id,created_time,message,permalink_url,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)',
-          since: String(Math.floor(sinceMs / 1000)), limit: '50',
-        },
-        token: pageToken, fetchImpl,
-      });
+      // Comments (and on some Pages reactions) are "user content": without
+      // pages_read_user_content Graph refuses the whole list, so ask for less.
+      let res = null;
+      const refused = [];
+      for (const fields of FB_FIELDSETS) {
+        try {
+          res = await get(`${pageId}/posts`, { params: { fields, since: String(Math.floor(sinceMs / 1000)), limit: '50' }, token: pageToken, fetchImpl });
+          break;
+        } catch (err) {
+          refused.push(graphError(err));
+          if (fields === FB_FIELDSETS[FB_FIELDSETS.length - 1]) throw err;
+        }
+      }
+      if (refused.length) report.fb.fieldErrors = refused;
       for (const p of res.data || []) {
         const row = {
           id: p.id, ...istParts(p.created_time), title: String(p.message || '').split('\n')[0].slice(0, 70), permalink: p.permalink_url,
@@ -213,6 +225,7 @@ export function toMarkdown(r) {
     for (const p of r.fb.posts) {
       L.push(`| ${p.date} | ${p.time} | ${cell(p.metrics.post_impressions_unique)} | ${cell(p.reactions)} | ${cell(p.comments)} | ${cell(p.shares)} | ${cell(p.metrics.post_clicks)} | ${p.title.replace(/\|/g, '/')} |`);
     }
+    if (r.fb.fieldErrors?.length) L.push('', 'Facebook fields refused (asked for less):', ...r.fb.fieldErrors.map((e) => `- ${e}`));
     const errs = [...new Set(r.fb.posts.flatMap((p) => Object.entries(p.errors).map(([k, v]) => `${k}: ${v}`)))];
     if (errs.length) L.push('', 'Facebook metric errors:', ...errs.slice(0, 6).map((e) => `- ${e}`));
   }
