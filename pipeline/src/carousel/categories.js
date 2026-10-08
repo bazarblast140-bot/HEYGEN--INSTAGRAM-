@@ -295,6 +295,38 @@ export function lateOk(slot, now = new Date(), env = process.env) {
   return opens !== undefined && mins >= opens && mins < 23 * 60;
 }
 
+/**
+ * Early ai dispatch (issue #61). The outside dispatcher fires carousel.yml at
+ * 06:07 IST with slot auto, before the ai window opens (09:00), and GitHub's
+ * own ai crons arrive hours late. A publishing dispatch that arrives between
+ * 06:00 and 09:00 IST with slot auto (or ai) is held until 09:02 IST the same
+ * day and then runs the normal ai flow: slot-status (ledger + Instagram
+ * check), build cap and post gate all run AFTER the wait. Never later than
+ * 09:10, never across midnight, never before 06:00.
+ */
+export const EARLY_AI = { from: 6 * 60, until: 9 * 60, target: 9 * 60 + 2, deadline: 9 * 60 + 10 };
+
+export function earlyAiWait({
+  event = '', dispatchSlot = '', now = new Date(), env = process.env, publish = false, preview = false, approveBuild = '', late = false,
+} = {}) {
+  const when = now instanceof Date ? now : new Date(now);
+  const { date, minutes } = istParts(when);
+  const raw = String(dispatchSlot || '').trim();
+  const no = (reason) => ({ wait: false, slot: null, seconds: 0, until: null, date, reason });
+  if (!['workflow_dispatch', 'repository_dispatch'].includes(event)) return no('not a dispatch');
+  if (event === 'workflow_dispatch' && !publish) return no('not a publishing dispatch');
+  if (preview || String(approveBuild || '').trim() || late) return no('preview / approve_build / late run');
+  if (raw && raw !== 'auto' && raw !== 'ai') return no(`slot ${raw}`);
+  if (!flagOn(ENABLE_AI_NEWS_CAROUSELS, env)) return no('ai slot is off');
+  if (minutes < EARLY_AI.from) return no('before 06:00 IST');
+  if (minutes >= EARLY_AI.until) return no('the ai window is already open or past');
+  const istMidnightMs = Date.parse(`${date}T00:00:00+05:30`);
+  const target = new Date(istMidnightMs + EARLY_AI.target * 60000);
+  const deadline = new Date(istMidnightMs + EARLY_AI.deadline * 60000);
+  const seconds = Math.max(0, Math.ceil((target.getTime() - when.getTime()) / 1000));
+  return { wait: true, slot: 'ai', seconds, until: target.toISOString(), deadline: deadline.toISOString(), date, reason: 'early ai dispatch' };
+}
+
 export function resolveRun({
   event = '',
   dispatchSlot = '',
