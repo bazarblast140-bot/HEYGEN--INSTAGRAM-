@@ -68,6 +68,19 @@ LANGUAGE — simple Hinglish
 - Respond only in valid JSON. The response format is json.
 `;
 
+/** Extra cover rule when CAROUSEL_COVER_STYLE=curiosity (otherwise empty). */
+export function coverHookRule(env = process.env) {
+  if (String(env.CAROUSEL_COVER_STYLE || '').trim().toLowerCase() !== 'curiosity') return '';
+  return `\n\n<cover_hook>
+Cover headline = reader के पैसे का एक सवाल या चौंकाने वाली बात, जिसका जवाब cover पर नहीं, अंदर की slides में है.
+- पढ़ने वाले को "मेरा पैसा" महसूस हो: "आप", "आपका", "हर साल", "चुपचाप" जैसे शब्द ठीक हैं.
+- Generic labels मना: "का असर", "का गणित", "कितना फर्क?", "समझें", "जानिए", "explained".
+- Cover पर final answer / result number मत लिखो (वो slide 2–9 पर code दिखाएगा). Input number (जैसे ₹1 लाख, 20 साल) ठीक है.
+- Subline: एक छोटा teaser जो swipe करने को कहे, जैसे "पूरा हिसाब अंदर →". Clickbait, झूठा वादा या guaranteed return नहीं.
+उदाहरण (सिर्फ़ style): "Regular plan आपसे हर साल क्या ले रहा है?" / "20 साल में ये 0.8% कितना खा जाता है?"
+</cover_hook>`;
+}
+
 export function buildUserPrompt({ category, date, recentTopics = [], headlines = [], example = null }) {
   // Today's headlines (daily news issue) are topic candidates only: the angle
   // may come from one, but every number still comes from the worked example.
@@ -87,7 +100,7 @@ export function buildUserPrompt({ category, date, recentTopics = [], headlines =
 इनमें से एक को inspiration बनाओ, exact wording copy मत करो. Category के अंदर calculation वाला angle चुनो
 (options → payoff/breakeven, intraday/risk → position size/expectancy/drawdown, fundamentals/stocks → operating_leverage/margin/CAGR/change,
 personal-finance → EMI/SIP/inflation/lumpsum, mutual-funds → SIP/lumpsum/expense_ratio/inflation, market-history → drawdown/CAGR/change).
-</task>${alreadyCovered}${todays}${marketDayNote(date)}${numberSheetPrompt(category, { example })}
+</task>${alreadyCovered}${todays}${marketDayNote(date)}${numberSheetPrompt(category, { example })}${coverHookRule()}
 
 <structure>
 ठीक ${SLIDES} slides:
