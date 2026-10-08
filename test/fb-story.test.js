@@ -292,5 +292,11 @@ test('workflows: FB Story step after the FB copy, never fails the job, commits i
   assert.match(script, /files: \[COMPANION_LEDGER, FB_LEDGER, FB_STORY_LEDGER\]/);
   const pub = fs.readFileSync('pipeline/publish-carousel.js', 'utf8');
   assert.match(pub, /'stories\.json'/);
-  assert.deepEqual(JSON.parse(fs.readFileSync('pipeline/fb-story-history.json', 'utf8')), [], 'committed empty: no backfill');
+  // Started empty on 7 Oct (no backfill): every row is a live story from then on.
+  const ledger = JSON.parse(fs.readFileSync('pipeline/fb-story-history.json', 'utf8'));
+  assert.ok(Array.isArray(ledger));
+  for (const row of ledger) {
+    assert.ok(row.date >= '2026-10-07', `no backfilled row: ${row.date}`);
+    assert.ok(row.igStoryId && row.state);
+  }
 });

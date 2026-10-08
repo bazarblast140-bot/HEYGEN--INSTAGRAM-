@@ -1,0 +1,41 @@
+name: Insights report
+
+# Read-only. Reads the last N days of Instagram and Facebook Page metrics with
+# GET requests and writes a table to the run summary plus a JSON artifact.
+# Never posts, never edits, never prints a token. Manual only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'How many days back'
+        default: '14'
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Read metrics (GET only)
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          DAYS: ${{ github.event.inputs.days || '14' }}
+        run: node pipeline/insights-report.js --days "$DAYS" --out pipeline/out/insights.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: insights
+          path: pipeline/out/insights.json
+          if-no-files-found: warn
