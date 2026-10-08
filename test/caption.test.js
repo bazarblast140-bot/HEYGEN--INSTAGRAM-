@@ -132,3 +132,13 @@ test('the model view line is not printed beside the standard save/share/comment 
   assert.equal((caption.match(/Save karo, share karo, comment mein apna sawal likho\./g) || []).length, 1);
   assert.match(caption, /^NIFTYBEES ne ek pattern banaya\./);
 });
+
+test('hook reflow breaks at a full stop, not mid-sentence (8 Oct caption)', () => {
+  const real = 'Mutual fund का expense ratio सिर्फ 1% या 0.2% नहीं होता — यह 20 साल में लाखों का फर्क बन जाता है. ₹1 लाख का lumpsum, 12% gross return, 20 साल: 1% expense ratio पर final value ₹8.06 लाख, जबकि 0.2% पर ₹9.31 लाख.';
+  const [hook, second] = reflowHook(real).split('\n');
+  assert.equal(hook, 'Mutual fund का expense ratio सिर्फ 1% या 0.2% नहीं होता — यह 20 साल में लाखों का फर्क बन जाता है.');
+  assert.match(second, /^₹1 लाख का lumpsum, 12% gross return/);
+  // A decimal point is not a sentence end.
+  const decimals = `${'क'.repeat(30)} 12.5% पर ${'ख'.repeat(100)} और आगे`;
+  assert.doesNotMatch(reflowHook(decimals).split('\n')[0], /12\.$/);
+});

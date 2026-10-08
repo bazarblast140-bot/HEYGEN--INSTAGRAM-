@@ -85,7 +85,10 @@ export function reflowHook(text, limit = HOOK_LIMIT) {
   const [first, ...rest] = String(text).split('\n');
   if (first.length <= limit) return text;
 
-  const sentence = first.match(new RegExp(`^[\\s\\S]{20,${limit}}[।?!]`));
+  // A full stop counts as a sentence end too (the model writes "." as often
+  // as "।"); without it the hook was cut mid-sentence ("… 12%\ngross return").
+  // "12.5%" is not a sentence end: the stop must be followed by space or the end.
+  const sentence = first.match(new RegExp(`^[\\s\\S]{20,${limit}}[।?!.](?=\\s|$)`));
   const cut = sentence ? sentence[0].length : first.lastIndexOf(' ', limit);
   if (cut <= 0) return text;
 
