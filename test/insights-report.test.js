@@ -92,3 +92,18 @@ test('workflow is manual, read-only and never touches a publishing script', () =
   const src = fs.readFileSync('pipeline/src/insights/report.js', 'utf8');
   assert.doesNotMatch(src, /method: 'POST'|method: "POST"|DELETE/);
 });
+
+test('Facebook: a refused comments field falls back to fewer fields and says so', async () => {
+  const { fetchImpl } = mock((u) => {
+    const p = u.pathname.replace('/v23.0/', '');
+    if (p === '1362/posts' && u.searchParams.get('fields').includes('comments')) {
+      return json(400, { error: { message: "(#10) This endpoint requires the 'pages_read_user_content' permission", code: 10 } });
+    }
+    return base(u, () => json(400, PERM));
+  });
+  const r = await buildReport({ env: ENV, fetchImpl, now: NOW });
+  assert.equal(r.fb.error, null);
+  assert.equal(r.fb.posts[0].reactions, 3);
+  assert.match(r.fb.fieldErrors[0], /pages_read_user_content/);
+  assert.match(toMarkdown(r), /Facebook fields refused/);
+});
