@@ -1,5 +1,9 @@
 name: Evening carousel one-off (real chart)
 
+# 9 Oct 2026: also the midday real-source one-off (slot=midday): 9–10 slides,
+# every slide also posted as its own Story frame (IG + FB), window 12:00–17:00
+# IST, claims "<today> midday"; any unclaimed carousel today blocks it.
+
 # One-off post of a reviewed, committed evening package (real TradingView chart
 # + real news screenshot slides, caption, Story) as TODAY's evening carousel.
 # Manual only — no schedule, no repository_dispatch.
@@ -30,6 +34,11 @@ on:
         type: choice
         options: [check, publish, release]
         default: check
+      slot:
+        description: "evening (post-close, 1 Story frame) or midday (real-source, one Story frame per slide)"
+        type: choice
+        options: [evening, midday]
+        default: evening
       package:
         description: Committed package directory
         default: pipeline/specs/oneoff/evening-2026-10-09
@@ -38,7 +47,7 @@ on:
         default: ''
 
 concurrency:
-  group: evening-oneoff
+  group: carousel-oneoff
   cancel-in-progress: false
 
 jobs:
@@ -50,6 +59,7 @@ jobs:
     env:
       PKG: ${{ inputs.package }}
       MODE: ${{ inputs.mode }}
+      SLOT: ${{ inputs.slot }}
       SHA_IN: ${{ inputs.sha }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       LEDGER_REFRESH_REF: ${{ github.ref_name }}
@@ -71,7 +81,7 @@ jobs:
         if: ${{ inputs.mode != 'release' }}
         run: |
           set -o pipefail
-          node pipeline/oneoff-evening.js --pkg "$PKG" --mode "$MODE" --sha "$SHA_IN" 2>&1 | tee check.log
+          node pipeline/oneoff-evening.js --slot "$SLOT" --pkg "$PKG" --mode "$MODE" --sha "$SHA_IN" 2>&1 | tee check.log
           { echo '## Evening one-off check'; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       # The claim is pushed before anything is posted: a second run, a re-run
@@ -83,9 +93,9 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin "${GITHUB_REF_NAME}"
-          node pipeline/oneoff-evening.js --pkg "$PKG" --mode publish --sha "$SHA_IN" --claim
+          node pipeline/oneoff-evening.js --slot "$SLOT" --pkg "$PKG" --mode publish --sha "$SHA_IN" --claim
           git add pipeline/carousel-history.json
-          git commit -m "Claim $(TZ=Asia/Kolkata date +%F) evening for the one-off carousel (run ${GITHUB_RUN_ID})"
+          git commit -m "Claim $(TZ=Asia/Kolkata date +%F) $SLOT for the one-off carousel (run ${GITHUB_RUN_ID})"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Publish to Instagram (carousel + Story)
@@ -95,7 +105,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -o pipefail
-          node pipeline/publish-carousel.js --report "$PKG/carousel-report.json" --caption-file "$PKG/caption.txt" --yes 2>&1 | tee publish.log
+          MAXS=1; [ "$SLOT" = midday ] && MAXS=10
+          node pipeline/publish-carousel.js --report "$PKG/carousel-report.json" --caption-file "$PKG/caption.txt" --max-stories "$MAXS" --yes 2>&1 | tee publish.log
           { echo '## Published'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' publish.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Copy to the Facebook Page
@@ -107,7 +118,7 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
         run: |
           ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json" 2>/dev/null || true)
-          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" --slot evening \
+          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" --slot "$SLOT" \
             --hosted "$PKG/hosted.json" --caption-file "$PKG/caption.txt" 2>&1 | tee fb.log
           sed -e 's/\x1b\[[0-9;]*m//g' fb.log >> "$GITHUB_STEP_SUMMARY"
 
@@ -128,10 +139,10 @@ jobs:
           ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json")
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          node pipeline/oneoff-evening.js --pkg "$PKG" --record "$ID"
+          node pipeline/oneoff-evening.js --slot "$SLOT" --pkg "$PKG" --record "$ID"
           git add pipeline/carousel-history.json pipeline/fb-crosspost-history.json pipeline/fb-story-history.json
           git diff --cached --quiet && exit 0
-          git commit -m "Record $(TZ=Asia/Kolkata date +%F) evening one-off: media $ID"
+          git commit -m "Record $(TZ=Asia/Kolkata date +%F) $SLOT one-off: media $ID"
           for attempt in 1 2 3; do
             git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
             sleep $((attempt * 3))
@@ -156,8 +167,8 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin "${GITHUB_REF_NAME}"
-          node pipeline/oneoff-evening.js --pkg "$PKG" --mode release 2>&1 | tee release.log
+          node pipeline/oneoff-evening.js --slot "$SLOT" --pkg "$PKG" --mode release 2>&1 | tee release.log
           git add pipeline/carousel-history.json
-          git commit -m "Release the one-off evening claim (run ${GITHUB_RUN_ID})"
+          git commit -m "Release the one-off $SLOT claim (run ${GITHUB_RUN_ID})"
           git push origin "HEAD:${GITHUB_REF_NAME}"
           { echo '## Release'; echo '```'; cat release.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

@@ -34,6 +34,18 @@ export const SLOT = 'evening';
 // opens, so it can never race the scheduled 16:45 run.
 export const NOT_BEFORE = 15 * 60 + 30;
 export const NOT_AFTER = 16 * 60 + 25;
+// Per-slot rules. midday (9 Oct 2026, Rajesh): ONE real-source carousel per day,
+// 9–10 slides, one Story frame per slide. Any unclaimed carousel on Instagram
+// today (since 00:00 IST) blocks it, so it can never be a second post of the day.
+export const SLOT_RULES = {
+  evening: { notBefore: NOT_BEFORE, notAfter: NOT_AFTER, minSlides: 2, maxSlides: 10, maxStories: 1, unclaimedSince: NOT_BEFORE },
+  midday: { notBefore: 12 * 60, notAfter: 17 * 60, minSlides: 9, maxSlides: 10, maxStories: 10, unclaimedSince: 0 },
+};
+const rules = (slot) => {
+  const r = SLOT_RULES[slot];
+  if (!r) throw new Error(`unknown one-off slot "${slot}" (${Object.keys(SLOT_RULES).join(', ')})`);
+  return r;
+};
 const MAX_CAPTION = 2200;
 const MAX_TAGS = 30;
 
@@ -57,18 +69,20 @@ export function jpegSize(buf) {
 }
 
 /** Problems with a committed package (slides, Story, caption, report), or []. */
-export async function packageProblems(dir) {
+export async function packageProblems(dir, slot = SLOT) {
+  const R = rules(slot);
   const out = [];
   let report;
   try { report = JSON.parse(await fs.readFile(path.join(dir, 'carousel-report.json'), 'utf8')); } catch (err) {
     return [`no readable carousel-report.json in ${dir} (${String(err.message).slice(0, 80)})`];
   }
-  if (report.slot !== SLOT) out.push(`report.slot is "${report.slot}", expected "${SLOT}"`);
+  if (report.slot !== slot) out.push(`report.slot is "${report.slot}", expected "${slot}"`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(report.istDate || ''))) out.push('report.istDate is not YYYY-MM-DD');
   if (report.format !== 'jpeg') out.push('report.format is not jpeg');
   if (report.quality?.ok !== true) out.push('report.quality.ok is not true');
   const files = report.files || [];
-  if (files.length < 2 || files.length > 10) out.push(`${files.length} slides — a carousel takes 2–10`);
+  if (files.length < R.minSlides || files.length > R.maxSlides) out.push(`${files.length} slides — ${slot} takes ${R.minSlides}–${R.maxSlides}`);
+  if ((report.stories || []).length > R.maxStories) out.push(`${report.stories.length} Story frames — ${slot} takes at most ${R.maxStories}`);
   const check = async (f, w, h, what) => {
     const rel = path.relative(dir, f);
     if (rel.startsWith('..') || path.isAbsolute(rel)) { out.push(`${what} ${f} is outside the package`); return; }
@@ -90,15 +104,15 @@ export async function packageProblems(dir) {
 }
 
 /** The ledger row that marks today's evening as taken, or null. */
-export function eveningRow(entries, date) {
-  return (entries || []).find((e) => e?.date === `${date} ${SLOT}`) || null;
+export function eveningRow(entries, date, slot = SLOT) {
+  return (entries || []).find((e) => e?.date === `${date} ${slot}`) || null;
 }
 
 /**
  * Carousels on Instagram today (IST) at or after 15:30 that no ledger row
  * claims — a post-close carousel that is already up. Fail closed.
  */
-export function unclaimedLateCarousels({ media = [], entries = [], fbEntries = [], date }) {
+export function unclaimedLateCarousels({ media = [], entries = [], fbEntries = [], date, since = NOT_BEFORE }) {
   const claimed = new Set([
     ...(entries || []).map((e) => String(e?.mediaId || '')),
     ...(fbEntries || []).map((f) => String(f?.igMediaId || '')),
@@ -108,7 +122,7 @@ export function unclaimedLateCarousels({ media = [], entries = [], fbEntries = [
     const when = new Date(m.timestamp);
     if (Number.isNaN(when.getTime())) return false;
     const p = istParts(when);
-    return p.date === date && p.minutes >= NOT_BEFORE;
+    return p.date === date && p.minutes >= since;
   });
 }
 
@@ -118,52 +132,53 @@ export function unclaimedLateCarousels({ media = [], entries = [], fbEntries = [
  */
 export function publishBlockers({
   now = new Date(), report = {}, pkgProblems = [], sha = '', expectedSha = '',
-  entries = [], fbEntries = [], listed = { ok: false, items: [] }, ref = '', defaultBranch = '',
+  entries = [], fbEntries = [], listed = { ok: false, items: [] }, ref = '', defaultBranch = '', slot = SLOT,
 }) {
+  const R = rules(slot);
   const out = [...pkgProblems];
   const { date, minutes } = istParts(now);
   if (ref && defaultBranch && ref !== defaultBranch) out.push(`runs on ${ref}; must run on the default branch ${defaultBranch} (the ledger lives there)`);
   if (!expectedSha) out.push('no --sha given: pass the reviewed package sha');
   else if (sha !== expectedSha) out.push(`package sha ${sha} does not match the reviewed sha ${expectedSha}`);
   if (report.istDate && report.istDate !== date) out.push(`package is for ${report.istDate}, today (IST) is ${date}`);
-  const closed = slotClosedToday(SLOT, date);
+  const closed = slotClosedToday('evening', date);
   if (closed) out.push(`${date} is not an NSE trading day (${closed})`);
-  if (minutes < NOT_BEFORE || minutes >= NOT_AFTER) out.push(`IST ${hhmm(minutes)} is outside the post-close window ${hhmm(NOT_BEFORE)}–${hhmm(NOT_AFTER)} (it must finish before the 16:30 evening window opens)`);
-  const row = eveningRow(entries, date);
-  if (row) out.push(`evening already posted/claimed today: "${row.topic}"${row.mediaId ? ` (media ${row.mediaId})` : ''}${row.status ? ` [${row.status}]` : ''}`);
+  if (minutes < R.notBefore || minutes >= R.notAfter) out.push(`IST ${hhmm(minutes)} is outside the ${slot} window ${hhmm(R.notBefore)}–${hhmm(R.notAfter)}`);
+  const row = eveningRow(entries, date, slot);
+  if (row) out.push(`${slot} already posted/claimed today: "${row.topic}"${row.mediaId ? ` (media ${row.mediaId})` : ''}${row.status ? ` [${row.status}]` : ''}`);
   if (!listed.ok) out.push('Instagram media list unavailable — cannot confirm evening is not already up (fail closed)');
   else {
-    const late = unclaimedLateCarousels({ media: listed.items, entries, fbEntries, date });
-    if (late.length) out.push(`a carousel is already on Instagram today after 15:30 IST (${late.map((m) => m.id).join(', ')})`);
+    const late = unclaimedLateCarousels({ media: listed.items, entries, fbEntries, date, since: R.unclaimedSince });
+    if (late.length) out.push(`a carousel no ledger row claims is already on Instagram today after ${hhmm(R.unclaimedSince)} IST (${late.map((m) => m.id).join(', ')})`);
   }
   return out;
 }
 
 /** Ledger with the claim row appended (does not mutate). */
-export function withClaim(ledger, { date, topic, runId, sha, at = new Date() }) {
+export function withClaim(ledger, { date, topic, runId, sha, at = new Date(), slot = SLOT }) {
   const entries = Array.isArray(ledger?.entries) ? [...ledger.entries] : [];
-  entries.push({ date: `${date} ${SLOT}`, topic, angle: 'stocks', oneoff: true, status: 'claimed', runId: String(runId), sha, claimedAt: at.toISOString() });
+  entries.push({ date: `${date} ${slot}`, topic, angle: 'stocks', oneoff: true, status: 'claimed', runId: String(runId), sha, claimedAt: at.toISOString() });
   return { ...ledger, entries };
 }
 
 /** Ledger with today's evening row marked posted with the media id. */
-export function withRecord(ledger, { date, mediaId, at = new Date() }) {
+export function withRecord(ledger, { date, mediaId, at = new Date(), slot = SLOT }) {
   if (!/^\d{6,}$/.test(String(mediaId || ''))) throw new Error(`not a media id: "${mediaId}"`);
   const entries = [...(ledger?.entries || [])];
-  const i = entries.findIndex((e) => e?.date === `${date} ${SLOT}`);
-  if (i < 0) throw new Error(`no "${date} ${SLOT}" row to record against`);
+  const i = entries.findIndex((e) => e?.date === `${date} ${slot}`);
+  if (i < 0) throw new Error(`no "${date} ${slot}" row to record against`);
   entries[i] = { ...entries[i], status: 'posted', mediaId: String(mediaId), postedAt: at.toISOString() };
   return { ...ledger, entries };
 }
 
 /** Ledger without an unposted one-off claim, or a reason it must stay. */
-export function withRelease(ledger, { date, listed }) {
+export function withRelease(ledger, { date, listed, slot = SLOT }) {
   const entries = [...(ledger?.entries || [])];
-  const i = entries.findIndex((e) => e?.date === `${date} ${SLOT}`);
-  if (i < 0) return { error: 'no evening row today — nothing to release' };
+  const i = entries.findIndex((e) => e?.date === `${date} ${slot}`);
+  if (i < 0) return { error: `no ${slot} row today — nothing to release` };
   const row = entries[i];
-  if (!row.oneoff) return { error: 'the evening row was not written by the one-off — not touching it' };
-  if (row.mediaId) return { error: `evening is posted (media ${row.mediaId}) — not releasing` };
+  if (!row.oneoff) return { error: `the ${slot} row was not written by the one-off — not touching it` };
+  if (row.mediaId) return { error: `${slot} is posted (media ${row.mediaId}) — not releasing` };
   if (!listed?.ok) return { error: 'Instagram media list unavailable — cannot prove nothing went up' };
   const since = new Date(row.claimedAt || 0).getTime() - 60000;
   const up = (listed.items || []).filter((m) => isCarouselMedia(m) && new Date(m.timestamp).getTime() >= since);
@@ -210,6 +225,8 @@ async function main() {
   const dir = at('--pkg');
   if (!dir) throw new Error('--pkg <dir> is required');
   const mode = at('--mode') || 'check';
+  const slot = at('--slot') || SLOT;
+  rules(slot);
   const out = async (k, v) => { if (process.env.GITHUB_OUTPUT) await fs.appendFile(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); };
   const now = clock();
   const { date } = istParts(now);
@@ -219,17 +236,17 @@ async function main() {
 
   const ledger = await readJson(LEDGER, { entries: [] });
   if (at('--record')) {
-    const next = withRecord(ledger, { date, mediaId: at('--record') });
+    const next = withRecord(ledger, { date, mediaId: at('--record'), slot });
     await fs.writeFile(LEDGER, `${JSON.stringify(next, null, 2)}\n`);
-    console.log(`recorded ${date} ${SLOT}: media ${at('--record')}`);
+    console.log(`recorded ${date} ${slot}: media ${at('--record')}`);
     return;
   }
   const listed = await listMedia();
   if (mode === 'release') {
-    const r = withRelease(ledger, { date, listed });
+    const r = withRelease(ledger, { date, listed, slot });
     if (r.error) { console.error(`NOT releasing: ${r.error}`); process.exit(1); }
     await fs.writeFile(LEDGER, `${JSON.stringify(r.ledger, null, 2)}\n`);
-    console.log(`released the one-off claim on ${date} ${SLOT}`);
+    console.log(`released the one-off claim on ${date} ${slot}`);
     return;
   }
 
@@ -239,15 +256,15 @@ async function main() {
   const fbEntries = [...await readJson(FB_LEDGER, []), ...(Array.isArray(remoteFb) ? remoteFb : [])];
   const report = await readJson(path.join(dir, 'carousel-report.json'), {});
   const blockers = publishBlockers({
-    now, report, pkgProblems: await packageProblems(dir), sha: pkg.sha, expectedSha: at('--sha') || '',
+    now, report, slot, pkgProblems: await packageProblems(dir, slot), sha: pkg.sha, expectedSha: at('--sha') || '',
     entries, fbEntries, listed, ref: process.env.GITHUB_REF_NAME || '', defaultBranch: process.env.DEFAULT_BRANCH || '',
   });
 
   console.log(`PACKAGE: ${dir} — ${(report.files || []).length} slides, ${(report.stories || []).length} story, sha ${pkg.sha} over ${pkg.files} files`);
   console.log(`TOPIC: ${report.topic || '(none)'}`);
-  console.log(`IST NOW: ${date} ${hhmm(istParts(now).minutes)} (window ${hhmm(NOT_BEFORE)}–${hhmm(NOT_AFTER)})`);
-  const row = eveningRow(entries, date);
-  console.log(`EVENING ${date}: ${row ? `already ${row.status || 'posted'}${row.mediaId ? ` (media ${row.mediaId})` : ''}` : 'not posted yet'}`);
+  console.log(`IST NOW: ${date} ${hhmm(istParts(now).minutes)} (${slot} window ${hhmm(SLOT_RULES[slot].notBefore)}–${hhmm(SLOT_RULES[slot].notAfter)})`);
+  const row = eveningRow(entries, date, slot);
+  console.log(`${slot.toUpperCase()} ${date}: ${row ? `already ${row.status || 'posted'}${row.mediaId ? ` (media ${row.mediaId})` : ''}` : 'not posted yet'}`);
   console.log(`INSTAGRAM LIST: ${listed.ok ? `${listed.items.length} recent media read` : `unavailable (${listed.reason})`}`);
   await out('ready', String(!blockers.length));
   await out('sha', pkg.sha);
@@ -261,9 +278,9 @@ async function main() {
     process.exit(1);
   }
   if (args.includes('--claim')) {
-    const next = withClaim(ledger, { date, topic: report.topic || 'one-off evening carousel', runId: process.env.GITHUB_RUN_ID || 'local', sha: pkg.sha, at: now });
+    const next = withClaim(ledger, { slot, date, topic: report.topic || `one-off ${slot} carousel`, runId: process.env.GITHUB_RUN_ID || 'local', sha: pkg.sha, at: now });
     await fs.writeFile(LEDGER, `${JSON.stringify(next, null, 2)}\n`);
-    console.log(`claimed ${date} ${SLOT} in ${LEDGER}`);
+    console.log(`claimed ${date} ${slot} in ${LEDGER}`);
   }
 }
 

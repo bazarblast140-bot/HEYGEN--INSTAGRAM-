@@ -118,7 +118,10 @@ async function main() {
   // The story rides along in the same release. One upload, one tag, and the
   // story URL is simply the last asset — a second release for one JPEG would
   // double the failure surface for the optional half of the job.
-  const storyFiles = (args.story === false ? [] : (report.stories || (report.story ? [report.story] : []))).slice(0, 1);
+  // One frame by default; the midday one-off posts every slide as its own frame
+  // (--max-stories 10, in order). Each IG Story id gets its own FB Story ledger row.
+  const maxStories = Math.max(1, Math.min(10, Number(args['max-stories']) || 1));
+  const storyFiles = (args.story === false ? [] : (report.stories || (report.story ? [report.story] : []))).slice(0, maxStories);
 
   console.log('\nHosting');
   const { assets, tag } = await hostFiles({

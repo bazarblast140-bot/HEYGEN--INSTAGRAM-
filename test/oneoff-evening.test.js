@@ -69,8 +69,8 @@ test('a good package passes; wrong size, PNG, missing story, long caption and wr
 test('publish goes ahead only post-close, before the evening window, on a trading day, with the reviewed sha', () => {
   assert.deepEqual(publishBlockers(base()), []);
   assert.deepEqual(publishBlockers(base({ now: at('15:30') })), []);
-  assert.match(publishBlockers(base({ now: at('15:29') })).join(), /outside the post-close window/);
-  assert.match(publishBlockers(base({ now: at('16:25') })).join(), /outside the post-close window/);
+  assert.match(publishBlockers(base({ now: at('15:29') })).join(), /outside the evening window/);
+  assert.match(publishBlockers(base({ now: at('16:25') })).join(), /outside the evening window/);
   assert.match(publishBlockers(base({ now: at('16:45') })).join(), /outside/);
   assert.match(publishBlockers(base({ expectedSha: '' })).join(), /no --sha/);
   assert.match(publishBlockers(base({ sha: 'def' })).join(), /does not match the reviewed sha/);
@@ -157,11 +157,11 @@ test('evening-oneoff.yml: manual only, check by default, claim before post, reco
   for (const i of [claim, pub]) {
     assert.match(wf.slice(i, wf.indexOf('run:', i)), /inputs\.mode == 'publish' && steps\.check\.outputs\.ready == 'true'/);
   }
-  assert.match(wf, /oneoff-evening\.js --pkg "\$PKG" --mode publish --sha "\$SHA_IN" --claim/);
-  assert.match(wf, /publish-carousel\.js --report "\$PKG\/carousel-report\.json" --caption-file "\$PKG\/caption\.txt" --yes/);
-  assert.match(wf, /fb-crosspost\.js --kind carousel .*--slot evening/);
+  assert.match(wf, /oneoff-evening\.js --slot "\$SLOT" --pkg "\$PKG" --mode publish --sha "\$SHA_IN" --claim/);
+  assert.match(wf, /publish-carousel\.js --report "\$PKG\/carousel-report\.json" --caption-file "\$PKG\/caption\.txt" --max-stories "\$MAXS" --yes/);
+  assert.match(wf, /fb-crosspost\.js --kind carousel .*--slot "\$SLOT"/);
   assert.match(wf, /fb-story\.js --stories "\$PKG\/stories\.json"/);
-  assert.match(wf, /oneoff-evening\.js --pkg "\$PKG" --record "\$ID"/);
+  assert.match(wf, /oneoff-evening\.js --slot "\$SLOT" --pkg "\$PKG" --record "\$ID"/);
   assert.doesNotMatch(wf, /\$\{\{\s*inputs\.(sha|mode)\s*\}\}"/, 'inputs reach the shell through env, not interpolation');
 });
 
@@ -173,4 +173,46 @@ test('every committed one-off package is valid and its sha is stable', async () 
     assert.deepEqual(await packageProblems(dir), [], dir);
     assert.equal((await packageSha(dir)).sha, (await packageSha(dir)).sha);
   }
+});
+
+// ---- midday real-source one-off (9 Oct 2026): 9–10 slides, one Story frame per slide
+async function makeMidday({ slides = 9, stories = 9 } = {}) {
+  const dir = await makePkg({ slides, story: null, report: { slot: 'midday' } });
+  const rep = JSON.parse(await fs.readFile(path.join(dir, 'carousel-report.json'), 'utf8'));
+  rep.stories = [];
+  for (let i = 1; i <= stories; i += 1) { const f = path.join(dir, `story-${i}.jpg`); await fs.writeFile(f, fakeJpeg(1080, 1920)); rep.stories.push(f); }
+  await fs.writeFile(path.join(dir, 'carousel-report.json'), JSON.stringify(rep));
+  return dir;
+}
+
+test('midday package: 9–10 slides and up to 10 Story frames; evening rules unchanged', async () => {
+  assert.deepEqual(await packageProblems(await makeMidday(), 'midday'), []);
+  assert.deepEqual(await packageProblems(await makeMidday({ slides: 10, stories: 10 }), 'midday'), []);
+  assert.match((await packageProblems(await makeMidday({ slides: 6, stories: 6 }), 'midday')).join(), /6 slides — midday takes 9–10/);
+  assert.match((await packageProblems(await makeMidday({ stories: 9 }), 'evening')).join(), /report.slot is "midday"|9 Story frames — evening takes at most 1/);
+  assert.match((await packageProblems(await makePkg(), 'midday')).join(), /report.slot is "evening"/);
+});
+
+test('midday publish: window 12:00–17:00 IST, once per day, any unclaimed carousel today blocks', () => {
+  const m = (over) => publishBlockers(base({ slot: 'midday', report: { istDate: DATE }, ...over }));
+  assert.deepEqual(m({ now: at('13:30') }), []);
+  assert.match(m({ now: at('11:50') }).join(), /outside the midday window 12:00–17:00/);
+  assert.match(m({ now: at('17:05') }).join(), /outside the midday window/);
+  assert.match(m({ now: at('13:30'), entries: [{ date: `${DATE} midday`, topic: 'x', mediaId: '123456789' }] }).join(), /midday already posted/);
+  // the 06:07 ai carousel is claimed by its ledger row → not a blocker; an unclaimed 08:00 carousel is
+  const ai = { id: '17963787267206144', media_type: 'CAROUSEL_ALBUM', media_product_type: 'FEED', timestamp: `${DATE}T00:37:40+0000` };
+  assert.deepEqual(m({ now: at('13:30'), entries: [{ date: `${DATE} ai`, mediaId: ai.id }], listed: { ok: true, items: [ai] } }), []);
+  assert.match(m({ now: at('13:30'), listed: { ok: true, items: [ai] } }).join(), /no ledger row claims .* after 00:00/);
+  // evening keeps its own window
+  assert.match(publishBlockers(base({ now: at('13:30') })).join(), /outside the evening window 15:30–16:25/);
+});
+
+test('midday claim / record / release use the "<date> midday" row', () => {
+  const c = withClaim({ entries: [] }, { slot: 'midday', date: DATE, topic: 't', runId: 1, sha: 's', at: at('13:00') });
+  assert.equal(c.entries[0].date, `${DATE} midday`);
+  assert.equal(eveningRow(c.entries, DATE, 'midday').status, 'claimed');
+  assert.equal(eveningRow(c.entries, DATE), null);
+  const r = withRecord(c, { slot: 'midday', date: DATE, mediaId: '1234567', at: at('13:01') });
+  assert.equal(r.entries[0].mediaId, '1234567');
+  assert.match(withRelease(r, { slot: 'midday', date: DATE, listed: { ok: true, items: [] } }).error, /midday is posted/);
 });
