@@ -1,0 +1,163 @@
+name: Evening carousel one-off (real chart)
+
+# One-off post of a reviewed, committed evening package (real TradingView chart
+# + real news screenshot slides, caption, Story) as TODAY's evening carousel.
+# Manual only — no schedule, no repository_dispatch.
+#
+#   mode=check    (default) prints the package sha, the ledger and Instagram
+#                 state and every reason publish would refuse. Posts nothing.
+#   mode=publish  refuses unless: run on the default branch; the package sha
+#                 equals the `sha` input (the reviewed build); the package is
+#                 for today (IST), an NSE trading day; IST 15:30–16:25 (before
+#                 the 16:30 evening window opens); no "<today> evening" row in
+#                 pipeline/carousel-history.json; no unclaimed carousel on
+#                 Instagram today after 15:30. It then CLAIMS "<today> evening"
+#                 in the ledger (committed and pushed) BEFORE posting, posts
+#                 the IG carousel + IG Story through publish-carousel.js, the
+#                 FB Page copy and FB Page Story, and records the media id on
+#                 that row. The scheduled evening run (16:45 cron, catch-ups,
+#                 the external 17:07 dispatch) reads that row in slot-status.js
+#                 and soft-skips: evening is already posted.
+#   mode=release  only after a failed publish: removes the one-off claim when
+#                 the row has no media id and Instagram shows no carousel
+#                 since the claim, so the scheduled evening run may post.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check (default, posts nothing), publish, or release"
+        type: choice
+        options: [check, publish, release]
+        default: check
+      package:
+        description: Committed package directory
+        default: pipeline/specs/oneoff/evening-2026-10-09
+      sha:
+        description: "Reviewed package sha (node pipeline/oneoff-evening.js --pkg <dir> --sha-only). Required for publish."
+        default: ''
+
+concurrency:
+  group: evening-oneoff
+  cancel-in-progress: false
+
+jobs:
+  oneoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      PKG: ${{ inputs.package }}
+      MODE: ${{ inputs.mode }}
+      SHA_IN: ${{ inputs.sha }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      LEDGER_REFRESH_REF: ${{ github.ref_name }}
+      IG_USER_ID: ${{ vars.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      IG_SURFACE: ${{ vars.IG_SURFACE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check (package sha, IST window, evening already posted?)
+        id: check
+        if: ${{ inputs.mode != 'release' }}
+        run: |
+          set -o pipefail
+          node pipeline/oneoff-evening.js --pkg "$PKG" --mode "$MODE" --sha "$SHA_IN" 2>&1 | tee check.log
+          { echo '## Evening one-off check'; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # The claim is pushed before anything is posted: a second run, a re-run
+      # or the scheduled evening run finds "<today> evening" and stops, even if
+      # this run dies after posting. A push race fails this step: nothing posts.
+      - name: Claim today's evening in the ledger
+        if: ${{ inputs.mode == 'publish' && steps.check.outputs.ready == 'true' }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          node pipeline/oneoff-evening.js --pkg "$PKG" --mode publish --sha "$SHA_IN" --claim
+          git add pipeline/carousel-history.json
+          git commit -m "Claim $(TZ=Asia/Kolkata date +%F) evening for the one-off carousel (run ${GITHUB_RUN_ID})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Publish to Instagram (carousel + Story)
+        id: publish
+        if: ${{ inputs.mode == 'publish' && steps.check.outputs.ready == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          node pipeline/publish-carousel.js --report "$PKG/carousel-report.json" --caption-file "$PKG/caption.txt" --yes 2>&1 | tee publish.log
+          { echo '## Published'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' publish.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Copy to the Facebook Page
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json" 2>/dev/null || true)
+          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" --slot evening \
+            --hosted "$PKG/hosted.json" --caption-file "$PKG/caption.txt" 2>&1 | tee fb.log
+          sed -e 's/\x1b\[[0-9;]*m//g' fb.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Story to the Facebook Page
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          node pipeline/fb-story.js --stories "$PKG/stories.json" 2>&1 | tee fbstory.log || true
+          { echo '## Facebook Page Story'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' fbstory.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the media id on "<today> evening"
+        if: ${{ always() && steps.publish.outcome == 'success' }}
+        run: |
+          ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json")
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node pipeline/oneoff-evening.js --pkg "$PKG" --record "$ID"
+          git add pipeline/carousel-history.json pipeline/fb-crosspost-history.json pipeline/fb-story-history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record $(TZ=Asia/Kolkata date +%F) evening one-off: media $ID"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the media id (the claim is already pushed, so evening still cannot post twice)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish failed — evening stays claimed
+        if: ${{ failure() && steps.publish.outcome == 'failure' }}
+        run: |
+          {
+            echo '## Publish FAILED after the claim'
+            echo 'Evening stays claimed (fail closed): the scheduled evening run will skip today.'
+            echo 'Check Instagram. If nothing went up, run this workflow with mode=release to let the scheduled run post.'
+            echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' publish.log | tail -n 20; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release the claim (only if nothing went up)
+        if: ${{ inputs.mode == 'release' }}
+        run: |
+          set -o pipefail
+          [ "${GITHUB_REF_NAME}" = "${DEFAULT_BRANCH}" ] || { echo "must run on ${DEFAULT_BRANCH}"; exit 1; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          node pipeline/oneoff-evening.js --pkg "$PKG" --mode release 2>&1 | tee release.log
+          git add pipeline/carousel-history.json
+          git commit -m "Release the one-off evening claim (run ${GITHUB_RUN_ID})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          { echo '## Release'; echo '```'; cat release.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
