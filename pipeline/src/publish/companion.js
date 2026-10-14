@@ -160,13 +160,15 @@ export function markerOf(caption) {
 
 /**
  * The Paise Ki Pathshala YouTube video id this Reel is for, or ''. Only a
- * Reel whose caption carries the marker pkp:video:<11-char id> is handled
+ * Reel whose caption carries the marker pkp:<key>:<11-char id> is handled
  * (Paise writes it on every Reel). A caption that merely names Paise Ki
  * Pathshala or links a YouTube video is NOT enough (7 Oct audit: anyone's Reel
  * could say that). Anything else (our own Reels included) is never touched.
  */
 export function paiseVideoId(caption) {
-  const marker = String(caption || '').match(/\bpkp:video:([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/);
+  // Paise writes pkp:<topic_key>:<YouTube id> (pkp:video:<id> when there is no
+  // topic key). The marker must start a word/line and end right after the 11-char id.
+  const marker = String(caption || '').match(/(?:^|[\s(\[])pkp:[A-Za-z0-9_-]{1,64}:([A-Za-z0-9_-]{11})(?![A-Za-z0-9_:.-])/);
   return marker ? marker[1] : '';
 }
 
