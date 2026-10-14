@@ -52,8 +52,8 @@ const numbers = (t) => (String(t || '').match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) || [
 // Loose schema so a long field comes back as fixable feedback, not a parse failure.
 export const LIMITS = { hook: 40, title: 48, coverLine: 50, plain: 170, summary: 120, captionLine: 130, contains: 60 };
 export const Pick = z.object({
-  hook: z.string().min(4).max(400),
-  hookFrom: z.number().int(), hookTerms: z.array(z.string().min(1).max(200)).max(6),
+  hook: z.string().optional(),
+  hookFrom: z.number().int().optional(), hookTerms: z.array(z.string()).optional(),
   articles: z.array(z.object({
     cand: z.number().int(), kicker: z.enum(KINDS), key: z.string().min(30).max(600),
     title: z.string().min(4).max(400), coverLine: z.string().min(4).max(400), plain: z.string().min(10).max(800),
@@ -64,9 +64,34 @@ export const Pick = z.object({
 /** Problems with a model pick against the visible text of the candidates, or []. */
 const norm = (x) => String(x).replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim();
 
+/** Shorten at a word boundary (never mid-word), adding … when cut. */
+export function trimWords(text, max) {
+  const t = norm(text);
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > 0 ? cut.slice(0, at) : cut).replace(/[\s,;:–-]+$/, '')}…`;
+}
+
+export const HOOK_WRAP = 'आज: ';
+/**
+ * Fields written by code, not the model: the cover text is the Market (else
+ * first) article's own headline behind a short wrapper, and long titles are
+ * trimmed at a word boundary. The gates below still check everything.
+ */
+export function applyCodeFields(pick, cands) {
+  const from = pick.articles.find((a) => a.kicker === 'Market') || pick.articles[0];
+  const head = norm(cands[from.cand]?.headline || '');
+  const core = trimWords(head, LIMITS.hook - HOOK_WRAP.length);
+  pick.hookFrom = from.cand;
+  pick.hookTerms = [core.replace(/…$/, '')];
+  pick.hook = `${HOOK_WRAP}${core}`;
+  for (const a of pick.articles) for (const f of ['title', 'coverLine']) a[f] = trimWords(a[f], LIMITS[f]);
+  return pick;
+}
+
 export function pickProblems(pick, cands) {
   const out = [];
-  if (/\d/.test(pick.hook)) out.push('hook must not contain numbers');
   // Cover gate: the cover claim comes from ONE chosen article. Its terms are
   // copied from that article's headline or key line and all appear in the hook.
   const from = pick.articles.find((a) => a.cand === pick.hookFrom);
@@ -74,6 +99,7 @@ export function pickProblems(pick, cands) {
   else {
     const src = norm(`${cands[from.cand]?.headline || ''} ${from.key}`).toLowerCase();
     if (pick.hookTerms.length < 1 || pick.hookTerms.length > 3) out.push('hookTerms needs 1-3 entries');
+    for (const n of numbers(pick.hook)) if (!norm(cands[from.cand]?.headline || '').includes(n)) out.push(`hook number ${n} is not in cand ${from.cand}'s headline`);
     for (const t of pick.hookTerms) {
       if (t.trim().length < 3) out.push(`hook term "${t}" is too short`);
       else if (!src.includes(norm(t).toLowerCase())) out.push(`hook term "${t}" is not in cand ${from.cand}'s headline or key line`);
@@ -105,7 +131,7 @@ const SYSTEM = `You write a daily Instagram carousel for @rajesh_technical_trade
 You get today's news articles (the text a reader sees on the page). Choose exactly 4: one "Market" (Nifty/Sensex/market move or market-wide news), one "Stocks" (a specific company/stock news, NOT a buy/sell tip), one "Mutual Funds" (MF/ETF/NFO/SEBI-MF news), one "Finance" (personal finance, banking, tax, RBI/SEBI regulation).
 Rules: use ONLY facts written in that article's text. Never add numbers that are not in the text. No advice, no predictions, no "buy/sell".
 Language: simple Hinglish — Hindi in Devanagari with common English finance words in Latin (e.g. "Nifty", "exit load", "profit"). captionLine is Hinglish in Latin script only.
-Return JSON: {"hook": short Hinglish cover headline, no digits, max 40 chars, that states ONLY what one chosen article's headline or key line says, "hookFrom": the cand number of that article, "hookTerms": 1-3 English names/terms (e.g. a company, "FIIs", "EPF") copied exactly from that article's headline or key line, each written unchanged in the hook,
+Return JSON: {
  "articles":[{"cand": candidate number, "kicker": "Market"|"Stocks"|"Mutual Funds"|"Finance",
  "key": ONE sentence copied EXACTLY character-for-character from the article text, containing a number, 30-260 chars,
  "title": slide title, STRICTLY under 45 characters, "coverLine": STRICTLY under 40 characters (count them), "plain": 1-2 short sentences explaining the key fact, max 170 chars,
@@ -144,7 +170,7 @@ async function main() {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     try {
       ({ output: pick } = await callOpenAICompatible({ provider, system: SYSTEM, user, schema: Pick }));
-      problems = pickProblems(pick, cands);
+      problems = pickProblems(applyCodeFields(pick, cands), cands);
     } catch (err) { problems = [String(err.message).slice(0, 300)]; pick = null; }
     await fs.writeFile(path.join(out, `pick-attempt-${attempt}.json`), `${JSON.stringify({ pick, problems }, null, 1)}\n`);
     console.log(`model attempt ${attempt}: ${problems.length ? problems.join(' | ') : 'ok'}`);
