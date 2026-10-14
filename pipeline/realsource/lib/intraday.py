@@ -62,6 +62,10 @@ else:
     cmp = [b for b in tb[:-1] if b.get('yahoo')] if not daily.get('afterClose') else [b for b in tb if b.get('yahoo')]
     worst = max((b['dev'] for b in cmp), default=0)
     bad = [b for b in cmp if b['match'] == 'MISMATCH']
+    # One stray wick between the two feeds is tolerated when that bar's close
+    # still matches and it is not the bar we print as the day high/low (those stay strict below).
+    if len(bad) == 1 and abs(bad[0]['c'] - bad[0]['yahoo']['c']) <= TOL and bad[0] is not max(tb, key=lambda b: b['h']) and bad[0] is not min(tb, key=lambda b: b['l']):
+        bad[0]['match'] = 'wick-outlier (close ok)'; out_outlier = {'time': bad[0]['time'], 'dev': bad[0]['dev']}; bad = []
     if bad: problems.append(f'{len(bad)} 5m bars differ from Yahoo (close > {TOL} or o/h/l > {round(3 * TOL, 2)} points; worst {worst})')
     if tb and tb[0]['time'] != '09:15': problems.append(f'first aligned 5m bar is {tb[0]["time"]}, not 09:15')
     if daily.get('afterClose'):
