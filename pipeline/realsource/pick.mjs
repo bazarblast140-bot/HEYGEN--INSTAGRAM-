@@ -48,7 +48,7 @@ export function istDateOf(pub) {
   const t = /[+-]\d{4}$|GMT|UTC|Z$/.test(s) ? Date.parse(s) : Date.parse(`${s} +0530`);
   return Number.isNaN(t) ? null : new Date(t + 5.5 * 3600e3).toISOString().slice(0, 10);
 }
-const numbers = (t) => String(t || '').match(/\d[\d,]*(?:\.\d+)?/g) || [];
+const numbers = (t) => (String(t || '').match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) || []);
 
 // Loose schema so a long field comes back as fixable feedback, not a parse failure.
 export const LIMITS = { hook: 40, title: 48, coverLine: 50, plain: 170, summary: 120, captionLine: 130, contains: 60 };
@@ -57,7 +57,7 @@ export const Pick = z.object({
   articles: z.array(z.object({
     cand: z.number().int(), kicker: z.enum(KINDS), key: z.string().min(30).max(600),
     title: z.string().min(4).max(400), coverLine: z.string().min(4).max(400), plain: z.string().min(10).max(800),
-    summary: z.string().min(6).max(600), captionLine: z.string().min(6).max(600), contains: z.array(z.string().min(2).max(400)).min(2).max(4),
+    summary: z.string().min(6).max(600), captionLine: z.string().min(6).max(600), contains: z.array(z.string().min(1).max(400)).max(10),
   })).length(4),
 });
 
@@ -79,6 +79,7 @@ export function pickProblems(pick, cands) {
     if (!numbers(a.key).length) out.push(`cand ${a.cand}: key sentence has no number`);
     for (const s of a.contains) if (!body.includes(norm(s))) out.push(`cand ${a.cand}: "${s}" is not in the visible text`);
     for (const f of ['title', 'coverLine', 'plain', 'summary', 'captionLine']) if (a[f].length > LIMITS[f]) out.push(`cand ${a.cand}: ${f} is ${a[f].length} chars, max ${LIMITS[f]}`);
+    if (a.contains.length < 2 || a.contains.length > 4) out.push(`cand ${a.cand}: contains needs 2-4 entries`);
     for (const x of a.contains) if (x.length > LIMITS.contains) out.push(`cand ${a.cand}: contains entry is ${x.length} chars, max ${LIMITS.contains}`);
     for (const f of ['title', 'coverLine', 'plain', 'summary', 'captionLine']) {
       for (const n of numbers(String(a[f]).replace(/CNBC[- ]?TV ?18/gi, ''))) if (!body.includes(n)) out.push(`cand ${a.cand}: number ${n} in ${f} is not in the article`);
@@ -127,7 +128,7 @@ async function main() {
   if (!provider || provider.kind === 'anthropic') { console.error('no OpenAI-compatible script model configured — skipping'); process.exit(3); }
   let user = `Today is ${date}. Candidates:\n\n${cands.map((c, i) => `### cand ${i} — ${c.site}\nHEADLINE: ${c.headline}\nTEXT: ${c.text.slice(0, 2500)}`).join('\n\n')}`;
   let pick = null; let problems = [];
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
     try {
       ({ output: pick } = await callOpenAICompatible({ provider, system: SYSTEM, user, schema: Pick }));
       problems = pickProblems(pick, cands);
@@ -137,7 +138,7 @@ async function main() {
     if (!problems.length) break;
     user += `\n\nYour previous answer:\n${pick ? JSON.stringify(pick) : '(unparseable)'}\nIt was rejected:\n- ${problems.join('\n- ')}\nKeep everything else, fix exactly these (use only numbers printed in that candidate's TEXT), and send the full JSON again.`;
   }
-  if (problems.length) { console.error('model pick failed the checks 3 times — skipping'); process.exit(3); }
+  if (problems.length) { console.error('model pick failed the checks 4 times — skipping'); process.exit(3); }
   const articles = KINDS.map((k) => pick.articles.find((a) => a.kicker === k)).map((a) => {
     const c = cands[a.cand];
     return {
