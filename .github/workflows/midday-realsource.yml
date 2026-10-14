@@ -1,0 +1,259 @@
+name: Midday real-source carousel
+
+# ONE carousel a day (Rajesh, 9 Oct 2026): today's market, stocks, mutual-fund
+# and finance news from real articles (screenshots + yellow highlights + date and
+# source), the real TradingView NIFTY chart, code-verified numbers, simple
+# Hinglish. 9 slides to the IG feed + FB copy, and EVERY slide as its own IG
+# Story frame (1080x1920, letterboxed, in order) + FB Story; the last frame
+# carries the profile prompt. The ai and evening slots stay off.
+#
+# Publishing is OFF until the repo variable MIDDAY_REALSOURCE_PUBLISH is "true".
+# While it is off, the 12:30 IST cron builds a check package (posts nothing)
+# and the fallback crons do nothing.
+#
+# Hard gates (any failure = skip, nothing posted): pick.mjs (4 articles dated
+# today, model copy re-checked against the visible page text), build.mjs
+# (TradingView 1D/5m vs Yahoo ^NSEI, article dates, every printed number in its
+# article, OCR of every highlight, layout QA), then oneoff-evening.js
+# --slot midday (NSE trading day, IST 12:00–17:00, no "<today> midday" row, no
+# unclaimed carousel on Instagram today). The ledger row is CLAIMED and pushed
+# before anything is posted, so a fallback cron or a re-run can never post twice.
+#
+# Manual:
+#   gh workflow run midday-realsource.yml -f mode=check                  # build + review, posts nothing
+#   gh workflow run midday-realsource.yml -f mode=publish -f from_run=<check run id> -f sha=<package sha>
+#                                                                        # post exactly that reviewed package
+
+on:
+  schedule:
+    - cron: '0 7 * * 1-5'    # 12:30 IST
+    - cron: '25 7 * * 1-5'   # fallbacks (GitHub cron runs late): 12:55,
+    - cron: '55 7 * * 1-5'   # 13:25,
+    - cron: '35 8 * * 1-5'   # 14:05,
+    - cron: '15 9 * * 1-5'   # 14:45 IST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check (default, posts nothing) or publish"
+        type: choice
+        options: [check, publish]
+        default: check
+      from_run:
+        description: "publish: id of the check run whose package to post (empty = build fresh now)"
+        default: ''
+      sha:
+        description: "publish with from_run: the package sha that check run printed"
+        default: ''
+
+concurrency:
+  group: carousel-oneoff
+  cancel-in-progress: false
+
+jobs:
+  midday:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+      issues: write
+    env:
+      EVENT: ${{ github.event_name }}
+      CRON: ${{ github.event.schedule }}
+      IN_MODE: ${{ inputs.mode }}
+      FROM_RUN: ${{ inputs.from_run }}
+      SHA_IN: ${{ inputs.sha }}
+      PUBLISH_ON: ${{ vars.MIDDAY_REALSOURCE_PUBLISH }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      LEDGER_REFRESH_REF: ${{ github.ref_name }}
+      IG_USER_ID: ${{ vars.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      IG_SURFACE: ${{ vars.IG_SURFACE }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mode and early skip
+        id: mode
+        run: |
+          DATE=$(TZ=Asia/Kolkata date +%F)
+          MODE=check
+          if [ "$EVENT" = schedule ]; then
+            if [ "$PUBLISH_ON" = true ]; then MODE=publish
+            elif [ "$CRON" != '0 7 * * 1-5' ]; then echo "publishing is off (MIDDAY_REALSOURCE_PUBLISH != true): fallback cron does nothing" >> "$GITHUB_STEP_SUMMARY"; MODE=skip; fi
+          else MODE="${IN_MODE:-check}"; fi
+          if [ "$MODE" = publish ] && jq -e --arg k "$DATE midday" '.entries[] | select(.date == $k)' pipeline/carousel-history.json >/dev/null; then
+            echo "$DATE midday is already posted/claimed — nothing to do" >> "$GITHUB_STEP_SUMMARY"; MODE=skip
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"; echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          echo "pkg=pipeline/specs/oneoff/midday-$DATE" >> "$GITHUB_OUTPUT"
+          echo "mode: $MODE ($EVENT ${CRON})" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.mode.outputs.mode != 'skip' }}
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        if: ${{ steps.mode.outputs.mode != 'skip' }}
+
+      - name: Fetch the reviewed package from the check run
+        if: ${{ steps.mode.outputs.mode == 'publish' && env.FROM_RUN != '' }}
+        run: |
+          gh run download "$FROM_RUN" -R "$GITHUB_REPOSITORY" -n realsource-package -D "${{ steps.mode.outputs.pkg }}"
+          ls "${{ steps.mode.outputs.pkg }}"
+
+      - name: Install Chromium, Tesseract, fonts
+        if: ${{ steps.mode.outputs.mode != 'skip' && env.FROM_RUN == '' }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr fonts-noto-color-emoji python3-pil >/dev/null
+          npx playwright install --with-deps chromium
+
+      - name: Pick today's 4 articles
+        id: pick
+        if: ${{ steps.mode.outputs.mode != 'skip' && env.FROM_RUN == '' }}
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          SCRIPT_MODEL: ${{ vars.SCRIPT_MODEL }}
+        run: |
+          set -o pipefail
+          node pipeline/realsource/pick.mjs 2>&1 | tee pick.log
+          { echo '## Pick'; echo '```'; cat pick.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build (charts, captures, checks, slides, Story frames)
+        id: build
+        if: ${{ steps.pick.outcome == 'success' }}
+        run: |
+          set +e
+          node pipeline/realsource/build.mjs 2>&1 | tee build.log
+          code=${PIPESTATUS[0]}
+          { echo '## Build'; echo '```'; tail -n 40 build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload package + review files
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: realsource-package
+          path: ${{ steps.mode.outputs.pkg }}
+          retention-days: 7
+
+      - name: Upload review files
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: realsource-review
+          path: |
+            pipeline/out/realsource/slide-*.jpg
+            pipeline/out/realsource/story-*.jpg
+            pipeline/out/realsource/sheet.jpg
+            pipeline/out/realsource/story-sheet.jpg
+            pipeline/out/realsource/source.md
+            pipeline/out/realsource/articles.json
+            pipeline/out/realsource/caption.txt
+          retention-days: 7
+
+      - name: Gates (trading day, window, once per day, package quality)
+        id: check
+        if: ${{ steps.mode.outputs.mode != 'skip' && ((steps.build.outcome == 'success' && steps.build.outputs.code == '0') || env.FROM_RUN != '') }}
+        run: |
+          set -o pipefail
+          PKG="${{ steps.mode.outputs.pkg }}"
+          SHA=$(node pipeline/oneoff-evening.js --slot midday --pkg "$PKG" --sha-only)
+          # A fresh scheduled build is reviewed by the gates themselves; a from_run publish must match the reviewed sha.
+          WANT="$SHA"; [ -n "$FROM_RUN" ] && WANT="$SHA_IN"
+          node pipeline/oneoff-evening.js --slot midday --pkg "$PKG" --mode "${{ steps.mode.outputs.mode }}" --sha "$WANT" 2>&1 | tee check.log
+          { echo '## Gates'; echo "package sha: \`$SHA\` (check run id: ${GITHUB_RUN_ID})"; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Claim today's midday in the ledger
+        if: ${{ steps.mode.outputs.mode == 'publish' && steps.check.outputs.ready == 'true' }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          node pipeline/oneoff-evening.js --slot midday --pkg "${{ steps.mode.outputs.pkg }}" --mode publish --sha "$(node pipeline/oneoff-evening.js --slot midday --pkg "${{ steps.mode.outputs.pkg }}" --sha-only)" --claim
+          git add pipeline/carousel-history.json
+          git commit -m "Claim ${{ steps.mode.outputs.date }} midday for the real-source carousel (run ${GITHUB_RUN_ID})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Publish to Instagram (carousel + one Story frame per slide)
+        id: publish
+        if: ${{ steps.mode.outputs.mode == 'publish' && steps.check.outputs.ready == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          PKG="${{ steps.mode.outputs.pkg }}"
+          node pipeline/publish-carousel.js --report "$PKG/carousel-report.json" --caption-file "$PKG/caption.txt" --max-stories 10 --yes 2>&1 | tee publish.log
+          { echo '## Published'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' publish.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Copy to the Facebook Page
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          PKG="${{ steps.mode.outputs.pkg }}"
+          ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json" 2>/dev/null || true)
+          node pipeline/fb-crosspost.js --kind carousel --ig-media "$ID" --slot midday \
+            --hosted "$PKG/hosted.json" --caption-file "$PKG/caption.txt" 2>&1 | tee fb.log
+          sed -e 's/\x1b\[[0-9;]*m//g' fb.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stories to the Facebook Page (one per frame; ledger row per IG Story)
+        if: ${{ always() && steps.publish.outcome == 'success' && vars.FB_CROSSPOST == 'true' }}
+        continue-on-error: true
+        env:
+          FB_CROSSPOST: ${{ vars.FB_CROSSPOST }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          node pipeline/fb-story.js --stories "${{ steps.mode.outputs.pkg }}/stories.json" 2>&1 | tee fbstory.log || true
+          { echo '## Facebook Page Stories'; echo '```'; sed -e 's/\x1b\[[0-9;]*m//g' fbstory.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the media id on "<today> midday"
+        if: ${{ always() && steps.publish.outcome == 'success' }}
+        run: |
+          PKG="${{ steps.mode.outputs.pkg }}"
+          ID=$(jq -r '.mediaId // empty' "$PKG/hosted.json")
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node pipeline/oneoff-evening.js --slot midday --pkg "$PKG" --record "$ID"
+          git add pipeline/carousel-history.json pipeline/fb-crosspost-history.json pipeline/fb-story-history.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Record ${{ steps.mode.outputs.date }} midday real-source carousel: media $ID"
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not record the media id (the claim is pushed, so midday still cannot post twice)." >> "$GITHUB_STEP_SUMMARY"
+
+      # Any failed gate HOLDS the package (nothing posts) and opens or updates
+      # one 'health-alert' issue for the day.
+      - name: Held — open or update the health-alert issue
+        if: >-
+          ${{ always() && steps.mode.outputs.mode != 'skip' && (
+            steps.pick.outcome == 'failure' ||
+            (steps.build.outcome == 'success' && steps.build.outputs.code != '0') ||
+            steps.check.outcome == 'failure' ||
+            (steps.mode.outputs.mode == 'publish' && steps.check.outputs.ready != 'true') ) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.mode.outputs.mode }}
+        run: |
+          D=$(TZ=Asia/Kolkata date +%F)
+          TITLE="Midday carousel held ($D)"
+          WHY="pick=${{ steps.pick.outcome }} build=${{ steps.build.outputs.code }} gates=${{ steps.check.outcome }} ready=${{ steps.check.outputs.ready }}"
+          BODY="The ${MODE} run held today's midday real-source package; nothing was posted. ${WHY}. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          N=$(gh issue list -R "$GITHUB_REPOSITORY" --label health-alert --state open --search "in:title \"$TITLE\"" --json number -q '.[0].number')
+          if [ -n "$N" ]; then gh issue comment "$N" -R "$GITHUB_REPOSITORY" -b "$BODY"
+          else gh issue create -R "$GITHUB_REPOSITORY" --label health-alert -t "$TITLE" -b "$BODY"; fi
+          echo "## HELD — health-alert: $TITLE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish failed — midday stays claimed
+        if: ${{ failure() && steps.publish.outcome == 'failure' }}
+        run: |
+          echo '## Publish FAILED after the claim — midday stays claimed (fail closed); check Instagram before any release.' >> "$GITHUB_STEP_SUMMARY"

@@ -376,7 +376,7 @@ test('a missed slot opens, updates, and closes one health-alert issue', async ()
   });
   assert.equal(updated.action, 'update');
   assert.equal(updated.number, 7);
-  assert.match(updated.body, /Midday carousel/);
+  assert.match(updated.body, /Midday real-source carousel/);
 
   const closed = alertPlan({
     date: '2026-10-02',

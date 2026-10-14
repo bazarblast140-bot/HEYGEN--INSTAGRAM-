@@ -4,7 +4,6 @@
 // non-trading day, are not checked.
 
 import { istParts, slotClosedToday } from '../carousel/categories.js';
-import { flagOn, ENABLE_AI_NEWS_CAROUSELS } from '../publish/flags.js';
 import { postedSlots, resolveReelPublish } from '../publish/same-day.js';
 
 export const GRACE_MINUTES = 30;
@@ -17,7 +16,7 @@ export const ALERT_LABEL = 'health-alert';
 export const SLOT_TIMES = {
   reel: { label: 'Reel (any Reel today; own fallback 21:47 IST)', ist: '21:47', minute: 21 * 60 + 47, grace: 78 },
   ai: { label: 'AI carousel', ist: '09:30', minute: 9 * 60 + 30 },
-  midday: { label: 'Midday carousel (mutual funds)', ist: '12:30', minute: 12 * 60 + 30 },
+  midday: { label: 'Midday real-source carousel', ist: '12:30', minute: 12 * 60 + 30 },
   evening: { label: 'Evening carousel (market close, trading days)', ist: '16:45', minute: 16 * 60 + 45 },
 };
 
@@ -25,10 +24,11 @@ export function alertTitle(date) {
   return `Scheduled post missing (${date})`;
 }
 
+// The 16:45 evening slot was dropped and the AI slot is off (14 Oct): only the
+// Reel and the single midday real-source carousel are checked.
+// eslint-disable-next-line no-unused-vars
 export function enabledPublishSlots(env = process.env) {
-  const slots = ['reel', 'midday', 'evening'];
-  if (flagOn(ENABLE_AI_NEWS_CAROUSELS, env)) slots.splice(1, 0, 'ai');
-  return slots;
+  return ['reel', 'midday'];
 }
 
 // Slot-aware (same-day.js postedSlots): a late AI post inside the ai/midday
