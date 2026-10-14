@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
-import { parseItems, istDateOf, pickProblems, DROP, KINDS } from '../pipeline/realsource/pick.mjs';
+import { parseItems, istDateOf, pickProblems, DROP, KINDS, trimWords, applyCodeFields } from '../pipeline/realsource/pick.mjs';
 
 test('RSS items: dates in IST (with or without an offset)', () => {
   const xml = '<rss><item><title><![CDATA[Nifty ends higher]]></title><link>https://x/a</link><pubDate>Wed, 14 Oct 2026 17:49</pubDate></item><item><title>B</title><link>https://x/b</link><pubDate>Tue, 13 Oct 2026 20:00:00 +0000</pubDate></item></rss>';
@@ -31,7 +31,7 @@ test('invented numbers, paraphrased keys, missing kinds and digits in the hook a
   const p = good(); p.articles[0].plain = 'Profit 18% बढ़ा.'; assert.match(pickProblems(p, cands).join(), /number 18 in plain/);
   const q = good(); q.articles[1].key = 'Profit went up 15 percent to 1,200 crore.'; assert.match(pickProblems(q, cands).join(), /not copied verbatim/);
   const r = good(); r.articles[3].kicker = 'Market'; assert.match(pickProblems(r, cands).join(), /one article per kind/);
-  const s = good(); s.hook = 'Nifty 1% ऊपर'; assert.match(pickProblems(s, cands).join(), /hook must not contain numbers/);
+  const s = good(); s.hook = 'Profit 9% ऊपर'; assert.match(pickProblems(s, cands).join(), /hook number 9 is not in cand 0's headline/);
   const t = good(); t.articles[2].cand = 0; assert.match(pickProblems(t, cands).join(), /4 different candidates/);
 });
 
@@ -86,4 +86,20 @@ test('cover gate: the cover claim must come from a chosen article', () => {
   const c = good(); c.hookTerms = ['Profit rose']; c.hook = 'Profit बढ़ा';
   assert.match(pickProblems(c, cands).join(), /hook must contain the term "Profit rose"/);
   const d = good(); d.hookTerms = []; assert.match(pickProblems(d, cands).join(), /hookTerms needs/);
+});
+
+test('titles are trimmed at a word boundary, never mid-word', () => {
+  assert.equal(trimWords('Bajaj Consumer Care का Q2 profit 67% बढ़ा, revenue भी ऊपर', 30), 'Bajaj Consumer Care का Q2…');
+  assert.equal(trimWords('short', 30), 'short');
+  for (const t of [trimWords('FIIs sell ₹1,857 crore of Indian shares, DIIs buy', 25)]) assert.ok(t.length <= 25 && 'FIIs sell ₹1,857 crore of Indian shares'.startsWith(t.replace(/…$/, '')));
+});
+
+test('the cover is written in code from the Market article headline and passes the cover gate', () => {
+  const c = cands.map((x, i) => ({ ...x, headline: i === 0 ? 'FIIs sell ₹1,857 crore of Indian shares, DIIs buy ₹2,670 crore as market ends lower' : x.headline }));
+  const p = good(); p.articles[0].title = 'Market में आज बड़ी गिरावट और FIIs की भारी बिकवाली दिखी पूरे दिन';
+  applyCodeFields(p, c);
+  assert.equal(p.hook, 'आज: FIIs sell ₹1,857 crore of Indian…');
+  assert.ok(p.hook.length <= 40);
+  assert.ok(p.articles[0].title.length <= 48 && !/\S…\S/.test(p.articles[0].title));
+  assert.deepEqual(pickProblems(p, c), []);
 });
