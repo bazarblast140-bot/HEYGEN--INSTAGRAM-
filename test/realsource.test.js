@@ -72,3 +72,8 @@ test('a package that fails any gate is held and raises a health-alert issue', as
   assert.match(wf, /--label health-alert/);
   assert.match(wf, /steps\.build\.outputs\.code == '0'/, 'a failed build never reaches the gates');
 });
+
+test('a trailing comma is not part of a number', () => {
+  const p = good(); p.articles[0].captionLine = 'Profit 15%, ₹1,200 crore, sab upar';
+  assert.deepEqual(pickProblems(p, cands), []);
+});
