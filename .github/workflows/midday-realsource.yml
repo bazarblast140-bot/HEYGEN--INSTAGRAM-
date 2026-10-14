@@ -44,6 +44,10 @@ on:
       sha:
         description: "publish with from_run: the package sha that check run printed"
         default: ''
+      late:
+        description: "publish a reviewed from_run package after 17:00 IST (same day, before 23:00)"
+        type: boolean
+        default: false
 
 concurrency:
   group: carousel-oneoff
@@ -63,6 +67,7 @@ jobs:
       IN_MODE: ${{ inputs.mode }}
       FROM_RUN: ${{ inputs.from_run }}
       SHA_IN: ${{ inputs.sha }}
+      ONEOFF_LATE: ${{ inputs.late }}
       PUBLISH_ON: ${{ vars.MIDDAY_REALSOURCE_PUBLISH }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       LEDGER_REFRESH_REF: ${{ github.ref_name }}
