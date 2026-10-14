@@ -143,7 +143,8 @@ export function publishBlockers({
   if (report.istDate && report.istDate !== date) out.push(`package is for ${report.istDate}, today (IST) is ${date}`);
   const closed = slotClosedToday('evening', date);
   if (closed) out.push(`${date} is not an NSE trading day (${closed})`);
-  if (minutes < R.notBefore || minutes >= R.notAfter) out.push(`IST ${hhmm(minutes)} is outside the ${slot} window ${hhmm(R.notBefore)}–${hhmm(R.notAfter)}`);
+  const lateOk = slot === 'midday' && /^true$/i.test(process.env.ONEOFF_LATE || '') && process.env.FROM_RUN && minutes >= R.notBefore && minutes < 23 * 60;
+  if (!lateOk && (minutes < R.notBefore || minutes >= R.notAfter)) out.push(`IST ${hhmm(minutes)} is outside the ${slot} window ${hhmm(R.notBefore)}–${hhmm(R.notAfter)}`);
   const row = eveningRow(entries, date, slot);
   if (row) out.push(`${slot} already posted/claimed today: "${row.topic}"${row.mediaId ? ` (media ${row.mediaId})` : ''}${row.status ? ` [${row.status}]` : ''}`);
   if (!listed.ok) out.push('Instagram media list unavailable — cannot confirm evening is not already up (fail closed)');
