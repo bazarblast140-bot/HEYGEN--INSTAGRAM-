@@ -91,10 +91,12 @@ test('marketCloseStories: verified NIFTY (+ SENSEX) on a trading day after 15:30
   assert.equal(called, 0);
 });
 
-test('slot health does not report the evening market post missing on a non-trading day', () => {
+test('slot health no longer checks the dropped 16:45 evening slot or the ai slot', () => {
   const after = (d) => new Date(`${d}T14:37:00Z`); // 20:07 IST
   const slots = (d) => missedSlots({ now: after(d), env: {}, media: [], carouselEntries: [], reelPublishEntries: [{ date: d, mediaId: '1' }] });
-  assert.ok(slots('2026-10-05').includes('evening'), 'a trading day without the post is missed');
+  assert.equal(slots('2026-10-05').includes('evening'), false);
+  assert.equal(slots('2026-10-05').includes('ai'), false);
+  assert.ok(slots('2026-10-05').includes('midday'));
   assert.equal(slots('2026-10-04').includes('evening'), false);
   assert.equal(slots('2026-10-02').includes('evening'), false);
 });
