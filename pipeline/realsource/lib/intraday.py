@@ -34,6 +34,10 @@ if xoff[0]: print(f'x offset corrected by {xoff[0]} px ({xoff[1]} bars on candle
 ytoday = [r for r in ytoday if int(r['time'][-2:]) % 5 == 0]
 TOL = round(0.0002 * (bars[-1]['c'] if bars else 22000), 2)  # 0.02% (~4.5 pts): TradingView and Yahoo use different tick feeds; observed diffs up to ~3 pts
 def dev(b, r): return max(abs(b[k] - r[k]) for k in ('o', 'h', 'l', 'c'))
+# A bar matches when its close is within TOL and open/high/low within 3*TOL
+# (single wick ticks differ between the two feeds). Printed numbers (day high,
+# low, the price shown) are checked strictly against TOL below.
+def bar_ok(b, r): return abs(b['c'] - r['c']) <= TOL and all(abs(b[k] - r[k]) <= 3 * TOL for k in ('o', 'h', 'l'))
 # Align TradingView's bar sequence to Yahoo's session: the offset with the smallest max deviation.
 best = None
 for k in range(len(bars)):
@@ -51,14 +55,14 @@ else:
     k, maxdev, n = best
     for i in range(n):
         b = bars[k + i]; r = ytoday[i]
-        b.update(date=today, time=r['time'], yahoo=r, dev=round(dev(b, r), 2), match='ok' if dev(b, r) <= TOL else 'MISMATCH')
+        b.update(date=today, time=r['time'], yahoo=r, dev=round(dev(b, r), 2), match='ok' if bar_ok(b, r) else 'MISMATCH')
     for b in bars[k + n:]:
         b.update(date=today, time='live', match='live (newer than Yahoo)')
     tb = [b for b in bars if b['date'] == today]
     cmp = [b for b in tb[:-1] if b.get('yahoo')] if not daily.get('afterClose') else [b for b in tb if b.get('yahoo')]
     worst = max((b['dev'] for b in cmp), default=0)
     bad = [b for b in cmp if b['match'] == 'MISMATCH']
-    if bad: problems.append(f'{len(bad)} 5m bars differ from Yahoo by more than {TOL} points (worst {worst})')
+    if bad: problems.append(f'{len(bad)} 5m bars differ from Yahoo (close > {TOL} or o/h/l > {round(3 * TOL, 2)} points; worst {worst})')
     if tb and tb[0]['time'] != '09:15': problems.append(f'first aligned 5m bar is {tb[0]["time"]}, not 09:15')
     if daily.get('afterClose'):
         if len(tb) != len(ytoday) or (ytoday and ytoday[-1]['time'] != '15:25'):
@@ -67,7 +71,12 @@ else:
 out = {'today': today, 'problems': problems, 'meta': meta, 'xOffsetPx': xoff[0], 'yahooCheck': out_dev if best else None}
 if tb:
     hi = max(tb, key=lambda b: b['h']); lo = min(tb, key=lambda b: b['l'])
-    op, cl = tb[0], tb[-1]
+    op = tb[0]
+    # The price we print: the newest COMPLETE bar whose close Yahoo confirms
+    # within TOL (TradingView's public feed is ~15 min delayed; a live bar is never printed).
+    done = [b for b in tb if b.get('yahoo') and abs(b['c'] - b['yahoo']['c']) <= TOL and (b is not tb[-1] or daily.get('afterClose'))]
+    cl = done[-1] if done else tb[-1]
+    if not done: problems.append('no Yahoo-verified complete 5m bar to print')
     yhi = max(ytoday, key=lambda r: r['h']); ylo = min(ytoday, key=lambda r: r['l'])
     if abs(hi['h'] - yhi['h']) > TOL or hi['time'] != yhi['time']: problems.append(f'day high {hi["h"]} @{hi["time"]} vs Yahoo {yhi["h"]} @{yhi["time"]}')
     if abs(lo['l'] - ylo['l']) > TOL or lo['time'] != ylo['time']: problems.append(f'day low {lo["l"]} @{lo["time"]} vs Yahoo {ylo["l"]} @{ylo["time"]}')
@@ -80,7 +89,9 @@ if tb:
         'high': {'price': hi['h'], 'time': hi['time'], 'x': hi['xCss'] * meta['dpr']},
         'low': {'price': lo['l'], 'time': lo['time'], 'x': lo['xCss'] * meta['dpr']},
         'open': {'price': op['o'], 'time': op['time'], 'x': op['xCss'] * meta['dpr']},
-        'close': {'price': cl['c'], 'time': cl['time'], 'x': cl['xCss'] * meta['dpr'], 'live': not cl.get('yahoo') or not daily.get('afterClose')},
+        'close': {'price': cl['c'], 'time': cl['time'], 'asOf': (dt.datetime.strptime(cl['time'], '%H:%M') + dt.timedelta(minutes=5)).strftime('%H:%M') if cl.get('time') and cl['time'] != 'live' else None,
+                  'x': cl['xCss'] * meta['dpr'], 'verified': bool(done), 'isClose': bool(daily.get('afterClose') and cl.get('time') == '15:25'),
+                  'live': not (daily.get('afterClose') and cl.get('time') == '15:25')},
         'range': rng, 'rangePct': round(rng / lo['l'] * 100, 2), 'bars': len(tb),
         'firstX': tb[0]['xCss'] * meta['dpr'], 'lastX': tb[-1]['xCss'] * meta['dpr'],
         'yahoo': {'bars': len(ytoday), 'high': yhi, 'low': ylo, 'first': ytoday[0] if ytoday else None, 'last': ytoday[-1] if ytoday else None},

@@ -45,7 +45,10 @@ D.intra = I;
 const LIVE_OK = /before the 15:30 IST close|today's bar does not match Yahoo OHLC exactly \(open-only|session incomplete/;
 problems.push(...D.problems.filter((x) => !LIVE_OK.test(x)), ...I.problems.filter((x) => !LIVE_OK.test(x)).map((x) => `5m: ${x}`));
 if (D.T.date !== date) problems.push(`last daily bar ${D.T.date} is not ${date}`);
-if (Math.abs(D.T.c - I.close.price) > 0.06 && !(I.close.live)) problems.push(`daily close ${D.T.c} != 5m close ${I.close.price}`);
+// The day's close is only claimed from the 15:25 bar after 15:30; any earlier
+// bar is an intraday price shown with its own time, never called the close.
+if (I.close.isClose && Math.abs(D.T.c - I.close.price) > 0.06) problems.push(`daily close ${D.T.c} != 5m close ${I.close.price}`);
+if (!I.close.verified) problems.push('printed Nifty price is not Yahoo-verified');
 const capMin = Number(D.capturedAtIst.slice(11, 13)) * 60 + Number(D.capturedAtIst.slice(14, 16));
 if (capMin < 10 * 60 + 30) problems.push(`chart captured at ${D.capturedAtIst.slice(11, 16)} IST — too early in the session for a midday post`);
 if (D.yahooLast && Math.abs(D.T.o - D.yahooLast.o) > 0.06) problems.push(`today's open ${D.T.o} != Yahoo open ${D.yahooLast.o}`);
@@ -168,7 +171,7 @@ for (const A of ART) for (const n of String(A.captionLine || '').match(/\d[\d,]*
 }
 const caption = `${dshort(date)} ki 4 badi khabrein + asli Nifty chart 📊
 
-📈 Nifty ${I.close.time} IST tak ${fmt(D.livePrice)} (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%) — TradingView
+📈 Nifty ${I.close.isClose ? 'close' : `${I.close.asOf} IST tak`} ${fmt(D.livePrice)} (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%) — TradingView
 ${ART.map((A) => `${EMO[A.kicker] || '📰'} ${A.kicker}: ${A.captionLine} — ${A.siteName}`).join('\n')}
 
 Analysis (khabar nahi): Nifty ${fmt(D.S.price)} key support, ${fmt(D.R1.price)} resistance — chart rule se, guaranteed nahi.

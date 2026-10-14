@@ -20,7 +20,8 @@ test('stock tips and live blogs never become candidates', () => {
 
 const cands = [0, 1, 2, 3].map((i) => ({ headline: `H${i}`, text: `Profit rose 15% to ₹1,200 crore in Q2 number ${i}. Exit load is 2%.` }));
 const good = () => ({
-  hook: 'आज की बड़ी ख़बरें',
+  hook: 'Profit बढ़ा, अच्छी ख़बर',
+  hookFrom: 0, hookTerms: ['Profit'],
   articles: KINDS.map((k, i) => ({ cand: i, kicker: k, key: `Profit rose 15% to ₹1,200 crore in Q2 number ${i}.`, title: 'Profit बढ़ा', coverLine: 'Profit 15% ऊपर', plain: 'Profit 15% बढ़कर ₹1,200 crore हुआ.', summary: 'Profit 15% ऊपर (Mint).', captionLine: 'Profit 15% upar', contains: ['15%', '₹1,200 crore'] })),
 });
 
@@ -76,4 +77,13 @@ test('a package that fails any gate is held and raises a health-alert issue', as
 test('a trailing comma is not part of a number', () => {
   const p = good(); p.articles[0].captionLine = 'Profit 15%, ₹1,200 crore, sab upar';
   assert.deepEqual(pickProblems(p, cands), []);
+});
+
+test('cover gate: the cover claim must come from a chosen article', () => {
+  const a = good(); a.hook = 'Crude ऊंचा, OMC पर दबाव'; a.hookTerms = ['Crude', 'OMC'];
+  assert.match(pickProblems(a, cands).join(), /hook term "Crude" is not in cand 0/);
+  const b = good(); b.hookFrom = 9; assert.match(pickProblems(b, cands).join(), /hookFrom must be/);
+  const c = good(); c.hookTerms = ['Profit rose']; c.hook = 'Profit बढ़ा';
+  assert.match(pickProblems(c, cands).join(), /hook must contain the term "Profit rose"/);
+  const d = good(); d.hookTerms = []; assert.match(pickProblems(d, cands).join(), /hookTerms needs/);
 });
