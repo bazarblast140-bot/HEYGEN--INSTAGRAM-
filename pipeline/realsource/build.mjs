@@ -104,7 +104,7 @@ for (const [i, a] of cfg.articles.entries()) {
     }
   }
   // every number we print for this article must be in the article itself
-  for (const t of [a.plain, a.coverLine, a.summary]) for (const n of t.match(/\d[\d,]*(?:\.\d+)?/g) || []) {
+  for (const t of [a.plain, a.coverLine, a.summary]) for (const n of t.match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) || []) {
     if (!body.includes(n)) P(`number ${n} in our text is not in the article`);
   }
   A.checkLine = lines.join(' · ');
@@ -166,7 +166,7 @@ log(qaProblems.length ? `LAYOUT QA: ${qaProblems.length} problem(s)\n  ${qaProbl
 const pct = D.livePct;
 const EMO = { Market: '📈', Stocks: '💹', 'Mutual Funds': '🏦', Finance: '⚖️' };
 if (ART.length !== 4) problems.push(`${ART.length} articles — the midday carousel takes exactly 4`);
-for (const A of ART) for (const n of String(A.captionLine || '').match(/\d[\d,]*(?:\.\d+)?/g) || []) {
+for (const A of ART) for (const n of String(A.captionLine || '').match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) || []) {
   if (!`${A.headline} ${A.key?.text || ''} ${A.bodyText || ''}`.includes(n)) problems.push(`${A.id}: caption number ${n} is not in the article`);
 }
 const caption = `${dshort(date)} ki 4 badi khabrein + asli Nifty chart 📊
