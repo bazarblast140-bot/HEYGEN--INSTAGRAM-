@@ -309,6 +309,14 @@ test('never hands a Meta CDN media_url to Graph: pinned, then re-host, then rele
 
 test('only Reels that name a Paise Ki Pathshala YouTube video are handled', () => {
   assert.equal(paiseVideoId('Gold vs FD\n\npkp:video:0oe9nuJyQLE'), '0oe9nuJyQLE');
+  assert.equal(paiseVideoId('SIP basics\n\npkp:sip-basics:KVmMkKG5gzk'), 'KVmMkKG5gzk', 'pkp:<topic_key>:<id>');
+  assert.equal(paiseVideoId('x\npkp:gold_vs_fd:0oe9nuJyQLE #paise'), '0oe9nuJyQLE');
+  assert.equal(paiseVideoId('pkp:sip:KVmMkKG5gzkX'), '', '12-char id is not a YouTube id');
+  assert.equal(paiseVideoId('pkp:sip:KVmMkKG5gz'), '', '10-char id');
+  assert.equal(paiseVideoId('xpkp:sip:KVmMkKG5gzk'), '', 'must be a real pkp-prefixed marker');
+  assert.equal(paiseVideoId('pkp:KVmMkKG5gzk'), '', 'key and id are both required');
+  assert.equal(paiseVideoId('pkp::KVmMkKG5gzk'), '', 'empty key');
+  assert.equal(paiseVideoId('pkp:sip:KVmMkKG5gzk:extra'), '');
   assert.equal(paiseVideoId('Paise Ki Pathshala ka naya short https://youtube.com/shorts/KVmMkKG5gzk'), '', 'naming Paise + a YouTube link is not the marker');
   assert.equal(paiseVideoId('https://youtube.com/shorts/KVmMkKG5gzk'), '', 'a YouTube link alone is not enough');
   assert.equal(paiseVideoId('pkp:sip-magic:abc123'), '', 'an old marker without a video id is not enough');
