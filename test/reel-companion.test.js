@@ -285,12 +285,12 @@ test('the workflow serialises runs, never cancels one, and offers a dry run', ()
   assert.match(wf, /FB_CROSSPOST: \$\{\{ vars\.FB_CROSSPOST \}\}/);
   assert.match(wf, /continue-on-error: true/);
   const crons = [...wf.matchAll(/cron: '([^']+)'/g)].map((m) => m[1]);
-  assert.equal(crons.length, 6);
+  assert.equal(crons.length, 10);
   const ist = crons.map((c) => { const [m, h] = c.split(' ').map(Number); return (h * 60 + m + 330) % 1440; });
   for (const c of crons) assert.ok(![0, 30].includes(Number(c.split(' ')[0])), c);
-  // 30–90 minutes after each Paise slot (08:30, 16:00, 21:00 IST).
-  for (const slot of [8 * 60 + 30, 16 * 60, 21 * 60]) {
-    const after = ist.filter((t) => t - slot >= 20 && t - slot <= 90);
+  // 5–90 minutes after each Paise slot (Mon-Fri 08:45, 16:15, 18:30; Sat 11:30; old 21:00 IST).
+  for (const slot of [8 * 60 + 45, 16 * 60 + 15, 18 * 60 + 30, 11 * 60 + 30, 21 * 60]) {
+    const after = ist.filter((t) => t - slot >= 5 && t - slot <= 90);
     assert.ok(after.length >= 1, `no run after ${slot}`);
   }
 });
