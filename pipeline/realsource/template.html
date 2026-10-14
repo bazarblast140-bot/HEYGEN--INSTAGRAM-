@@ -195,7 +195,7 @@ function build(D) {
     y += hh + 12;
     if (dt && !dateNear) {
       const dc = { x: Math.max(0, dt.x * K - pad), y: dt.y * K - 5 * K, w: Math.min(nat.w, dt.w * K + 2 * pad), h: dt.h * K + 10 * K };
-      const dh = 66, dw = Math.round(Math.min(960, dc.w * dh / dc.h));
+      const dw = Math.round(Math.min(750, dc.w * 66 / dc.h)), dh = Math.round(dc.h * dw / dc.w); // stays inside the 60 px safe margin
       html += `<div class="note" data-block data-qa="note" style="top:${y + 8}px;right:auto;width:200px;font-size:23px">Article की date:</div>` + shot({ src: NP, natural: nat, crop: dc, left: 270, top: y, width: dw });
       y += dh + 14;
     }
@@ -246,9 +246,9 @@ function build(D) {
   };
   const ART = D.articles;
   slides[1] = () => frame(1, `आज की ख़बरें · ${dlong(D.today)}`, `
-    <div class="h" data-block data-qa="h" style="top:130px;font-size:62px">${C.hook}</div>
-    <div class="facts" data-block data-qa="facts" style="top:${C.hookTop || 300}px;font-size:32px">Nifty ${D.intra.close.isClose ? 'close' : `${D.intra.close.asOf} IST पर`}: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:24px;color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
-    <div style="position:absolute;left:60px;right:60px;top:${(C.hookTop || 300) + 80}px;display:flex;flex-direction:column;gap:20px">
+    <div class="h" data-block data-qa="h" style="top:120px;font-size:46px">${C.hook}</div>
+    <div class="facts" data-block data-qa="facts" style="top:${C.hookTop || 320}px;font-size:32px">Nifty ${D.intra.close.isClose ? 'close' : `${D.intra.close.asOf} IST पर`}: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:24px;color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
+    <div style="position:absolute;left:60px;right:60px;top:${(C.hookTop || 320) + 80}px;display:flex;flex-direction:column;gap:20px">
     ${ART.map((A, i) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:18px 26px"><p style="font-size:24px;color:var(--yellow);font-weight:800">${i + 3}/${TOTAL} · ${A.kicker}</p><p style="font-size:30px">${A.coverLine}</p><p style="font-size:21px;color:var(--muted)">${A.siteName} · ${dlong(A.dateIso)}</p></div>`).join('')}
     </div>
     <div class="note" data-block data-qa="note" style="top:1150px;color:var(--ink);font-weight:700;font-size:28px;text-align:center">असली ख़बर + असली chart → swipe करो</div>`,
