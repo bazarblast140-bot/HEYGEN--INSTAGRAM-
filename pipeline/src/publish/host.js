@@ -110,8 +110,14 @@ export async function hostFiles({ files, tag = `carousel-${new Date().toISOStrin
   const release = await ensureRelease({ repo, token, tag });
 
   const hosted = [];
+  const used = new Set();
   for (const [i, file] of files.entries()) {
-    hosted.push(await upload({ repo, token, release, file, name: path.basename(file) }));
+    // Story frames share basenames with slides (slides/01.jpg vs story/01.jpg);
+    // an asset name can exist once per release, so prefix only on a clash.
+    const base = path.basename(file);
+    const name = used.has(base) ? `${String(i + 1).padStart(2, '0')}-${base}` : base;
+    used.add(name);
+    hosted.push(await upload({ repo, token, release, file, name }));
     onProgress?.(i + 1, files.length);
   }
   return { assets: hosted, repo, tag };
