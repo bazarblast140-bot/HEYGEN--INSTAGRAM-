@@ -25,12 +25,11 @@ const istNow = new Date(Date.now() + 5.5 * 3600e3).toISOString();
 const date = opt('date', istNow.slice(0, 10));
 const out = path.resolve(opt('out', path.join('pipeline', 'out', 'realsource')));
 const DESKTOP = { width: 1200, dpr: 2, mobile: false };
-const MOBILE = { width: 480, dpr: 3, mobile: true };
 export const FEEDS = [
   { site: 'Mint', url: 'https://www.livemint.com/rss/markets', capture: DESKTOP },
-  { site: 'CNBC-TV18', url: 'https://www.cnbctv18.com/commonfeeds/v1/cne/rss/market.xml', capture: MOBILE },
+  { site: 'CNBC-TV18', url: 'https://www.cnbctv18.com/commonfeeds/v1/cne/rss/market.xml', capture: DESKTOP },
   { site: 'Mint', url: 'https://www.livemint.com/rss/money', capture: DESKTOP },
-  { site: 'CNBC-TV18', url: 'https://www.cnbctv18.com/commonfeeds/v1/cne/rss/personal-finance.xml', capture: MOBILE },
+  { site: 'CNBC-TV18', url: 'https://www.cnbctv18.com/commonfeeds/v1/cne/rss/personal-finance.xml', capture: DESKTOP },
   { site: 'Economic Times', url: 'https://economictimes.indiatimes.com/mf/rssfeeds/359241701.cms', capture: DESKTOP },
 ];
 export const KINDS = ['Market', 'Stocks', 'Mutual Funds', 'Finance'];
@@ -54,6 +53,7 @@ const numbers = (t) => (String(t || '').match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) || [
 export const LIMITS = { hook: 40, title: 48, coverLine: 50, plain: 170, summary: 120, captionLine: 130, contains: 60 };
 export const Pick = z.object({
   hook: z.string().min(4).max(400),
+  hookFrom: z.number().int(), hookTerms: z.array(z.string().min(1).max(200)).max(6),
   articles: z.array(z.object({
     cand: z.number().int(), kicker: z.enum(KINDS), key: z.string().min(30).max(600),
     title: z.string().min(4).max(400), coverLine: z.string().min(4).max(400), plain: z.string().min(10).max(800),
@@ -67,6 +67,19 @@ const norm = (x) => String(x).replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u
 export function pickProblems(pick, cands) {
   const out = [];
   if (/\d/.test(pick.hook)) out.push('hook must not contain numbers');
+  // Cover gate: the cover claim comes from ONE chosen article. Its terms are
+  // copied from that article's headline or key line and all appear in the hook.
+  const from = pick.articles.find((a) => a.cand === pick.hookFrom);
+  if (!from) out.push('hookFrom must be the cand number of one of the 4 chosen articles');
+  else {
+    const src = norm(`${cands[from.cand]?.headline || ''} ${from.key}`).toLowerCase();
+    if (pick.hookTerms.length < 1 || pick.hookTerms.length > 3) out.push('hookTerms needs 1-3 entries');
+    for (const t of pick.hookTerms) {
+      if (t.trim().length < 3) out.push(`hook term "${t}" is too short`);
+      else if (!src.includes(norm(t).toLowerCase())) out.push(`hook term "${t}" is not in cand ${from.cand}'s headline or key line`);
+      if (!norm(pick.hook).toLowerCase().includes(norm(t).toLowerCase())) out.push(`hook must contain the term "${t}" exactly`);
+    }
+  }
   if (pick.hook.length > LIMITS.hook) out.push(`hook is ${pick.hook.length} chars, max ${LIMITS.hook}`);
   const kinds = new Set(pick.articles.map((a) => a.kicker));
   if (kinds.size !== 4) out.push('need exactly one article per kind: Market, Stocks, Mutual Funds, Finance');
@@ -92,7 +105,7 @@ const SYSTEM = `You write a daily Instagram carousel for @rajesh_technical_trade
 You get today's news articles (the text a reader sees on the page). Choose exactly 4: one "Market" (Nifty/Sensex/market move or market-wide news), one "Stocks" (a specific company/stock news, NOT a buy/sell tip), one "Mutual Funds" (MF/ETF/NFO/SEBI-MF news), one "Finance" (personal finance, banking, tax, RBI/SEBI regulation).
 Rules: use ONLY facts written in that article's text. Never add numbers that are not in the text. No advice, no predictions, no "buy/sell".
 Language: simple Hinglish — Hindi in Devanagari with common English finance words in Latin (e.g. "Nifty", "exit load", "profit"). captionLine is Hinglish in Latin script only.
-Return JSON: {"hook": short Devanagari headline for the cover, no digits, max 40 chars,
+Return JSON: {"hook": short Hinglish cover headline, no digits, max 40 chars, that states ONLY what one chosen article's headline or key line says, "hookFrom": the cand number of that article, "hookTerms": 1-3 English names/terms (e.g. a company, "FIIs", "EPF") copied exactly from that article's headline or key line, each written unchanged in the hook,
  "articles":[{"cand": candidate number, "kicker": "Market"|"Stocks"|"Mutual Funds"|"Finance",
  "key": ONE sentence copied EXACTLY character-for-character from the article text, containing a number, 30-260 chars,
  "title": slide title, STRICTLY under 45 characters, "coverLine": STRICTLY under 40 characters (count them), "plain": 1-2 short sentences explaining the key fact, max 170 chars,

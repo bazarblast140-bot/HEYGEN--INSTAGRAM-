@@ -157,9 +157,9 @@ function build(D) {
       const x = leftX >= crop.x + 12 / sc ? leftX : pt.x + 44 / sc;
       return `<div class="tag" data-qa="tag" style="${at(clampX(x, w), clampY(py - 20 / sc))};color:${col}">${txt}</div>`;
     };
-    const closeLbl = I.close.live ? `${I.close.time} candle (live) ${fmt(I.close.price)}` : `${I.close.time} candle close ${fmt(I.close.price)}`;
+    const closeLbl = I.close.isClose ? `दिन का close ${fmt(I.close.price)}` : `${I.close.asOf} IST पर ${fmt(I.close.price)} (${I.close.time} candle)`;
     return frame(2, `Nifty आज · 5-minute chart`, `
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:44px">${I.close.live ? `आज ${I.close.time} तक का range` : 'दिन भर का range'}: ${fmt(I.range)} points</div>
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:44px">${I.close.isClose ? 'दिन भर का range' : `आज ${I.close.asOf} IST तक का range`}: ${fmt(I.range)} points</div>
     <div class="facts" data-block data-qa="facts" style="top:178px;font-size:29px;font-weight:600;color:var(--ink)">${I.low.time <= I.high.time
       ? `Low <span style="color:var(--red)">${fmt(I.low.price)}</span> (${I.low.time}) → High <span style="color:var(--green)">${fmt(I.high.price)}</span> (${I.high.time})`
       : `High <span style="color:var(--green)">${fmt(I.high.price)}</span> (${I.high.time}) → Low <span style="color:var(--red)">${fmt(I.low.price)}</span> (${I.low.time})`} IST</div>
@@ -169,7 +169,7 @@ function build(D) {
     ${t5(I.open.x + 140 / sc, Y5(I.open.price) - 60 / sc, 250, '#CBD5E1', `Open ${fmt(I.open.price)} · ${I.open.time}`)}
     <div class="card" data-block data-qa="card" style="top:${top + H + 18}px;padding:14px 26px"><p style="font-size:24px;line-height:1.45">
       <span style="color:#38BDF8">● ${closeLbl}</span> · range = ${fmt(I.high.price)} − ${fmt(I.low.price)} (${I.rangePct.toFixed(2)}%)<br>
-      TradingView 5m = Yahoo 5m (${I.yahooCheck.compared} candles, max फ़र्क ${I.yahooCheck.worstDevPts} pt)${I.close.live ? '<br><span style="color:var(--muted)">Market अभी खुला है · TradingView data ~15 min delayed</span>' : ''}</p></div>`,
+      TradingView 5m = Yahoo 5m (${I.yahooCheck.compared} candles, max फ़र्क ${I.yahooCheck.worstDevPts} pt)${I.close.isClose ? '' : '<br><span style="color:var(--muted)">TradingView public data ~15 min delayed · यह close नहीं है</span>'}</p></div>`,
     `TradingView · NIFTY 5m · ${dlong(D.today)}`);
   };
   const newsSlide = (n, A) => {
@@ -247,7 +247,7 @@ function build(D) {
   const ART = D.articles;
   slides[1] = () => frame(1, `आज की ख़बरें · ${dlong(D.today)}`, `
     <div class="h" data-block data-qa="h" style="top:130px;font-size:62px">${C.hook}</div>
-    <div class="facts" data-block data-qa="facts" style="top:${C.hookTop || 300}px;font-size:32px">Nifty ${D.intra.close.time} IST तक: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:24px;color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
+    <div class="facts" data-block data-qa="facts" style="top:${C.hookTop || 300}px;font-size:32px">Nifty ${D.intra.close.isClose ? 'close' : `${D.intra.close.asOf} IST पर`}: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:24px;color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
     <div style="position:absolute;left:60px;right:60px;top:${(C.hookTop || 300) + 80}px;display:flex;flex-direction:column;gap:20px">
     ${ART.map((A, i) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:18px 26px"><p style="font-size:24px;color:var(--yellow);font-weight:800">${i + 3}/${TOTAL} · ${A.kicker}</p><p style="font-size:30px">${A.coverLine}</p><p style="font-size:21px;color:var(--muted)">${A.siteName} · ${dlong(A.dateIso)}</p></div>`).join('')}
     </div>
