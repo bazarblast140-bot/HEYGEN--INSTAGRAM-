@@ -41,6 +41,10 @@ export async function captureNews({ out, url, key, log = console.log, width = 12
       }
       return n;
     });
+    // Whole article in the viewport so the visibility gate can sample any line
+    // with elementFromPoint (some sites lock window scrolling).
+    const docH = await p.evaluate(() => document.documentElement.scrollHeight);
+    await p.setViewportSize({ width, height: Math.min(Math.max(docH, 1500), 12000) });
     await p.waitForTimeout(800);
     const info = await p.evaluate((keyText) => {
       const R = (r) => ({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height });
@@ -94,8 +98,8 @@ export async function captureNews({ out, url, key, log = console.log, width = 12
             // nothing may sit on top of it (sampled with elementFromPoint).
             let covered = 0; let samples = 0; let offPage = 0;
             for (const r of lm) {
+              if (r.y + r.h > innerHeight) { offPage += 1; continue; }
               if (r.x < 0 || r.x + r.w > document.documentElement.clientWidth + 1) offPage += 1;
-              window.scrollTo(0, Math.max(0, r.y - innerHeight / 2));
               for (const f of [0.03, 0.25, 0.5, 0.75, 0.97]) {
                 const vx = r.x + r.w * f - scrollX; const vy = r.y + r.h / 2 - scrollY;
                 samples += 1;
@@ -103,7 +107,6 @@ export async function captureNews({ out, url, key, log = console.log, width = 12
                 if (!top || !(block.contains(top) || top.contains(block))) covered += 1;
               }
             }
-            window.scrollTo(0, 0);
             key = { text: want, rects: lm, block: R(block.getBoundingClientRect()), blockText: norm(block.textContent).trim().slice(0, 600), covered, samples, offPage };
           }
         }
