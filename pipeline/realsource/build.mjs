@@ -149,8 +149,8 @@ try {
 *{margin:0;padding:0;box-sizing:border-box} html,body{width:1080px;height:1920px;overflow:hidden}
 body{font-family:'Inter','Noto Devanagari','Noto Color Emoji',sans-serif;background:repeating-linear-gradient(90deg,#121C2A 0 1px,transparent 1px 54px),repeating-linear-gradient(0deg,#121C2A 0 1px,transparent 1px 54px),linear-gradient(180deg,#070C18 0%,#040810 100%)}
 img{position:absolute;left:0;top:${last ? 150 : 285}px;width:1080px;height:1350px}
-.p{position:absolute;left:50px;right:50px;top:1530px;text-align:center;color:#0A0A0A;background:#FACC15;border-radius:28px;padding:26px 20px;font-weight:800;font-size:44px;line-height:1.3}
-.t{position:absolute;left:0;right:0;top:60px;text-align:center;color:#94A3B8;font-weight:700;font-size:30px}
+.p{position:absolute;left:50px;right:50px;top:1530px;text-align:center;color:#0A0A0A;background:#FACC15;border-radius:28px;padding:26px 20px;font-weight:800;font-size:52px;line-height:1.3}
+.t{position:absolute;left:0;right:0;top:60px;text-align:center;color:#94A3B8;font-weight:700;font-size:38px}
 </style></head><body>${last ? '<div class="t">' + dshort(date) + ' की ख़बरें · पूरी post feed में</div>' : ''}<img src="slide-${n}.jpg">${last ? '<div class="p" data-qa="prompt">Poora padhne ke liye profile dekho 👆<br>@rajesh_technical_trader</div>' : ''}</body></html>`;
     await fs.writeFile(path.join(out, `story-${n}.html`), html);
     await s.goto('file://' + path.join(out, `story-${n}.html`));
