@@ -35,3 +35,20 @@ bad = prev + [dict(mk(i), c=mk(i)['c'] + 40) for i in range(44)]
 print(json.dumps(align(bad, y)[1]))`);
   assert.ok(r >= 40);
 });
+
+test('09:15 open (pre-open auction vs first trade) is not compared; other fields stay strict', () => {
+  const r = py(`
+b = {'o': 22686.45, 'h': 22737.7, 'l': 22637.4, 'c': 22725.1}
+y915 = {'time': '09:15', 'o': 22671.3, 'h': 22737.7, 'l': 22637.4, 'c': 22725.1}
+y920 = dict(y915, time='09:20')
+print(json.dumps([dev(b, y915), round(dev(b, y920), 2), round(dev(dict(b, h=22760), y915), 2)]))`);
+  assert.deepEqual(r, [0, 15.15, 22.3]);
+});
+
+test('cutoff = last complete TradingView bar: the forming bar is excluded before the close', () => {
+  const r = py(`
+tb = [{'time': slot(i)} for i in range(47)]   # 09:15..13:05, 13:05 still forming
+y = [{'time': slot(i), 'h': 1} for i in range(50)]
+print(json.dumps([complete(tb, False)[-1]['time'], yahoo_window(y, complete(tb, False)[-1]['time'])[-1]['time'], len(complete(tb, True))]))`);
+  assert.deepEqual(r, ['13:00', '13:00', 47]);
+});

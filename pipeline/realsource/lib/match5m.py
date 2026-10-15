@@ -9,7 +9,12 @@ are taken only over slots TradingView also shows (same cutoff window).
 import datetime as dt
 
 def slot(i): return (dt.datetime(2000, 1, 1, 9, 15) + dt.timedelta(minutes=5 * i)).strftime('%H:%M')
-def dev(b, r): return max(abs(b[k] - r[k]) for k in ('o', 'h', 'l', 'c'))
+# TradingView's 09:15 5m candle opens at the first continuous trade; Yahoo's (and the
+# official/daily) open is the pre-open auction price. That one field is a different
+# quantity, not feed noise, so it is not compared here; the printed open is the
+# official daily open, which build.mjs checks exactly against Yahoo.
+def fields(r): return ('h', 'l', 'c') if r.get('time') == '09:15' else ('o', 'h', 'l', 'c')
+def dev(b, r): return max(abs(b[k] - r[k]) for k in fields(r))
 
 def align(bars, ytoday):
     """Best k (index of today's 09:15 bar in `bars`): smallest max deviation over the
@@ -30,3 +35,7 @@ def align(bars, ytoday):
 def yahoo_window(ytoday, last_time):
     """Yahoo rows up to and including TradingView's last slot (same cutoff)."""
     return [r for r in ytoday if r['time'] <= last_time]
+
+def complete(tb, after_close):
+    """TradingView bars that are finished: all after the close, else all but the newest (live) one."""
+    return list(tb) if after_close else list(tb[:-1])
