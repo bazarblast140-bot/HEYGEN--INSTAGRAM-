@@ -6,7 +6,8 @@ import json, sys, urllib.request, datetime as dt
 from PIL import Image
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from xalign import align
+from xalign import align as xalign
+from match5m import align, slot, yahoo_window
 
 run, today = sys.argv[1], sys.argv[2]
 bars = json.load(open(f'{run}/tv5-bars.json'))
@@ -28,36 +29,30 @@ ytoday = [r for r in yrows if r['date'] == today]
 def eq(a, b, tol=0.06): return abs(a - b) <= tol
 
 _im = Image.open(f'{run}/tv5.png').convert('RGB')
-xoff = align(_im, bars, meta)
+xoff = xalign(_im, bars, meta)
 if xoff[0]: print(f'x offset corrected by {xoff[0]} px ({xoff[1]} bars on candle)', file=sys.stderr)
 # Yahoo's in-progress row has an odd minute; keep whole 5-minute bars only.
 ytoday = [r for r in ytoday if int(r['time'][-2:]) % 5 == 0]
 TOL = round(0.0002 * (bars[-1]['c'] if bars else 22000), 2)  # 0.02% (~4.5 pts): TradingView and Yahoo use different tick feeds; observed diffs up to ~3 pts
-def dev(b, r): return max(abs(b[k] - r[k]) for k in ('o', 'h', 'l', 'c'))
+from match5m import dev
 # A bar matches when its close is within TOL and open/high/low within 3*TOL
 # (single wick ticks differ between the two feeds). Printed numbers (day high,
 # low, the price shown) are checked strictly against TOL below.
 def bar_ok(b, r): return abs(b['c'] - r['c']) <= TOL and all(abs(b[k] - r[k]) <= 3 * TOL for k in ('o', 'h', 'l'))
-# Align TradingView's bar sequence to Yahoo's session: the offset with the smallest max deviation.
-best = None
-for k in range(len(bars)):
-    tvN = len(bars) - k; n = min(tvN, len(ytoday))
-    if n < 3 or tvN - n > 1: continue  # at most one TradingView bar newer than Yahoo's
-    cmp_n = n - 1  # the newest bar may still be live
-    if cmp_n <= 0: continue
-    d = max(dev(bars[k + i], ytoday[i]) for i in range(cmp_n))
-    if best is None or d < best[1]: best = (k, d, n)
+# Align by TIME SLOT (match5m.py): Yahoo drops null rows, so index alignment shifts every later bar.
+best = align(bars, ytoday)
+ymap = {r['time']: r for r in ytoday}
 for b in bars: b['date'] = b['time'] = None; b['match'] = 'none'
 if best is None:
     problems.append('could not align TradingView 5m bars with Yahoo 5m bars')
     tb = []
 else:
-    k, maxdev, n = best
-    for i in range(n):
-        b = bars[k + i]; r = ytoday[i]
-        b.update(date=today, time=r['time'], yahoo=r, dev=round(dev(b, r), 2), match='ok' if bar_ok(b, r) else 'MISMATCH')
-    for b in bars[k + n:]:
-        b.update(date=today, time='live', match='live (newer than Yahoo)')
+    k = best[0]
+    for i, b in enumerate(bars[k:]):
+        t = slot(i); r = ymap.get(t)
+        if r: b.update(date=today, time=t, yahoo=r, dev=round(dev(b, r), 2), match='ok' if bar_ok(b, r) else 'MISMATCH')
+        elif ytoday and t > ytoday[-1]['time']: b.update(date=today, time=t, match='live (newer than Yahoo)')
+        else: b.update(date=today, time=t, match='no Yahoo row (null in feed)')
     tb = [b for b in bars if b['date'] == today]
     cmp = [b for b in tb[:-1] if b.get('yahoo')] if not daily.get('afterClose') else [b for b in tb if b.get('yahoo')]
     worst = max((b['dev'] for b in cmp), default=0)
@@ -69,8 +64,8 @@ else:
     if bad: problems.append(f'{len(bad)} 5m bars differ from Yahoo (close > {TOL} or o/h/l > {round(3 * TOL, 2)} points; worst {worst})')
     if tb and tb[0]['time'] != '09:15': problems.append(f'first aligned 5m bar is {tb[0]["time"]}, not 09:15')
     if daily.get('afterClose'):
-        if len(tb) != len(ytoday) or (ytoday and ytoday[-1]['time'] != '15:25'):
-            problems.append(f'session incomplete: {len(tb)} TradingView vs {len(ytoday)} Yahoo 5m bars, Yahoo last {ytoday[-1]["time"] if ytoday else "-"}')
+        if len(tb) != 75 or tb[-1]['time'] != '15:25' or not ytoday or ytoday[-1]['time'] != '15:25':
+            problems.append(f'session incomplete: {len(tb)} TradingView 5m bars (need 75, last {tb[-1]["time"] if tb else "-"}) vs {len(ytoday)} Yahoo rows, Yahoo last {ytoday[-1]["time"] if ytoday else "-"}')
     out_dev = {'tolerancePts': TOL, 'worstDevPts': worst, 'compared': len(cmp)}
 out = {'today': today, 'problems': problems, 'meta': meta, 'xOffsetPx': xoff[0], 'yahooCheck': out_dev if best else None}
 if tb:
@@ -81,7 +76,10 @@ if tb:
     done = [b for b in tb if b.get('yahoo') and abs(b['c'] - b['yahoo']['c']) <= TOL and (b is not tb[-1] or daily.get('afterClose'))]
     cl = done[-1] if done else tb[-1]
     if not done: problems.append('no Yahoo-verified complete 5m bar to print')
-    yhi = max(ytoday, key=lambda r: r['h']); ylo = min(ytoday, key=lambda r: r['l'])
+    yw = yahoo_window(ytoday, tb[-1]['time'])   # same cutoff as the TradingView chart
+    for e, nm in ((hi, 'high'), (lo, 'low')):
+        if not e.get('yahoo'): problems.append(f'day {nm} bar {e["time"]} has no Yahoo row to verify it')
+    yhi = max(yw, key=lambda r: r['h']); ylo = min(yw, key=lambda r: r['l'])
     if abs(hi['h'] - yhi['h']) > TOL or hi['time'] != yhi['time']: problems.append(f'day high {hi["h"]} @{hi["time"]} vs Yahoo {yhi["h"]} @{yhi["time"]}')
     if abs(lo['l'] - ylo['l']) > TOL or lo['time'] != ylo['time']: problems.append(f'day low {lo["l"]} @{lo["time"]} vs Yahoo {ylo["l"]} @{ylo["time"]}')
     T = daily['T']
