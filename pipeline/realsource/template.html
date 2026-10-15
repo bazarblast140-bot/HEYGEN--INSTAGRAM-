@@ -11,23 +11,23 @@ body { font-family: 'Inter','Noto Devanagari',sans-serif; color: var(--ink);
 #root { position: relative; width: 1080px; height: 1350px; }
 .slide { position: absolute; inset: 0; }
 .top { position: absolute; left: 60px; right: 60px; top: 52px; display: flex; justify-content: space-between; align-items: center; }
-.pill { background: var(--yellow); color: #0A0A0A; border-radius: 23px; padding: 8px 20px; font-weight: 800; font-size: 26px; white-space: nowrap; }
-.page { color: var(--muted); font-weight: 700; font-size: 26px; }
+.pill { background: var(--yellow); color: #0A0A0A; border-radius: 23px; padding: 8px 20px; font-weight: 800; font-size: calc(var(--k, 1) * 34px); white-space: nowrap; }
+.page { color: var(--muted); font-weight: 700; font-size: calc(var(--k, 1) * 34px); }
 .h { position: absolute; left: 60px; right: 60px; color: var(--yellow); font-weight: 800; line-height: 1.22; }
-.foot { position: absolute; left: 60px; right: 60px; bottom: 34px; display: flex; justify-content: space-between; align-items: center; font-size: 24px; font-weight: 700; gap: 20px; }
+.foot { position: absolute; left: 60px; right: 60px; bottom: 34px; display: flex; justify-content: space-between; align-items: center; font-size: calc(var(--k, 1) * 31px); font-weight: 700; gap: 20px; }
 .handle { color: var(--gold); white-space: nowrap; }
-.src { color: var(--muted); font-size: 21px; font-weight: 600; text-align: right; }
+.src { color: var(--muted); font-size: calc(var(--k, 1) * 27px); font-weight: 600; text-align: right; }
 .prog { position: absolute; left: 60px; right: 60px; bottom: 22px; height: 6px; border-radius: 3px; background: #1C2434; }
 .prog i { display: block; height: 100%; border-radius: 3px; background: var(--yellow); }
 .shot { position: absolute; border-radius: 14px; overflow: hidden; border: 2px solid #2A3A55; background: #fff; }
 .shot img { position: absolute; display: block; max-width: none; }
 .shot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.tag { position: absolute; font-weight: 800; font-size: 23px; line-height: 1.2; padding: 6px 11px; border-radius: 9px; background: rgba(4,8,16,0.88); white-space: nowrap; }
+.tag { position: absolute; font-weight: 800; font-size: calc(var(--k, 1) * 30px); line-height: 1.2; padding: 6px 11px; border-radius: 9px; background: rgba(4,8,16,0.88); white-space: nowrap; }
 .card { position: absolute; left: 60px; right: 60px; background: #0C1220; border: 2px solid #2A3A55; border-radius: 18px; padding: 24px 30px; }
-.card h3 { font-size: 34px; font-weight: 800; margin-bottom: 10px; }
-.card p { font-size: 29px; font-weight: 600; line-height: 1.38; color: var(--ink); }
-.facts { position: absolute; left: 60px; right: 60px; font-size: 34px; font-weight: 700; line-height: 1.4; }
-.note { position: absolute; left: 60px; right: 60px; font-size: 26px; color: var(--muted); font-weight: 600; line-height: 1.4; }
+.card h3 { font-size: calc(var(--k, 1) * 44px); font-weight: 800; margin-bottom: 10px; }
+.card p { font-size: calc(var(--k, 1) * 38px); font-weight: 600; line-height: 1.38; color: var(--ink); }
+.facts { position: absolute; left: 60px; right: 60px; font-size: calc(var(--k, 1) * 44px); font-weight: 700; line-height: 1.4; }
+.note { position: absolute; left: 60px; right: 60px; font-size: calc(var(--k, 1) * 34px); color: var(--muted); font-weight: 600; line-height: 1.4; }
 </style></head><body><div id="root"></div>
 <script>
 const fmt = (v) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -37,6 +37,7 @@ const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','
 const dshort = (iso) => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${d} ${MON[m - 1]}`; };
 const dlong = (iso) => `${dshort(iso)} ${iso.slice(0, 4)}`;
 const TOTAL = 9;
+const MIN_FONT = 22;   // QA floor (was 21); every size is base × --k, --k shrinks only if the slide would overflow
 
 // A crop of an unaltered screenshot, scaled to `width`; overlays are SVG in SOURCE pixel coords.
 // padTop (source px): blank white margin above the crop (no screenshot pixels there); svg coords cover it too.
@@ -99,12 +100,12 @@ function build(D) {
   slides[1] = () => {
     const W = Math.round(Math.min(900, 650 * zoomCrop.w / zoomCrop.h)), s = W / zoomCrop.w, H = Math.round(zoomCrop.h * s), top = 470;
     return frame(1, 'NIFTY 50 · Daily chart', `
-    <div class="h" data-block data-qa="h" style="top:140px;font-size:64px">${hook}</div>
+    <div class="h" data-block data-qa="h" style="top:140px;font-size:calc(var(--k, 1) * 74px)">${hook}</div>
     <div class="facts" data-block data-qa="facts" style="top:${C.hook2 ? 330 : 318}px">
       ${day} close: <span style="color:${up ? 'var(--green)' : down ? 'var(--red)' : 'var(--ink)'}">${fmt(T.c)} (${pctS(D.pct)})</span><br>
       ${sLabel}: <span style="color:var(--yellow)">${fmt(S.price)}</span>${s52}</div>
     ${shot({ src: 'tv.png', natural: tvNat, crop: zoomCrop, left: (1080 - W) / 2, top, width: W, svg: circle(S.x, Y(S.price), 34, '#FACC15', 7) })}
-    <div class="note" data-block data-qa="note" style="top:${top + H + 22}px;color:var(--ink);font-weight:700;font-size:28px">असली TradingView chart + असली ख़बर → swipe करो</div>`,
+    <div class="note" data-block data-qa="note" style="top:${top + H + 22}px;color:var(--ink);font-weight:700;font-size:calc(var(--k, 1) * 36px)">असली TradingView chart + असली ख़बर → swipe करो</div>`,
     `Chart: TradingView · News: ${site}`);
   };
   slides.daily = () => {
@@ -112,11 +113,11 @@ function build(D) {
     const at = place(fullCrop, s, left, top);
     const x0 = fullCrop.x;
     return frame(7, 'Analysis · NSE:NIFTY · 1D', `
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:40px">Analysis (ख़बर नहीं): Nifty के key levels</div>
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 52px)">Analysis (ख़बर नहीं): Nifty के key levels</div>
     ${shot({ src: 'tv.png', natural: tvNat, crop: fullCrop, left, top, height: H, svg: zones(x0, 5) + circle(S.x, Y(S.price), 50, '#FACC15', 10) })}
-    <div class="tag" data-qa="tag" style="${at(fullCrop.x + 240, zoneTop - 100)};color:var(--green);font-size:22px">TARGET ZONE</div>
-    <div class="tag" data-qa="tag" style="${at(fullCrop.x + fullCrop.w * 0.42, Y(S.price) + 60)};color:var(--red);font-size:22px">SL ZONE</div>
-    <div class="card" data-block data-qa="card" style="top:${top + H + 16}px;padding:14px 26px"><p style="font-size:24px;line-height:1.45">
+    <div class="tag" data-qa="tag" style="${at(fullCrop.x + 240, zoneTop - 100)};color:var(--green);font-size:calc(var(--k, 1) * 29px)">TARGET ZONE</div>
+    <div class="tag" data-qa="tag" style="${at(fullCrop.x + fullCrop.w * 0.42, Y(S.price) + 60)};color:var(--red);font-size:calc(var(--k, 1) * 29px)">SL ZONE</div>
+    <div class="card" data-block data-qa="card" style="top:${top + H + 16}px;padding:14px 26px"><p style="font-size:calc(var(--k, 1) * 31px);line-height:1.45">
       <span style="color:var(--yellow)">● ${sLabel} ${fmt(S.price)}</span>${s52} (key level)<br>
       <span style="color:var(--green)">■ Resistance / possible target: ${tgtText}</span> (guaranteed नहीं)<br>
       <span style="color:var(--red)">■ SL zone: ${fmt(S.price)} के नीचे daily close</span></p></div>`,
@@ -159,21 +160,21 @@ function build(D) {
     };
     const closeLbl = I.close.isClose ? `दिन का close ${fmt(I.close.price)}` : `${I.close.asOf} IST पर ${fmt(I.close.price)} (${I.close.time} candle)`;
     return frame(2, `Nifty आज · 5-minute chart`, `
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:44px">${I.close.isClose ? 'दिन भर का range' : `आज ${I.close.asOf} IST तक का range`}: ${fmt(I.range)} points</div>
-    <div class="facts" data-block data-qa="facts" style="top:178px;font-size:29px;font-weight:600;color:var(--ink)">${I.low.time <= I.high.time
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 57px)">${I.close.isClose ? 'दिन भर का range' : `आज ${I.close.asOf} IST तक का range`}: ${fmt(I.range)} points</div>
+    <div class="facts" data-block data-qa="facts" style="top:178px;font-size:calc(var(--k, 1) * 38px);font-weight:600;color:var(--ink)">${I.low.time <= I.high.time
       ? `Low <span style="color:var(--red)">${fmt(I.low.price)}</span> (${I.low.time}) → High <span style="color:var(--green)">${fmt(I.high.price)}</span> (${I.high.time})`
       : `High <span style="color:var(--green)">${fmt(I.high.price)}</span> (${I.high.time}) → Low <span style="color:var(--red)">${fmt(I.low.price)}</span> (${I.low.time})`} IST</div>
     ${shot({ src: 'tv5.png', natural: D.tv5Natural, crop: img, padTop, padBottom, left, top, width: W, svg })}
     ${side(I.high, Y5(I.high.price), -1, 300, 'var(--green)', `High ${fmt(I.high.price)} · ${I.high.time}`)}
     ${side(I.low, Y5(I.low.price), 1, 290, 'var(--red)', `Low ${fmt(I.low.price)} · ${I.low.time}`)}
     ${t5(I.open.x + 140 / sc, Y5(I.open.price) - 60 / sc, 250, '#CBD5E1', `Open ${fmt(I.open.price)} · ${I.open.time}`)}
-    <div class="card" data-block data-qa="card" style="top:${top + H + 18}px;padding:14px 26px"><p style="font-size:24px;line-height:1.45">
+    <div class="card" data-block data-qa="card" style="top:${top + H + 18}px;padding:14px 26px"><p style="font-size:calc(var(--k, 1) * 31px);line-height:1.45">
       <span style="color:#38BDF8">● ${closeLbl}</span> · range = ${fmt(I.high.price)} − ${fmt(I.low.price)} (${I.rangePct.toFixed(2)}%)<br>
       TradingView 5m = Yahoo 5m (${I.yahooCheck.compared} candles, max फ़र्क ${I.yahooCheck.worstDevPts} pt)${I.close.isClose ? '' : '<br><span style="color:var(--muted)">TradingView public data ~15 min delayed · यह close नहीं है</span>'}</p></div>`,
     `TradingView · NIFTY 5m · ${dlong(D.today)}`);
   };
   const newsSlide = (n, A) => {
-    const K = A.dpr || 2, NP = `${A.dir}/news.png`, nat = A.natural, nd = dlong(A.dateIso), cardH = 196, pad = 12 * K;
+    const K = A.dpr || 2, NP = `${A.dir}/news.png`, nat = A.natural, nd = dlong(A.dateIso), cardH = 250, pad = 12 * K;
     const hl = (r) => `<rect x="${r.x * K - 4}" y="${r.y * K + r.h * K * 0.1}" width="${r.w * K + 8}" height="${r.h * K * 0.82}" fill="#FDE047" opacity="0.85"/>`;
     const mul = (inner) => `<g style="mix-blend-mode:multiply">${inner}</g>`;
     const h1 = A.h1, dt = A.date?.rect;
@@ -182,7 +183,7 @@ function build(D) {
     const hy1 = Math.max(h1.y + h1.h, dateNear ? dt.y + dt.h : 0);
     const headCrop = { x: Math.max(0, hx0 * K - pad), y: h1.y * K - 5 * K, w: (hx1 - hx0) * K + 2 * pad, h: (hy1 - h1.y) * K + 10 * K };
     const maxH = Math.max(...A.headlineLines.map((r) => r.h));
-    let y = 182, html = '';
+    let y = 112 + (A.title.length > 34 ? 2 : 1) * 64 + 14, html = '';   // below the (bigger) title
     if (A.mast) {
       const m = A.mast, mc = { x: Math.max(0, m.x * K - 4 * K), y: Math.max(0, m.y * K - 6 * K), w: m.w * K + 8 * K, h: m.h * K + 12 * K };
       const mh = 64, mw = Math.round(Math.min(560, mc.w * mh / mc.h));
@@ -196,7 +197,7 @@ function build(D) {
     if (dt && !dateNear) {
       const dc = { x: Math.max(0, dt.x * K - pad), y: dt.y * K - 5 * K, w: Math.min(nat.w, dt.w * K + 2 * pad), h: dt.h * K + 10 * K };
       const dw = Math.round(Math.min(750, dc.w * 66 / dc.h)), dh = Math.round(dc.h * dw / dc.w); // stays inside the 60 px safe margin
-      html += `<div class="note" data-block data-qa="note" style="top:${y + 8}px;right:auto;width:200px;font-size:23px">Article की date:</div>` + shot({ src: NP, natural: nat, crop: dc, left: 270, top: y, width: dw });
+      html += `<div class="note" data-block data-qa="note" style="top:${y + 8}px;right:auto;width:200px;font-size:calc(var(--k, 1) * 30px)">Article की date:</div>` + shot({ src: NP, natural: nat, crop: dc, left: 270, top: y, width: dw });
       y += dh + 14;
     }
     if (A.key && A.key.rects.length) {
@@ -210,15 +211,15 @@ function build(D) {
     }
     return `<div class="slide">
     <div class="top"><span class="pill" data-qa="pill">${A.kicker} · ख़बर · ${nd}</span><span class="page">${n}/${TOTAL}</span></div>
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:40px">${A.title}</div>
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 52px)">${A.title}</div>
     ${html}
-    <div class="card" data-block data-qa="card" style="top:${1350 - 118 - cardH}px;height:${cardH}px;padding:14px 26px;display:flex;flex-direction:column;justify-content:center"><p style="font-size:27px;line-height:1.4">${A.plain}</p>
-      <p style="font-size:22px;line-height:1.35;color:var(--green);margin-top:6px">✓ ${A.checkLine}</p></div>
+    <div class="card" data-block data-qa="card" style="top:${1350 - 118 - cardH}px;height:${cardH}px;padding:14px 26px;display:flex;flex-direction:column;justify-content:center"><p style="font-size:calc(var(--k, 1) * 35px);line-height:1.4">${A.plain}</p>
+      <p style="font-size:calc(var(--k, 1) * 29px);line-height:1.35;color:var(--green);margin-top:6px">✓ ${A.checkLine}</p></div>
     <div class="foot" data-qa="foot"><span class="handle">@rajesh_technical_trader</span><span class="src">Source: ${A.siteName} · ${nd}</span></div>
     <div class="prog"><i style="width:${(n / TOTAL) * 100}%"></i></div></div>`;
   };
   slides[5] = () => frame(5, 'Takeaway', `
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:46px">दोनों scenario तैयार रखो</div>
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 60px)">दोनों scenario तैयार रखो</div>
     <div style="position:absolute;left:60px;right:60px;top:200px;display:flex;flex-direction:column;gap:26px">
     <div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;border-color:rgba(34,197,94,0.7)"><h3 style="color:var(--green)">Bull case</h3>
       <p>Nifty ${fmt(S.price)} (${sLabel}) के ऊपर टिका रहे, तो ${R2 ? `${fmt(R1.price)} – ${fmt(R2.price)}` : `${fmt(R1.price)} (${dshort(R1.date)} high)`} अगला resistance / possible target. उसके ऊपर daily close = strength.</p></div>
@@ -229,44 +230,45 @@ function build(D) {
     <div class="note" data-block data-qa="note" style="position:relative;left:0;right:0">सिर्फ़ शिक्षा के लिए — निवेश सलाह नहीं. Levels guaranteed नहीं हैं; trade से पहले अपनी research करें.</div></div>`,
     `Levels: TradingView NIFTY 1D, ${day} ${D.capturedAtIst.slice(11, 16)} IST`);
   slides[6] = () => frame(6, 'Save · Follow', `
-    <div class="h" data-block data-qa="h" style="top:330px;text-align:center;font-size:72px">सेव करो, फ़ॉलो करो</div>
-    <div class="facts" data-block data-qa="facts" style="left:90px;right:90px;top:520px;text-align:center;font-size:36px;line-height:1.45">असली chart + असली ख़बर से<br>simple technical analysis</div>
-    <div style="position:absolute;left:0;right:0;top:760px;text-align:center"><span class="pill" style="font-size:34px;padding:14px 34px">@rajesh_technical_trader</span></div>
+    <div class="h" data-block data-qa="h" style="top:330px;text-align:center;font-size:calc(var(--k, 1) * 83px)">सेव करो, फ़ॉलो करो</div>
+    <div class="facts" data-block data-qa="facts" style="left:90px;right:90px;top:520px;text-align:center;font-size:calc(var(--k, 1) * 47px);line-height:1.45">असली chart + असली ख़बर से<br>simple technical analysis</div>
+    <div style="position:absolute;left:0;right:0;top:760px;text-align:center"><span class="pill" style="font-size:calc(var(--k, 1) * 44px);padding:14px 34px">@rajesh_technical_trader</span></div>
     <div class="note" data-block data-qa="note" style="left:90px;right:90px;top:900px;text-align:center">Comment करो: Nifty ${fmt(S.price)} बचाएगा या ${fmt(R1.price)} पार करेगा?</div>`, '');
   slides.story = () => {
     const W = 960, s = W / zoomCrop.w, H = Math.round(zoomCrop.h * s), top = 640;
     return `<div class="slide" style="height:1920px">
     <div class="top" style="top:180px"><span class="pill" data-qa="pill">NIFTY 50 · ${day}</span><span class="page"></span></div>
-    <div class="h" data-block data-qa="h" style="top:270px;font-size:68px">${hook}</div>
+    <div class="h" data-block data-qa="h" style="top:270px;font-size:calc(var(--k, 1) * 78px)">${hook}</div>
     <div class="facts" data-block data-qa="facts" style="top:470px">Close: ${fmt(T.c)} (${pctS(D.pct)}) · ${sLabel}: ${fmt(S.price)}</div>
     ${shot({ src: 'tv.png', natural: tvNat, crop: zoomCrop, left: 60, top, width: W, svg: circle(S.x, Y(S.price), 30, '#FACC15', 7) })}
     <div class="facts" data-block data-qa="facts" style="top:${top + H + 40}px;text-align:center;color:var(--yellow)">पूरा analysis नई post में → feed देखो</div>
     <div class="note" data-block data-qa="note" style="top:${top + H + 120}px;text-align:center">Chart: TradingView · News: ${site} · सिर्फ़ शिक्षा के लिए</div>
-    <div style="position:absolute;left:0;right:0;bottom:240px;text-align:center"><span class="handle" style="font-size:34px;font-weight:800">@rajesh_technical_trader</span></div></div>`;
+    <div style="position:absolute;left:0;right:0;bottom:240px;text-align:center"><span class="handle" style="font-size:calc(var(--k, 1) * 44px);font-weight:800">@rajesh_technical_trader</span></div></div>`;
   };
   const ART = D.articles;
+  // Slide 1 = the HOOK (Rajesh, 15 Oct 2026: "hook wala slide phle, text jitna ho sake bada"):
+  // the strongest real-sourced headline claim, biggest text in the carousel, then the 4 sourced lines.
   slides[1] = () => frame(1, `आज की ख़बरें · ${dlong(D.today)}`, `
-    <div class="h" data-block data-qa="h" style="top:120px;font-size:46px">${C.hook}</div>
-    <div class="facts" data-block data-qa="facts" style="top:${C.hookTop || 320}px;font-size:32px">Nifty ${D.intra.close.isClose ? 'close' : `${D.intra.close.asOf} IST पर`}: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:24px;color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
-    <div style="position:absolute;left:60px;right:60px;top:${(C.hookTop || 320) + 80}px;display:flex;flex-direction:column;gap:20px">
-    ${ART.map((A, i) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:18px 26px"><p style="font-size:24px;color:var(--yellow);font-weight:800">${i + 3}/${TOTAL} · ${A.kicker}</p><p style="font-size:30px">${A.coverLine}</p><p style="font-size:21px;color:var(--muted)">${A.siteName} · ${dlong(A.dateIso)}</p></div>`).join('')}
-    </div>
-    <div class="note" data-block data-qa="note" style="top:1150px;color:var(--ink);font-weight:700;font-size:28px;text-align:center">असली ख़बर + असली chart → swipe करो</div>`,
+    <div style="position:absolute;left:60px;right:60px;top:112px;bottom:96px;display:flex;flex-direction:column;justify-content:space-between;gap:14px">
+    <div class="h" data-block data-qa="h" data-hook style="position:relative;left:0;right:0;flex-shrink:0;font-size:calc(var(--k, 1) * 84px);line-height:1.14">${C.hook}</div>
+    <div class="facts" data-block data-qa="facts" style="position:relative;left:0;right:0;flex-shrink:0;font-size:calc(var(--k, 1) * 49px)">Nifty ${D.intra.close.isClose ? 'close' : `${D.intra.close.asOf} IST पर`}: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:calc(var(--k, 1) * 36px);color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
+    ${ART.map((A, i) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;flex-shrink:0;padding:12px 24px"><p style="font-size:calc(var(--k, 1) * 40px);line-height:1.25"><span style="color:var(--yellow);font-weight:800">${i + 3}/${TOTAL} · ${A.kicker}:</span> ${A.coverLine}</p><p style="font-size:calc(var(--k, 1) * 30px);color:var(--muted)">${A.siteName} · ${dlong(A.dateIso)}</p></div>`).join('')}
+    <div class="note" data-block data-qa="note" style="position:relative;left:0;right:0;flex-shrink:0;color:var(--ink);font-weight:700;font-size:calc(var(--k, 1) * 42px);text-align:center">असली ख़बर + असली chart → swipe करो</div></div>`,
     `News: ${[...new Set(ART.map((A) => A.siteName))].join(' · ')} · Chart: TradingView`);
   slides[2] = slides.m5;
   ART.forEach((A, i) => { slides[3 + i] = () => newsSlide(3 + i, A); });
   slides[7] = slides.daily;
   slides[8] = () => frame(8, 'आज का सार', `
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:46px">4 ख़बरें, 1 line में</div>
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 60px)">4 ख़बरें, 1 line में</div>
     <div style="position:absolute;left:60px;right:60px;top:200px;display:flex;flex-direction:column;gap:18px">
-    ${ART.map((A) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:16px 26px"><p style="font-size:27px;line-height:1.4"><span style="color:var(--yellow);font-weight:800">ख़बर · ${A.kicker}:</span> ${A.summary}</p></div>`).join('')}
-    <div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:16px 26px;border-color:rgba(56,189,248,0.7)"><p style="font-size:27px;line-height:1.4"><span style="color:#38BDF8;font-weight:800">Analysis (हमारा chart rule):</span> Nifty ${fmt(S.price)} (${sLabel}) key support; ${tgtText} resistance. Guaranteed कुछ नहीं.</p></div>
-    <div class="note" data-block data-qa="note" style="position:relative;left:0;right:0;font-size:25px">सिर्फ़ शिक्षा के लिए — निवेश सलाह नहीं. ख़बरें source से हैं; analysis हमारा है. Trade/निवेश से पहले अपनी research करें.</div></div>`,
+    ${ART.map((A) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:16px 26px"><p style="font-size:calc(var(--k, 1) * 35px);line-height:1.4"><span style="color:var(--yellow);font-weight:800">ख़बर · ${A.kicker}:</span> ${A.summary}</p></div>`).join('')}
+    <div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:16px 26px;border-color:rgba(56,189,248,0.7)"><p style="font-size:calc(var(--k, 1) * 35px);line-height:1.4"><span style="color:#38BDF8;font-weight:800">Analysis (हमारा chart rule):</span> Nifty ${fmt(S.price)} (${sLabel}) key support; ${tgtText} resistance. Guaranteed कुछ नहीं.</p></div>
+    <div class="note" data-block data-qa="note" style="position:relative;left:0;right:0;font-size:calc(var(--k, 1) * 32px)">सिर्फ़ शिक्षा के लिए — निवेश सलाह नहीं. ख़बरें source से हैं; analysis हमारा है. Trade/निवेश से पहले अपनी research करें.</div></div>`,
     'News: sources on slides 3–6 · Levels: TradingView NIFTY 1D');
   slides[9] = () => frame(9, 'Save · Follow', `
-    <div class="h" data-block data-qa="h" style="top:330px;text-align:center;font-size:72px">सेव करो, फ़ॉलो करो</div>
-    <div class="facts" data-block data-qa="facts" style="left:90px;right:90px;top:520px;text-align:center;font-size:36px;line-height:1.45">रोज़ दोपहर: finance, mutual funds,<br>stocks और market की असली ख़बरें</div>
-    <div style="position:absolute;left:0;right:0;top:760px;text-align:center"><span class="pill" style="font-size:34px;padding:14px 34px">@rajesh_technical_trader</span></div>
+    <div class="h" data-block data-qa="h" style="top:330px;text-align:center;font-size:calc(var(--k, 1) * 83px)">सेव करो, फ़ॉलो करो</div>
+    <div class="facts" data-block data-qa="facts" style="left:90px;right:90px;top:520px;text-align:center;font-size:calc(var(--k, 1) * 47px);line-height:1.45">रोज़ दोपहर: finance, mutual funds,<br>stocks और market की असली ख़बरें</div>
+    <div style="position:absolute;left:0;right:0;top:760px;text-align:center"><span class="pill" style="font-size:calc(var(--k, 1) * 44px);padding:14px 34px">@rajesh_technical_trader</span></div>
     <div class="note" data-block data-qa="note" style="left:90px;right:90px;top:900px;text-align:center">Comment करो: आज की कौन सी ख़बर आपके काम की है?</div>`, '');
   return slides;
 }
@@ -288,9 +290,18 @@ function qa(height) {
     if (a.left < b.right - 2 && b.left < a.right - 2 && a.top < b.bottom - 2 && b.top < a.bottom - 2) out.push(`overlap: ${blocks[i].e.dataset.qa} "${blocks[i].e.innerText.slice(0, 25)}" × ${blocks[j].e.dataset.qa} "${blocks[j].e.innerText.slice(0, 25)}"`);
   }
   const fs = [...document.querySelectorAll('.slide *')].filter((e) => e.childNodes.length && [...e.childNodes].some((n) => n.nodeType === 3 && n.data.trim())).map((e) => parseFloat(getComputedStyle(e).fontSize));
-  if (fs.length && Math.min(...fs) < 21) out.push(`text smaller than 21px (${Math.min(...fs)}px)`);
+  if (fs.length && Math.min(...fs) < MIN_FONT) out.push(`text smaller than ${MIN_FONT}px (${Math.min(...fs)}px)`);
   return out;
 }
-window.render = (n) => { document.body.className = n === 'story' ? 'story' : ''; document.getElementById('root').style.height = n === 'story' ? '1920px' : '1350px'; document.getElementById('root').innerHTML = build(window.DATA)[n](); };
+// Largest text that fits: render at --k = 1 and step down only while layout QA finds overflow/overlap.
+window.render = (n) => {
+  const root = document.getElementById('root'), h = n === 'story' ? 1920 : 1350;
+  document.body.className = n === 'story' ? 'story' : ''; root.style.height = h + 'px';
+  root.innerHTML = build(window.DATA)[n]();
+  for (let k = 1; k >= 0.8; k = Math.round((k - 0.02) * 100) / 100) {
+    root.style.setProperty('--k', k);
+    if (!qa(h).some((x) => !/smaller than/.test(x))) break;
+  }
+};
 window.qa = qa;
 </script></body></html>

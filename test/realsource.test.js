@@ -103,3 +103,16 @@ test('the cover is written in code from the Market article headline and passes t
   assert.ok(p.articles[0].title.length <= 48 && !/\S…\S/.test(p.articles[0].title));
   assert.deepEqual(pickProblems(p, c), []);
 });
+
+test('layout: slide 1 is the hook (biggest text) and all text is large', async () => {
+  const t = await fs.readFile(new URL('../pipeline/realsource/template.html', import.meta.url), 'utf8');
+  const s1 = t.slice(t.indexOf('slides[1] = () => frame(1,'), t.indexOf('slides[2] = slides.m5;'));
+  assert.match(s1, /data-hook[^>]*>\$\{C\.hook\}</, 'slide 1 must open with the real-sourced hook');
+  assert.ok(s1.indexOf('${C.hook}') < s1.indexOf('ART.map'), 'hook comes before the article lines');
+  const sizes = [...t.matchAll(/font-size: ?(?:calc\(var\(--k, 1\) \* )?(\d+)px/g)].map((m) => +m[1]);
+  const hook = +s1.match(/data-hook[^>]*\* (\d+)px/)[1];
+  assert.ok(hook >= 72 && hook >= Math.max(...sizes), `hook ${hook}px must be the largest text`);
+  assert.ok(Math.min(...sizes) >= 27, `smallest base font ${Math.min(...sizes)}px`);
+  assert.ok(+t.match(/const MIN_FONT = (\d+)/)[1] >= 22, 'QA floor');
+  assert.match(t, /k >= 0\.8/, 'auto-fit never shrinks below 80%');
+});
