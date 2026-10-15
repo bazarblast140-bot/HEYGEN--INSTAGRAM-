@@ -7,7 +7,7 @@ from PIL import Image
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from xalign import align as xalign
-from match5m import align, slot, yahoo_window
+from match5m import align, slot, yahoo_window, complete, fields
 
 run, today = sys.argv[1], sys.argv[2]
 bars = json.load(open(f'{run}/tv5-bars.json'))
@@ -38,7 +38,7 @@ from match5m import dev
 # A bar matches when its close is within TOL and open/high/low within 3*TOL
 # (single wick ticks differ between the two feeds). Printed numbers (day high,
 # low, the price shown) are checked strictly against TOL below.
-def bar_ok(b, r): return abs(b['c'] - r['c']) <= TOL and all(abs(b[k] - r[k]) <= 3 * TOL for k in ('o', 'h', 'l'))
+def bar_ok(b, r): return abs(b['c'] - r['c']) <= TOL and all(abs(b[k] - r[k]) <= 3 * TOL for k in fields(r) if k != 'c')
 # Align by TIME SLOT (match5m.py): Yahoo drops null rows, so index alignment shifts every later bar.
 best = align(bars, ytoday)
 ymap = {r['time']: r for r in ytoday}
@@ -76,9 +76,12 @@ if tb:
     done = [b for b in tb if b.get('yahoo') and abs(b['c'] - b['yahoo']['c']) <= TOL and (b is not tb[-1] or daily.get('afterClose'))]
     cl = done[-1] if done else tb[-1]
     if not done: problems.append('no Yahoo-verified complete 5m bar to print')
-    yw = yahoo_window(ytoday, tb[-1]['time'])   # same cutoff as the TradingView chart
+    # Same cutoff on both sides: TradingView's last COMPLETE bar (the live one is still forming).
+    fin = complete(tb, daily.get('afterClose')) or tb
+    yw = yahoo_window(ytoday, fin[-1]['time']) or ytoday
     for e, nm in ((hi, 'high'), (lo, 'low')):
-        if not e.get('yahoo'): problems.append(f'day {nm} bar {e["time"]} has no Yahoo row to verify it')
+        if e not in fin: problems.append(f'day {nm} {e["h" if nm == "high" else "l"]} is in the live {e["time"]} bar (still forming, cannot be verified)')
+        elif not e.get('yahoo'): problems.append(f'day {nm} bar {e["time"]} has no Yahoo row to verify it')
     yhi = max(yw, key=lambda r: r['h']); ylo = min(yw, key=lambda r: r['l'])
     if abs(hi['h'] - yhi['h']) > TOL or hi['time'] != yhi['time']: problems.append(f'day high {hi["h"]} @{hi["time"]} vs Yahoo {yhi["h"]} @{yhi["time"]}')
     if abs(lo['l'] - ylo['l']) > TOL or lo['time'] != ylo['time']: problems.append(f'day low {lo["l"]} @{lo["time"]} vs Yahoo {ylo["l"]} @{ylo["time"]}')
@@ -90,7 +93,8 @@ if tb:
     out.update({
         'high': {'price': hi['h'], 'time': hi['time'], 'x': hi['xCss'] * meta['dpr']},
         'low': {'price': lo['l'], 'time': lo['time'], 'x': lo['xCss'] * meta['dpr']},
-        'open': {'price': op['o'], 'time': op['time'], 'x': op['xCss'] * meta['dpr']},
+        # official open (auction price) = TradingView daily open, checked == Yahoo open in build.mjs
+        'open': {'price': daily['T']['o'] if op['time'] == '09:15' else op['o'], 'time': op['time'], 'x': op['xCss'] * meta['dpr']},
         'close': {'price': cl['c'], 'time': cl['time'], 'asOf': (dt.datetime.strptime(cl['time'], '%H:%M') + dt.timedelta(minutes=5)).strftime('%H:%M') if cl.get('time') and cl['time'] != 'live' else None,
                   'x': cl['xCss'] * meta['dpr'], 'verified': bool(done), 'isClose': bool(daily.get('afterClose') and cl.get('time') == '15:25'),
                   'live': not (daily.get('afterClose') and cl.get('time') == '15:25')},
