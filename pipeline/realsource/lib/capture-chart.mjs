@@ -45,6 +45,7 @@ export async function captureChart({ out, log = console.log, zoomSteps = 10, int
     await p.waitForTimeout(1200);
     // Mouse off the chart: legend shows the last bar, no crosshair in the shot.
     await p.mouse.move(550, 982);
+    mergeLiveRuns(runs);
     await p.waitForTimeout(1500);
     await p.locator('[class*="toast"] button, [data-name="toast-close"]').first().click({ timeout: 800 }).catch(() => {});
     await p.waitForTimeout(500);
@@ -104,4 +105,16 @@ export async function captureChart({ out, log = console.log, zoomSteps = 10, int
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
   const out = process.argv[2] || 'out';
   await captureChart({ out });
+}
+
+// The live (last) bar can tick while the crosshair sweeps over it, which splits its
+// hover run in two (16 Oct 2026: 76 "bars", the stale reading matched no Yahoo date).
+// Contiguous trailing runs with the same open are ONE bar: merge them, keep the newest values.
+export function mergeLiveRuns(runs) {
+  while (runs.length >= 2) {
+    const a = runs[runs.length - 2], b = runs[runs.length - 1];
+    if (a.o !== b.o || b.x0 - a.x1 > 1) break;
+    runs.splice(runs.length - 2, 2, { ...b, x0: a.x0 });
+  }
+  return runs;
 }
