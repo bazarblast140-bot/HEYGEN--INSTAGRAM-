@@ -173,6 +173,19 @@ function build(D) {
       TradingView 5m = Yahoo 5m (${I.yahooCheck.compared} candles, max फ़र्क ${I.yahooCheck.worstDevPts} pt)${I.close.isClose ? '' : '<br><span style="color:var(--muted)">TradingView public data ~15 min delayed · यह close नहीं है</span>'}</p></div>`,
     `TradingView · NIFTY 5m · ${dlong(D.today)}`);
   };
+  // The article's own headline (+ its date line when adjacent) cropped from its unaltered screenshot.
+  const headShot = (A, top, maxW, maxH) => {
+    const K = A.dpr || 2, NP = `${A.dir}/news.png`, nat = A.natural, pad = 12 * K, h1 = A.h1, dt = A.date?.rect;
+    const hl = (r) => `<rect x="${r.x * K - 4}" y="${r.y * K + r.h * K * 0.1}" width="${r.w * K + 8}" height="${r.h * K * 0.82}" fill="#FDE047" opacity="0.85"/>`;
+    const dateNear = dt && dt.y >= h1.y - 10 && dt.y < h1.y + h1.h + 120;
+    const hx0 = Math.min(h1.x, dateNear ? dt.x : 1e9), hx1 = Math.max(h1.x + h1.w, dateNear ? dt.x + dt.w : 0);
+    const hy1 = Math.max(h1.y + h1.h, dateNear ? dt.y + dt.h : 0);
+    const crop = { x: Math.max(0, hx0 * K - pad), y: h1.y * K - 5 * K, w: (hx1 - hx0) * K + 2 * pad, h: (hy1 - h1.y) * K + 10 * K };
+    const maxH1 = Math.max(...A.headlineLines.map((r) => r.h));
+    let w = maxW, h = Math.round(crop.h * w / crop.w);
+    if (h > maxH) { h = maxH; w = Math.round(crop.w * h / crop.h); }
+    return { h, html: shot({ src: NP, natural: nat, crop, left: Math.round((1080 - w) / 2), top, width: w, svg: `<g style="mix-blend-mode:multiply">${A.headlineLines.filter((r) => r.h >= maxH1 * 0.7).map(hl).join('')}</g>` }) };
+  };
   const newsSlide = (n, A) => {
     const K = A.dpr || 2, NP = `${A.dir}/news.png`, nat = A.natural, nd = dlong(A.dateIso), cardH = 250, pad = 12 * K;
     const hl = (r) => `<rect x="${r.x * K - 4}" y="${r.y * K + r.h * K * 0.1}" width="${r.w * K + 8}" height="${r.h * K * 0.82}" fill="#FDE047" opacity="0.85"/>`;
@@ -248,23 +261,28 @@ function build(D) {
   const ART = D.articles;
   // Slide 1 = the HOOK (Rajesh, 15 Oct 2026: "hook wala slide phle, text jitna ho sake bada"):
   // the strongest real-sourced headline claim, biggest text in the carousel, then the 4 sourced lines.
-  slides[1] = () => frame(1, `आज की ख़बरें · ${dlong(D.today)}`, `
-    <div style="position:absolute;left:60px;right:60px;top:112px;bottom:96px;display:flex;flex-direction:column;justify-content:space-between;gap:14px">
-    <div class="h" data-block data-qa="h" data-hook style="position:relative;left:0;right:0;flex-shrink:0;font-size:calc(var(--k, 1) * 84px);line-height:1.14">${C.hook}</div>
-    <div class="facts" data-block data-qa="facts" style="position:relative;left:0;right:0;flex-shrink:0;font-size:calc(var(--k, 1) * 49px)">Nifty ${D.intra.close.isClose ? 'close' : `${D.intra.close.asOf} IST पर`}: <span style="color:${D.livePct >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(D.livePrice)} (${pctS(D.livePct)})</span> <span style="font-size:calc(var(--k, 1) * 36px);color:var(--muted)">· ${dshort(D.livePrev.date)} close ${fmt(D.livePrev.c)}</span></div>
-    ${ART.map((A, i) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;flex-shrink:0;padding:12px 24px"><p style="font-size:calc(var(--k, 1) * 40px);line-height:1.25"><span style="color:var(--yellow);font-weight:800">${i + 3}/${TOTAL} · ${A.kicker}:</span> ${A.coverLine}</p><p style="font-size:calc(var(--k, 1) * 30px);color:var(--muted)">${A.siteName} · ${dlong(A.dateIso)}</p></div>`).join('')}
-    <div class="note" data-block data-qa="note" style="position:relative;left:0;right:0;flex-shrink:0;color:var(--ink);font-weight:700;font-size:calc(var(--k, 1) * 42px);text-align:center">असली ख़बर + असली chart → swipe करो</div></div>`,
-    `News: ${[...new Set(ART.map((A) => A.siteName))].join(' · ')} · Chart: TradingView`);
+  // Slide 1 = ONE story (Rajesh, 16 Oct 2026: "sidha har slide me apna apna news"): the hook
+  // article only — its claim big, its own headline screenshot, its source and date. No list.
+  const HA = ART.find((A) => A.kicker === 'Market') || ART[0];   // pick.mjs builds the hook from this article
+  const HN = 3 + ART.indexOf(HA);
+  slides[1] = () => {
+    const hs = headShot(HA, 560, 960, 380);
+    return frame(1, `आज की बड़ी ख़बर · ${dlong(D.today)}`, `
+    <div class="h" data-block data-qa="h" data-hook style="top:120px;font-size:calc(var(--k, 1) * 84px);line-height:1.14">${String(C.hook || hook).split('<br>')[0]}</div>
+    ${hs.html}
+    <div class="facts" data-block data-qa="facts" style="top:${560 + hs.h + 30}px;font-size:calc(var(--k, 1) * 38px);color:var(--ink)">${HA.siteName} · ${dlong(HA.dateIso)}</div>
+    <div class="note" data-block data-qa="note" style="top:1150px;color:var(--ink);font-weight:700;font-size:calc(var(--k, 1) * 36px);text-align:center">पूरी ख़बर slide ${HN} पर → swipe करो</div>`,
+    `Source: ${HA.siteName} · ${dlong(HA.dateIso)}`);
+  };
   slides[2] = slides.m5;
   ART.forEach((A, i) => { slides[3 + i] = () => newsSlide(3 + i, A); });
   slides[7] = slides.daily;
-  slides[8] = () => frame(8, 'आज का सार', `
-    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 60px)">4 ख़बरें, 1 line में</div>
+  slides[8] = () => frame(8, 'Analysis · सार', `
+    <div class="h" data-block data-qa="h" style="top:112px;font-size:calc(var(--k, 1) * 60px)">Nifty: आज के key levels</div>
     <div style="position:absolute;left:60px;right:60px;top:200px;display:flex;flex-direction:column;gap:18px">
-    ${ART.map((A) => `<div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:16px 26px"><p style="font-size:calc(var(--k, 1) * 35px);line-height:1.4"><span style="color:var(--yellow);font-weight:800">ख़बर · ${A.kicker}:</span> ${A.summary}</p></div>`).join('')}
     <div class="card" data-block data-qa="card" style="position:relative;left:0;right:0;padding:16px 26px;border-color:rgba(56,189,248,0.7)"><p style="font-size:calc(var(--k, 1) * 35px);line-height:1.4"><span style="color:#38BDF8;font-weight:800">Analysis (हमारा chart rule):</span> Nifty ${fmt(S.price)} (${sLabel}) key support; ${tgtText} resistance. Guaranteed कुछ नहीं.</p></div>
     <div class="note" data-block data-qa="note" style="position:relative;left:0;right:0;font-size:calc(var(--k, 1) * 32px)">सिर्फ़ शिक्षा के लिए — निवेश सलाह नहीं. ख़बरें source से हैं; analysis हमारा है. Trade/निवेश से पहले अपनी research करें.</div></div>`,
-    'News: sources on slides 3–6 · Levels: TradingView NIFTY 1D');
+    'Levels: TradingView NIFTY 1D');
   slides[9] = () => frame(9, 'Save · Follow', `
     <div class="h" data-block data-qa="h" style="top:330px;text-align:center;font-size:calc(var(--k, 1) * 83px)">सेव करो, फ़ॉलो करो</div>
     <div class="facts" data-block data-qa="facts" style="left:90px;right:90px;top:520px;text-align:center;font-size:calc(var(--k, 1) * 47px);line-height:1.45">रोज़ दोपहर: finance, mutual funds,<br>stocks और market की असली ख़बरें</div>
