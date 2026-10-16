@@ -541,6 +541,16 @@
       "claimedAt": "2026-10-15T08:14:57.574Z",
       "mediaId": "18123211163513825",
       "postedAt": "2026-10-15T08:18:15.941Z"
+    },
+    {
+      "date": "2026-10-16 midday",
+      "topic": "16 Oct: market, stocks, MF, finance — real sources",
+      "angle": "stocks",
+      "oneoff": true,
+      "status": "claimed",
+      "runId": "38881948799",
+      "sha": "91e4c4710718b3d3d77df37cde7bdc10a79328c046bae4fa8085a5834cde223e",
+      "claimedAt": "2026-10-16T09:39:44.113Z"
     }
   ],
   "stories": [
