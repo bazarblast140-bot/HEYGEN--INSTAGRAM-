@@ -45,7 +45,6 @@ export async function captureChart({ out, log = console.log, zoomSteps = 10, int
     await p.waitForTimeout(1200);
     // Mouse off the chart: legend shows the last bar, no crosshair in the shot.
     await p.mouse.move(550, 982);
-    mergeLiveRuns(runs);
     await p.waitForTimeout(1500);
     await p.locator('[class*="toast"] button, [data-name="toast-close"]').first().click({ timeout: 800 }).catch(() => {});
     await p.waitForTimeout(500);
@@ -78,6 +77,7 @@ export async function captureChart({ out, log = console.log, zoomSteps = 10, int
       if (prev && prev.key === key) { prev.x1 = x; } else runs.push({ key, x0: x, x1: x, ...v });
     }
     await p.mouse.move(550, 982);
+    mergeLiveRuns(runs);
     // The last bar may be cut by the right edge sweep; keep runs with >= 2 px.
     // Bar centre = middle of its hover run. The first and last runs extend to
     // the pane edges, so they sit one bar spacing from their neighbour instead.
