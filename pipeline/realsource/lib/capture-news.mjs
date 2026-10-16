@@ -46,7 +46,7 @@ export async function captureNews({ out, url, key, log = console.log, width = 12
     const docH = await p.evaluate(() => document.documentElement.scrollHeight);
     await p.setViewportSize({ width, height: Math.min(Math.max(docH, 1500), 12000) });
     await p.waitForTimeout(800);
-    const info = await p.evaluate((keyText) => {
+    const measure = () => p.evaluate((keyText) => {
       const R = (r) => ({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height });
       const visible = (e) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
       const h1 = [...document.querySelectorAll('h1')].filter(visible).sort((a, b) => b.getBoundingClientRect().width * b.getBoundingClientRect().height - a.getBoundingClientRect().width * a.getBoundingClientRect().height)[0];
@@ -121,18 +121,36 @@ export async function captureNews({ out, url, key, log = console.log, width = 12
         metaTime, modTime, site, author, key, mast, bodyText: (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 40000), pageHeight: document.documentElement.scrollHeight, title: document.title,
       };
     }, key || '');
+    // Late ads/banners (Mint's top IPO banner, 16 Oct 2026) can push the article down AFTER
+    // measuring, so the crop lands on the nav bar. Screenshot, re-measure, and only accept
+    // the shot when headline, date and key line are still where they were measured.
+    let info, shotOk = false;
+    for (let attempt = 0; attempt < 4 && !shotOk; attempt += 1) {
+      info = await measure();
+      if (info.error) break;
+      const clipH0 = Math.min(info.pageHeight, Math.max(2400, (info.key ? info.key.block.y + info.key.block.h : 0) + 200));
+      await p.screenshot({ path: path.join(out, 'news.png'), fullPage: true, clip: { x: 0, y: 0, width, height: clipH0 } });
+      shotOk = sameLayout(info, await measure());
+      if (!shotOk) { log(`news: layout moved during capture (attempt ${attempt + 1}), re-measuring`); await p.waitForTimeout(2500); }
+    }
+    if (!info.error && !shotOk) throw new Error('article layout kept moving during capture (late ads) — headline/key rects not stable');
     if (info.error) throw new Error(info.error);
     if (key && !info.key) throw new Error(`key sentence not found on the page: "${key.slice(0, 80)}"`);
     if (info.key && (info.key.covered || info.key.offPage)) throw new Error(`key line not fully visible: ${info.key.covered}/${info.key.samples} points covered, ${info.key.offPage} line(s) off the page`);
     info.overlaysHidden = hidden;
     const capturedAt = new Date();
-    const clipH = Math.min(info.pageHeight, Math.max(2400, (info.key ? info.key.block.y + info.key.block.h : 0) + 200));
-    await p.screenshot({ path: path.join(out, 'news.png'), fullPage: true, clip: { x: 0, y: 0, width, height: clipH } });
     const meta = { url, status, capturedAt: capturedAt.toISOString(), dpr: DPR, ...info };
     await fs.writeFile(path.join(out, 'news.json'), JSON.stringify(meta, null, 1));
     log(`news: "${info.headline}" — ${info.site} — date "${info.date?.text || info.metaTime}" — key ${info.key ? 'found' : 'none'}`);
     return meta;
   } finally { await b.close(); }
+}
+
+// Same layout = headline, date line and key-line rects within 1 px.
+export function sameLayout(a, b) {
+  const rs = (m) => [m.h1, m.date?.rect, ...(m.key?.rects || [])].filter(Boolean);
+  const A = rs(a), B = rs(b);
+  return A.length === B.length && A.every((r, i) => ['x', 'y', 'w', 'h'].every((k) => Math.abs(r[k] - B[i][k]) <= 1));
 }
 
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
