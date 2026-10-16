@@ -116,3 +116,20 @@ test('layout: slide 1 is the hook (biggest text) and all text is large', async (
   assert.ok(+t.match(/const MIN_FONT = (\d+)/)[1] >= 22, 'QA floor');
   assert.match(t, /k >= 0\.8/, 'auto-fit never shrinks below 80%');
 });
+
+test('midday schedule: early staggered UTC crons + gate (GitHub delays crons ~5 h)', async () => {
+  const { decide } = await import('../pipeline/realsource/schedule-gate.mjs');
+  assert.equal(decide('10:40', false).action, 'wait');
+  assert.equal(decide('10:40', false).seconds, 85 * 60);
+  assert.equal(decide('09:30', false).action, 'skip');
+  assert.equal(decide('12:31', false).action, 'run');
+  assert.equal(decide('12:31', true).action, 'skip');
+  assert.equal(decide('16:45', false).action, 'skip');
+  const wf = await fs.readFile(new URL('../.github/workflows/midday-realsource.yml', import.meta.url), 'utf8');
+  const crons = [...wf.matchAll(/cron: '(\d+) (\d+) \* \* 1-5'/g)].map((m) => +m[2] * 60 + +m[1] + 330); // UTC -> IST minutes
+  assert.ok(crons.filter((t) => t >= 6 * 60 + 30 && t <= 9 * 60 + 30).length >= 6, 'early crons that land near 12:00 IST after the delay');
+  assert.ok(crons.includes(12 * 60 + 30), 'on-time 12:30 IST cron kept');
+  assert.match(wf, /schedule-gate\.mjs/);
+  assert.doesNotMatch(wf, /fallback cron does nothing/);
+  assert.match(wf, /timeout-minutes: 1[5-9]\d/);
+});
