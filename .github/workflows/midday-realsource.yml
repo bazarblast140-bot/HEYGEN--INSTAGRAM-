@@ -26,10 +26,22 @@ name: Midday real-source carousel
 
 on:
   schedule:
+    # GitHub delays this repo's cron events by ~4.5-6.5 h (15 Oct: 07:00Z fired at 12:32Z,
+    # daily-news 01:45Z fires ~06:20Z). So: early staggered crons (06:37-09:07 IST, off the
+    # busy :00) that land around 12:00 IST after the delay, plus the on-time ones. Each run
+    # goes through pipeline/realsource/schedule-gate.mjs: too early -> sleeps until 12:05 IST
+    # (max 2 h), after 16:30 or once today's package exists -> skips. Crons are UTC.
+    - cron: '7 1 * * 1-5'    # 06:37 IST
+    - cron: '31 1 * * 1-5'   # 07:01
+    - cron: '53 1 * * 1-5'   # 07:23
+    - cron: '17 2 * * 1-5'   # 07:47
+    - cron: '41 2 * * 1-5'   # 08:11
+    - cron: '7 3 * * 1-5'    # 08:37
+    - cron: '37 3 * * 1-5'   # 09:07
     - cron: '0 7 * * 1-5'    # 12:30 IST
-    - cron: '25 7 * * 1-5'   # fallbacks (GitHub cron runs late): 12:55,
-    - cron: '55 7 * * 1-5'   # 13:25,
-    - cron: '35 8 * * 1-5'   # 14:05,
+    - cron: '25 7 * * 1-5'   # 12:55
+    - cron: '55 7 * * 1-5'   # 13:25
+    - cron: '35 8 * * 1-5'   # 14:05
     - cron: '15 9 * * 1-5'   # 14:45 IST
   workflow_dispatch:
     inputs:
@@ -56,7 +68,7 @@ concurrency:
 jobs:
   midday:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 170   # up to 120 min schedule-gate wait + build
     permissions:
       contents: write
       actions: read
@@ -84,8 +96,13 @@ jobs:
           DATE=$(TZ=Asia/Kolkata date +%F)
           MODE=check
           if [ "$EVENT" = schedule ]; then
-            if [ "$PUBLISH_ON" = true ]; then MODE=publish
-            elif [ "$CRON" != '0 7 * * 1-5' ]; then echo "publishing is off (MIDDAY_REALSOURCE_PUBLISH != true): fallback cron does nothing" >> "$GITHUB_STEP_SUMMARY"; MODE=skip; fi
+            if [ "$PUBLISH_ON" = true ]; then MODE=publish; fi
+            # Any of the staggered crons may arrive first: wait for 12:05 IST, skip if late or already built today.
+            SINCE=$(TZ=Asia/Kolkata date -d "$DATE 00:00" -u +%FT%TZ)
+            BUILT=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=realsource-package&per_page=20" --jq "[.artifacts[] | select(.created_at >= \"$SINCE\" and .workflow_run.id != $GITHUB_RUN_ID)] | length")
+            node pipeline/realsource/schedule-gate.mjs "$(TZ=Asia/Kolkata date +%H:%M)" "$([ "${BUILT:-0}" -gt 0 ] && echo 1 || echo 0)" > gate.txt
+            . ./gate.txt; echo "schedule gate: $action — $why" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$action" = wait ]; then sleep "$seconds"; elif [ "$action" = skip ]; then MODE=skip; fi
           else MODE="${IN_MODE:-check}"; fi
           if [ "$MODE" = publish ] && jq -e --arg k "$DATE midday" '.entries[] | select(.date == $k)' pipeline/carousel-history.json >/dev/null; then
             echo "$DATE midday is already posted/claimed — nothing to do" >> "$GITHUB_STEP_SUMMARY"; MODE=skip
