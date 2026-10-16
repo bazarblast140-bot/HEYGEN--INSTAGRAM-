@@ -13,3 +13,8 @@ test('different opens or a gap are separate bars', () => {
   assert.equal(mergeLiveRuns([r(700, 708, 1, 2), r(709, 713, 3, 4)]).length, 2);
   assert.equal(mergeLiveRuns([r(700, 708, 3, 2), r(712, 713, 3, 4)]).length, 2);
 });
+test('mergeLiveRuns is called after the crosshair sweep (runs exists there)', async () => {
+  const src = await (await import('node:fs/promises')).readFile(new URL('../pipeline/realsource/lib/capture-chart.mjs', import.meta.url), 'utf8');
+  const call = src.indexOf('mergeLiveRuns(runs);');
+  assert.ok(call > src.indexOf('const runs = [];') && call < src.indexOf('const mids = runs.map'));
+});
