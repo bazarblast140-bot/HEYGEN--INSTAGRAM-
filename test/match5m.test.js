@@ -52,3 +52,27 @@ y = [{'time': slot(i), 'h': 1} for i in range(50)]
 print(json.dumps([complete(tb, False)[-1]['time'], yahoo_window(y, complete(tb, False)[-1]['time'])[-1]['time'], len(complete(tb, True))]))`);
   assert.deepEqual(r, ['13:00', '13:00', 47]);
 });
+
+// 21 Oct 2026 check run 39552391975: Yahoo LAGGED TradingView (last Yahoo row 2 bars older).
+// The old "at most one TradingView bar newer than Yahoo" filter rejected the true alignment
+// and picked one slot later: every bar labelled 5 min early (high @09:35 vs 09:40, low
+// 22807.45 @11:45 vs Yahoo 22814.05 @11:40, 31 bars "differ"). Real data from both feeds.
+test('5m alignment holds when Yahoo lags TradingView (real 21 Oct data)', () => {
+  const r = py(`
+fx = json.load(open('test/fixtures/match5m-2026-10-21-yahoo-lag.json'))
+tv, y = fx['tv'], fx['yahoo']
+k, d = align(tv, y)
+tb = [dict(b, time=slot(i)) for i, b in enumerate(tv[k:])]
+fin = complete(tb, False); w = yahoo_window(y, fin[-1]['time'])
+hi = max(tb, key=lambda b: b['h']); lo = min(fin, key=lambda b: b['l'])
+yhi = max(w, key=lambda r: r['h']); ylo = min(w, key=lambda r: r['l'])
+print(json.dumps([k, d <= 13.71, hi['time'], yhi['time'], lo['time'], lo['l'], ylo['time'], ylo['l'], tb[-1]['time']]))`);
+  assert.deepEqual(r, [16, true, '09:40', '09:40', '11:50', 22807.45, '11:40', 22814.05, '11:55']);
+});
+
+test('synthetic: Yahoo two bars behind TradingView still aligns by slot', () => {
+  const r = py(`${SETUP}
+yl = [r for r in y if r['time'] <= slot(41)]   # Yahoo stops 2 bars before TradingView's last complete bar
+print(json.dumps(align(tv, yl)))`);
+  assert.deepEqual(r, [5, 0]);
+});
