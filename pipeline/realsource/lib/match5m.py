@@ -18,19 +18,26 @@ def dev(b, r): return max(abs(b[k] - r[k]) for k in fields(r))
 
 def align(bars, ytoday):
     """Best k (index of today's 09:15 bar in `bars`): smallest max deviation over the
-    complete (non-newest) bars that have a Yahoo row in the same slot."""
+    complete (non-newest) bars that have a Yahoo row in the same slot.
+
+    Either feed may be ahead: Yahoo is usually ahead of TradingView, but it can also
+    lag it by several bars (21 Oct 2026 run 39552391975: Yahoo's last row was 2+ bars
+    older than TradingView's). Candidate alignments are therefore NOT filtered by how
+    many TradingView bars are newer than Yahoo's last row; that filter rejected the
+    true alignment and forced a one-slot shift (every bar labelled 5 min early). Bars
+    newer than Yahoo simply have no pair and stay unverified downstream."""
     ymap = {r['time']: r for r in ytoday}
-    ylast = max((r['time'] for r in ytoday), default=None)
+    if not ymap: return None
     best = None
     for k in range(len(bars)):
         tvN = len(bars) - k
-        if tvN < 3 or ylast is None: continue
-        if sum(1 for i in range(tvN) if slot(i) > ylast) > 1: continue  # at most one TradingView bar newer than Yahoo's
+        if tvN < 3: continue
         pairs = [(bars[k + i], ymap[slot(i)]) for i in range(tvN - 1) if slot(i) in ymap]
         if len(pairs) < 2: continue
         d = max(dev(b, r) for b, r in pairs)
-        if best is None or d < best[1]: best = (k, d)
-    return best
+        # lower deviation wins; on a tie, the alignment that verifies more bars
+        if best is None or d < best[1] or (d == best[1] and len(pairs) > best[2]): best = (k, d, len(pairs))
+    return best[:2] if best else None
 
 def yahoo_window(ytoday, last_time):
     """Yahoo rows up to and including TradingView's last slot (same cutoff)."""
