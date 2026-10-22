@@ -559,10 +559,12 @@
       "topic": "22 Oct: market, stocks, MF, finance — real sources",
       "angle": "stocks",
       "oneoff": true,
-      "status": "claimed",
+      "status": "posted",
       "runId": "39745412436",
       "sha": "70221bd26c158b06e55f463ee44f99bef16a8213989ecdcd1f1fc138a3d2504d",
-      "claimedAt": "2026-10-22T08:07:38.651Z"
+      "claimedAt": "2026-10-22T08:07:38.651Z",
+      "mediaId": "18137552218640387",
+      "postedAt": "2026-10-22T08:09:49.474Z"
     }
   ],
   "stories": [
