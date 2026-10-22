@@ -364,5 +364,15 @@
     "state": "failed",
     "stage": "photo",
     "error": "Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons. · code 190/460 · OAuthException · fbtrace An8EEhz5wPdfvlXUC27BKet · HTTP 400 — the FB_PAGE_TOKEN is invalid or expired — create a new Page access token"
+  },
+  {
+    "date": "2026-10-22",
+    "igStoryId": "18105833492456633",
+    "igMediaId": "18254247205308469",
+    "kind": "video",
+    "source": "reel-companion",
+    "at": "2026-10-22T08:47:44.841Z",
+    "state": "done",
+    "fbStoryId": "4714989062079452"
   }
 ]
