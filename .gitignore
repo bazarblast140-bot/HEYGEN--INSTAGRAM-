@@ -9,3 +9,5 @@ downloads/
 pipeline/out/
 
 pipeline/engagement.json
+__pycache__/
+*.pyc
