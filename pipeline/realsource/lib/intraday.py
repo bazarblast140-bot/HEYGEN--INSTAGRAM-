@@ -7,7 +7,7 @@ from PIL import Image
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from xalign import align as xalign
-from match5m import align, slot, yahoo_window, complete, fields
+from match5m import align, slot, positions, yahoo_window, complete, fields
 
 run, today = sys.argv[1], sys.argv[2]
 bars = json.load(open(f'{run}/tv5-bars.json'))
@@ -41,7 +41,8 @@ from wicks import classify, extremes, yahoo_extremes
 # low, the price shown) are checked strictly against TOL below.
 def bar_ok(b, r): return abs(b['c'] - r['c']) <= TOL and all(abs(b[k] - r[k]) <= 3 * TOL for k in fields(r) if k != 'c')
 # Align by TIME SLOT (match5m.py): Yahoo drops null rows, so index alignment shifts every later bar.
-best = align(bars, ytoday)
+best = align(bars, ytoday, meta.get('spacingCss'))
+pos = positions(bars, meta.get('spacingCss'))
 ymap = {r['time']: r for r in ytoday}
 for b in bars: b['date'] = b['time'] = None; b['match'] = 'none'
 if best is None:
@@ -49,8 +50,8 @@ if best is None:
     tb = []; spikes = []
 else:
     k = best[0]
-    for i, b in enumerate(bars[k:]):
-        t = slot(i); r = ymap.get(t)
+    for j, b in enumerate(bars[k:], start=k):
+        t = slot(pos[j] - pos[k]); r = ymap.get(t)
         if r: b.update(date=today, time=t, yahoo=r, dev=round(dev(b, r), 2), match='ok' if bar_ok(b, r) else 'MISMATCH')
         elif ytoday and t > ytoday[-1]['time']: b.update(date=today, time=t, match='live (newer than Yahoo)')
         else: b.update(date=today, time=t, match='no Yahoo row (null in feed)')

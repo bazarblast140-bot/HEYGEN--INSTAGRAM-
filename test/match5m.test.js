@@ -76,3 +76,16 @@ yl = [r for r in y if r['time'] <= slot(41)]   # Yahoo stops 2 bars before Tradi
 print(json.dumps(align(tv, yl)))`);
   assert.deepEqual(r, [5, 0]);
 });
+
+// 23 Oct 2026 held runs 39908584540/39920316301/39921845117: the hover sweep missed one
+// bar (x gap of 2 spacings), and slotting by list index labelled every later bar 5 min early.
+test('a bar missed by the hover sweep does not shift later bars (slot from x position)', () => {
+  const r = py(`
+def mk(i): p = 22600 + i * 10; return {'o': p, 'h': p + 6, 'l': p - 4, 'c': p + 3}
+tv = [dict(mk(i), xCss=100 + 7 * i) for i in range(30) if i != 20]   # slot 20 (10:55) missing
+y = [dict(mk(i), time=slot(i)) for i in range(30)]
+k, d = align(tv, y, 7)
+pos = positions(tv, 7)
+print(json.dumps([k, d, slot(pos[20] - pos[k]), positions([{'o': 1}, {'o': 2}])]))`);
+  assert.deepEqual(r, [0, 0, '11:00', [0, 1]]);
+});
