@@ -138,7 +138,14 @@
         "tries": 1,
         "at": "2026-10-23T08:41:10.808Z"
       },
-      "fb": null
+      "fb": {
+        "state": "done",
+        "id": "1811795299949813",
+        "url": "https://www.facebook.com/reel/1811795299949813",
+        "from": "rehost",
+        "tries": 1,
+        "at": "2026-10-23T08:41:10.808Z"
+      }
     }
   ]
 }
