@@ -35,6 +35,7 @@ if xoff[0]: print(f'x offset corrected by {xoff[0]} px ({xoff[1]} bars on candle
 ytoday = [r for r in ytoday if int(r['time'][-2:]) % 5 == 0]
 TOL = round(0.0002 * (bars[-1]['c'] if bars else 22000), 2)  # 0.02% (~4.5 pts): TradingView and Yahoo use different tick feeds; observed diffs up to ~3 pts
 from match5m import dev
+from wicks import classify, extremes, yahoo_extremes
 # A bar matches when its close is within TOL and open/high/low within 3*TOL
 # (single wick ticks differ between the two feeds). Printed numbers (day high,
 # low, the price shown) are checked strictly against TOL below.
@@ -45,7 +46,7 @@ ymap = {r['time']: r for r in ytoday}
 for b in bars: b['date'] = b['time'] = None; b['match'] = 'none'
 if best is None:
     problems.append('could not align TradingView 5m bars with Yahoo 5m bars')
-    tb = []
+    tb = []; spikes = []
 else:
     k = best[0]
     for i, b in enumerate(bars[k:]):
@@ -57,19 +58,21 @@ else:
     cmp = [b for b in tb[:-1] if b.get('yahoo')] if not daily.get('afterClose') else [b for b in tb if b.get('yahoo')]
     worst = max((b['dev'] for b in cmp), default=0)
     bad = [b for b in cmp if b['match'] == 'MISMATCH']
-    # One stray wick between the two feeds is tolerated when that bar's close
-    # still matches and it is not the bar we print as the day high/low (those stay strict below).
-    if len(bad) == 1 and abs(bad[0]['c'] - bad[0]['yahoo']['c']) <= TOL and bad[0] is not max(tb, key=lambda b: b['h']) and bad[0] is not min(tb, key=lambda b: b['l']):
-        bad[0]['match'] = 'wick-outlier (close ok)'; out_outlier = {'time': bad[0]['time'], 'dev': bad[0]['dev']}; bad = []
+    # Isolated wick spikes (close and open still within TOL) on up to 2 bars are
+    # tolerated, including the day high/low bar; the printed extremes then use the
+    # value both feeds agree on (wicks.py). Close/open mismatches or >2 bad bars fail.
+    spikes, bad = classify(bad, TOL)
+    for b in spikes: b['match'] = 'wick-spike (open/close ok)'
     if bad: problems.append(f'{len(bad)} 5m bars differ from Yahoo (close > {TOL} or o/h/l > {round(3 * TOL, 2)} points; worst {worst})')
     if tb and tb[0]['time'] != '09:15': problems.append(f'first aligned 5m bar is {tb[0]["time"]}, not 09:15')
     if daily.get('afterClose'):
         if len(tb) != 75 or tb[-1]['time'] != '15:25' or not ytoday or ytoday[-1]['time'] != '15:25':
             problems.append(f'session incomplete: {len(tb)} TradingView 5m bars (need 75, last {tb[-1]["time"] if tb else "-"}) vs {len(ytoday)} Yahoo rows, Yahoo last {ytoday[-1]["time"] if ytoday else "-"}')
-    out_dev = {'tolerancePts': TOL, 'worstDevPts': worst, 'compared': len(cmp)}
+    out_dev = {'tolerancePts': TOL, 'worstDevPts': worst, 'compared': len(cmp), 'wickSpikes': [{'time': b['time'], 'dev': b['dev']} for b in spikes]}
 out = {'today': today, 'problems': problems, 'meta': meta, 'xOffsetPx': xoff[0], 'yahooCheck': out_dev if best else None}
 if tb:
-    hi = max(tb, key=lambda b: b['h']); lo = min(tb, key=lambda b: b['l'])
+    (hi, hiP), (lo, loP) = extremes(tb, TOL)   # agreed values, never a one-feed spike
+    rawHi = max(b['h'] for b in tb); rawLo = min(b['l'] for b in tb)   # TradingView's own extremes
     op = tb[0]
     # The price we print: the newest COMPLETE bar whose close Yahoo confirms
     # within TOL (TradingView's public feed is ~15 min delayed; a live bar is never printed).
@@ -80,27 +83,28 @@ if tb:
     fin = complete(tb, daily.get('afterClose')) or tb
     yw = yahoo_window(ytoday, fin[-1]['time']) or ytoday
     for e, nm in ((hi, 'high'), (lo, 'low')):
-        if e not in fin: problems.append(f'day {nm} {e["h" if nm == "high" else "l"]} is in the live {e["time"]} bar (still forming, cannot be verified)')
+        if e not in fin: problems.append(f'day {nm} {hiP if nm == "high" else loP} is in the live {e["time"]} bar (still forming, cannot be verified)')
         elif not e.get('yahoo'): problems.append(f'day {nm} bar {e["time"]} has no Yahoo row to verify it')
-    yhi = max(yw, key=lambda r: r['h']); ylo = min(yw, key=lambda r: r['l'])
-    if abs(hi['h'] - yhi['h']) > TOL or hi['time'] != yhi['time']: problems.append(f'day high {hi["h"]} @{hi["time"]} vs Yahoo {yhi["h"]} @{yhi["time"]}')
-    if abs(lo['l'] - ylo['l']) > TOL or lo['time'] != ylo['time']: problems.append(f'day low {lo["l"]} @{lo["time"]} vs Yahoo {ylo["l"]} @{ylo["time"]}')
+    (yhi, yhiP), (ylo, yloP) = yahoo_extremes(yw, {b['time']: b for b in tb}, TOL)
+    if abs(hiP - yhiP) > TOL or hi['time'] != yhi['time']: problems.append(f'day high {hiP} @{hi["time"]} vs Yahoo {yhiP} @{yhi["time"]}')
+    if abs(loP - yloP) > TOL or lo['time'] != ylo['time']: problems.append(f'day low {loP} @{lo["time"]} vs Yahoo {yloP} @{ylo["time"]}')
     T = daily['T']
-    # same TradingView feed: the 5m extremes must equal the daily bar's high/low exactly
-    if not eq(hi['h'], T['h']): problems.append(f'5m day high {hi["h"]} != TradingView daily high {T["h"]}')
-    if not eq(lo['l'], T['l']): problems.append(f'5m day low {lo["l"]} != TradingView daily low {T["l"]}')
-    rng = round(hi['h'] - lo['l'], 2)
+    # same TradingView feed: TradingView's RAW 5m extremes (spike included) must equal its daily
+    # bar's high/low exactly; the printed (agreed) values differ from them only by a tolerated spike.
+    if not eq(rawHi, T['h']): problems.append(f'5m day high {rawHi} != TradingView daily high {T["h"]}')
+    if not eq(rawLo, T['l']): problems.append(f'5m day low {rawLo} != TradingView daily low {T["l"]}')
+    rng = round(hiP - loP, 2)
     out.update({
-        'high': {'price': hi['h'], 'time': hi['time'], 'x': hi['xCss'] * meta['dpr']},
-        'low': {'price': lo['l'], 'time': lo['time'], 'x': lo['xCss'] * meta['dpr']},
+        'high': {'price': hiP, 'time': hi['time'], 'x': hi['xCss'] * meta['dpr'], 'tvRaw': rawHi, 'spikeCorrected': not eq(hiP, rawHi)},
+        'low': {'price': loP, 'time': lo['time'], 'x': lo['xCss'] * meta['dpr'], 'tvRaw': rawLo, 'spikeCorrected': not eq(loP, rawLo)},
         # official open (auction price) = TradingView daily open, checked == Yahoo open in build.mjs
         'open': {'price': daily['T']['o'] if op['time'] == '09:15' else op['o'], 'time': op['time'], 'x': op['xCss'] * meta['dpr']},
         'close': {'price': cl['c'], 'time': cl['time'], 'asOf': (dt.datetime.strptime(cl['time'], '%H:%M') + dt.timedelta(minutes=5)).strftime('%H:%M') if cl.get('time') and cl['time'] != 'live' else None,
                   'x': cl['xCss'] * meta['dpr'], 'verified': bool(done), 'isClose': bool(daily.get('afterClose') and cl.get('time') == '15:25'),
                   'live': not (daily.get('afterClose') and cl.get('time') == '15:25')},
-        'range': rng, 'rangePct': round(rng / lo['l'] * 100, 2), 'bars': len(tb),
+        'range': rng, 'rangePct': round(rng / loP * 100, 2), 'bars': len(tb),
         'firstX': tb[0]['xCss'] * meta['dpr'], 'lastX': tb[-1]['xCss'] * meta['dpr'],
-        'yahoo': {'bars': len(ytoday), 'high': yhi, 'low': ylo, 'first': ytoday[0] if ytoday else None, 'last': ytoday[-1] if ytoday else None},
+        'yahoo': {'bars': len(ytoday), 'high': dict(yhi, agreed=yhiP), 'low': dict(ylo, agreed=yloP), 'first': ytoday[0] if ytoday else None, 'last': ytoday[-1] if ytoday else None},
     })
 
 # price -> pixel from the 5m candles
