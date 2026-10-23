@@ -16,7 +16,22 @@ def slot(i): return (dt.datetime(2000, 1, 1, 9, 15) + dt.timedelta(minutes=5 * i
 def fields(r): return ('h', 'l', 'c') if r.get('time') == '09:15' else ('o', 'h', 'l', 'c')
 def dev(b, r): return max(abs(b[k] - r[k]) for k in fields(r))
 
-def align(bars, ytoday):
+def positions(bars, spacing=None):
+    """Chart-slot index of each bar from its x position. The legend sweep can miss a
+    bar (23 Oct 2026 runs 39908584540/39920316301/39921845117: no run at x=677 between
+    670 and 684, spacing 7), and counting bars by list index then labelled every later
+    bar one slot early. A gap of n spacings advances the slot by n."""
+    if not bars: return []
+    xs = [b.get('xCss') for b in bars]
+    if None in xs: return list(range(len(bars)))
+    if not spacing:
+        gaps = sorted(xs[i + 1] - xs[i] for i in range(len(xs) - 1))
+        spacing = gaps[len(gaps) // 2] if gaps else 1
+    pos = [0]
+    for i in range(1, len(xs)): pos.append(pos[-1] + max(1, round((xs[i] - xs[i - 1]) / spacing)))
+    return pos
+
+def align(bars, ytoday, spacing=None):
     """Best k (index of today's 09:15 bar in `bars`): smallest max deviation over the
     complete (non-newest) bars that have a Yahoo row in the same slot.
 
@@ -29,10 +44,11 @@ def align(bars, ytoday):
     ymap = {r['time']: r for r in ytoday}
     if not ymap: return None
     best = None
+    pos = positions(bars, spacing)
     for k in range(len(bars)):
         tvN = len(bars) - k
         if tvN < 3: continue
-        pairs = [(bars[k + i], ymap[slot(i)]) for i in range(tvN - 1) if slot(i) in ymap]
+        pairs = [(bars[j], ymap[slot(pos[j] - pos[k])]) for j in range(k, len(bars) - 1) if slot(pos[j] - pos[k]) in ymap]
         if len(pairs) < 2: continue
         d = max(dev(b, r) for b, r in pairs)
         # lower deviation wins; on a tie, the alignment that verifies more bars
