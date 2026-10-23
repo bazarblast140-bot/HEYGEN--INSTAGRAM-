@@ -132,3 +132,13 @@ test('midday schedule: early staggered UTC crons + gate (GitHub delays crons ~5 
   assert.doesNotMatch(wf, /fallback cron does nothing/);
   assert.match(wf, /timeout-minutes: 1[5-9]\d/);
 });
+
+test('a candidate whose key sentence has no number is replaced, not kept, on retry', async () => {
+  const { retryNote } = await import('../pipeline/realsource/pick.mjs');
+  const dropped = new Set();
+  const note = retryNote(good(), ['cand 2: key sentence has no number'], dropped);
+  assert.deepEqual([...dropped], [2]);
+  assert.match(note, /Do NOT use cand 2/); assert.match(note, /replace cand 2 with another candidate/);
+  const p = good(); assert.match(pickProblems(p, cands, dropped).join(), /cand 2 was dropped/);
+  assert.deepEqual(pickProblems(p, cands), []);
+});

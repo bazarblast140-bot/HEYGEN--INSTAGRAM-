@@ -90,8 +90,9 @@ export function applyCodeFields(pick, cands) {
   return pick;
 }
 
-export function pickProblems(pick, cands) {
+export function pickProblems(pick, cands, dropped = new Set()) {
   const out = [];
+  for (const a of pick.articles) if (dropped.has(a.cand)) out.push(`cand ${a.cand} was dropped (its key sentence had no number); choose a different candidate`);
   // Cover gate: the cover claim comes from ONE chosen article. Its terms are
   // copied from that article's headline or key line and all appear in the hook.
   const from = pick.articles.find((a) => a.cand === pick.hookFrom);
@@ -166,16 +167,16 @@ async function main() {
   const provider = resolveProvider();
   if (!provider || provider.kind === 'anthropic') { console.error('no OpenAI-compatible script model configured — skipping'); process.exit(3); }
   let user = `Today is ${date}. Candidates:\n\n${cands.map((c, i) => `### cand ${i} — ${c.site}\nHEADLINE: ${c.headline}\nTEXT: ${c.text.slice(0, 2500)}`).join('\n\n')}`;
-  let pick = null; let problems = [];
+  let pick = null; let problems = []; const dropped = new Set();
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     try {
       ({ output: pick } = await callOpenAICompatible({ provider, system: SYSTEM, user, schema: Pick }));
-      problems = pickProblems(applyCodeFields(pick, cands), cands);
+      problems = pickProblems(applyCodeFields(pick, cands), cands, dropped);
     } catch (err) { problems = [String(err.message).slice(0, 300)]; pick = null; }
     await fs.writeFile(path.join(out, `pick-attempt-${attempt}.json`), `${JSON.stringify({ pick, problems }, null, 1)}\n`);
     console.log(`model attempt ${attempt}: ${problems.length ? problems.join(' | ') : 'ok'}`);
     if (!problems.length) break;
-    user += `\n\nYour previous answer:\n${pick ? JSON.stringify(pick) : '(unparseable)'}\nIt was rejected:\n- ${problems.join('\n- ')}\nKeep everything else, fix exactly these (use only numbers printed in that candidate's TEXT), and send the full JSON again.`;
+    user += retryNote(pick, problems, dropped);
   }
   if (problems.length) { console.error('model pick failed the checks 4 times — skipping'); process.exit(3); }
   const articles = KINDS.map((k) => pick.articles.find((a) => a.kicker === k)).map((a) => {
@@ -192,3 +193,13 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) main().catch((e) => { console.error(e.message); process.exit(3); });
+
+// 23 Oct 2026 runs 39923711714/39924512428: "Keep everything else" locked the model onto a
+// candidate whose text had no numbered key sentence, failing all 4 attempts. Such a
+// candidate is dropped and must be REPLACED by another candidate of the same kind.
+export function retryNote(pick, problems, dropped) {
+  const fresh = [];
+  for (const p of problems) { const m = p.match(/^cand (\d+): key sentence has no number$/); if (m) { dropped.add(Number(m[1])); fresh.push(Number(m[1])); } }
+  const swap = dropped.size ? `\nDo NOT use cand ${[...dropped].join(', ')} at all (no numbered key sentence); replace ${fresh.length ? `cand ${fresh.join(', ')}` : 'it'} with another candidate of the same kind whose TEXT has a sentence with a number.` : '';
+  return `\n\nYour previous answer:\n${pick ? JSON.stringify(pick) : '(unparseable)'}\nIt was rejected:\n- ${problems.join('\n- ')}${swap}\nKeep everything else, fix exactly these (use only numbers printed in that candidate's TEXT), and send the full JSON again.`;
+}
