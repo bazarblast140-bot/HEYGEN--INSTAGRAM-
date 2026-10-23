@@ -41,6 +41,13 @@ const D = JSON.parse(await fs.readFile(path.join(out, 'data.json'), 'utf8'));
 execFileSync('python3', [path.join(LIB, 'lib', 'intraday.py'), out, date], { stdio: ['ignore', 'ignore', 'inherit'] });
 const I = JSON.parse(await fs.readFile(path.join(out, 'intraday.json'), 'utf8'));
 D.intra = I;
+// A tolerated TradingView wick spike on today's low (intraday.py / wicks.py) must not reach
+// the daily slides either: the support level uses today's agreed low, same as the 5m slide.
+if (I.low?.spikeCorrected) {
+  const win = D.bars.slice(-10).map((b) => (b.date === date ? { ...b, l: I.low.price } : b));
+  const sb = win.reduce((m, b) => (b.l < m.l ? b : m));
+  D.S = { price: sb.l, date: sb.date, x: sb.xCss * D.meta.dpr, is52wLow: Boolean(D.low52 && sb.l <= D.low52.l + 0.06) };
+}
 // Midday: today's candle is live by design. Every other chart check stays hard.
 const LIVE_OK = /before the 15:30 IST close|today's bar does not match Yahoo OHLC exactly \(open-only|session incomplete/;
 problems.push(...D.problems.filter((x) => !LIVE_OK.test(x)), ...I.problems.filter((x) => !LIVE_OK.test(x)).map((x) => `5m: ${x}`));
