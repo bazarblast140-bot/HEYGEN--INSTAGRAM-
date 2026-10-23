@@ -31,16 +31,29 @@ test('real feed mismatch still fails: close mismatch', () => {
   const r = py(`${SETUP}
 tv[10]['c'] += 12
 bad = [b for b in tv if not bar_ok(b, b['yahoo'])]
+tv[3]['l'] -= 30   # plus a tolerated wick elsewhere
 print(json.dumps([len(x) for x in classify(bad, TOL)]))`);
   assert.deepEqual(r, [0, 1]);
 });
 
-test('real feed mismatch still fails: more than 2 spike bars', () => {
+test('any number of isolated wick bars is tolerated when close and open match', () => {
   const r = py(`${SETUP}
-for i in (5, 9, 13): tv[i]['l'] -= 30
+for i in (5, 9, 13, 16): tv[i]['l'] -= 30
 bad = [b for b in tv if not bar_ok(b, b['yahoo'])]
 print(json.dumps([len(x) for x in classify(bad, TOL)]))`);
-  assert.deepEqual(r, [0, 3]);
+  assert.deepEqual(r, [4, 0]);
+});
+
+test('23 Oct 13:05: TV open = previous TV close (Yahoo first tick differs), close equal: wick bar', () => {
+  const r = py(`${SETUP}
+tv[23].update(o=22429.9, h=22432, l=22398.6, c=22400.45); tv[23]['yahoo'].update(o=22409.65, h=22432, l=22398.6, c=22400.45)
+tv[22]['c'] = tv[22]['yahoo']['c'] = 22429.35
+tv[10]['o'] += 20   # open differs and is NOT the previous close: real mismatch
+prev = {id(tv[i]): tv[i - 1]['c'] for i in range(1, len(tv))}
+bad = [b for b in tv if not bar_ok(b, b['yahoo'])]
+s, real = classify(bad, TOL, prev)
+print(json.dumps([[b['time'] for b in s], [b['time'] for b in real]]))`);
+  assert.deepEqual(r, [['11:10'], ['10:05']]);
 });
 
 test('open mismatch on a wick bar is not a tolerated spike (except 09:15 auction open)', () => {

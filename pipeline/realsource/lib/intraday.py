@@ -59,10 +59,10 @@ else:
     cmp = [b for b in tb[:-1] if b.get('yahoo')] if not daily.get('afterClose') else [b for b in tb if b.get('yahoo')]
     worst = max((b['dev'] for b in cmp), default=0)
     bad = [b for b in cmp if b['match'] == 'MISMATCH']
-    # Isolated wick spikes (close and open still within TOL) on up to 2 bars are
+    # Isolated wick spikes (close and open still within TOL) on any number of bars are
     # tolerated, including the day high/low bar; the printed extremes then use the
-    # value both feeds agree on (wicks.py). Close/open mismatches or >2 bad bars fail.
-    spikes, bad = classify(bad, TOL)
+    # value both feeds agree on (wicks.py). Any close/open mismatch fails.
+    spikes, bad = classify(bad, TOL, {id(tb[i]): tb[i - 1]['c'] for i in range(1, len(tb))})
     for b in spikes: b['match'] = 'wick-spike (open/close ok)'
     if bad: problems.append(f'{len(bad)} 5m bars differ from Yahoo (close > {TOL} or o/h/l > {round(3 * TOL, 2)} points; worst {worst})')
     if tb and tb[0]['time'] != '09:15': problems.append(f'first aligned 5m bar is {tb[0]["time"]}, not 09:15')
@@ -133,14 +133,9 @@ for b in bars[:-1]:
         elif seg[1] - seg[0] > best[1] - best[0]: best = list(seg)
     if not best or best[1] - best[0] < 4: continue
     pairs += [(b['h'], best[0]), (b['l'], best[1] + 1)]
-def fit(ps):
-    n = len(ps); mx = sum(p for p, _ in ps) / n; my = sum(v for _, v in ps) / n
-    bb = sum((p - mx) * (v - my) for p, v in ps) / sum((p - mx) ** 2 for p, _ in ps)
-    return my - bb * mx, bb
+from pxfit import robust_fit
 if len(pairs) >= 20:
-    a, s = fit(pairs); res = [abs(v - (a + s * p)) for p, v in pairs]
-    n0 = len(pairs); pairs = [pp for pp, r in zip(pairs, res) if r <= 4]; a, s = fit(pairs)
-    res = [abs(v - (a + s * p)) for p, v in pairs]
+    n0 = len(pairs); a, s, pairs, res = robust_fit(pairs)
     out['mapping'] = {'a': a, 'b': s, 'pairs': len(pairs), 'maxResidualPx': round(max(res), 2), 'meanResidualPx': round(sum(res) / len(res), 2)}
     if max(res) > 4 or len(pairs) < 0.7 * n0: problems.append(f'5m price->pixel fit is poor (max residual {max(res):.1f}px, kept {len(pairs)}/{n0})')
 else:
