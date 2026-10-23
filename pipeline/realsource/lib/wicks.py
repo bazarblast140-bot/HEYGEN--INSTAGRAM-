@@ -14,17 +14,26 @@ Rules:
   of the two: it lies inside both candles' ranges, so both feeds traded there
   (normally the Yahoo-confirmed value). The spike number itself is never printed.
 """
-MAX_SPIKES = 2
+MAX_SPIKES = None   # 23 Oct: any number of isolated wick bars, as long as close/open match
 
-def spike_ok(b, r, tol):
+def spike_ok(b, r, tol, prev_c=None):
+    """Close must match. Open must match too, except 09:15 (auction open) or when
+    TradingView's open is its previous bar's close (TV starts a bar at the prior
+    close; Yahoo at the bar's first tick: 23 Oct 13:05 TV o 22429.90 = 13:00 close
+    22429.35 vs Yahoo o 22409.65, close equal)."""
     if abs(b['c'] - r['c']) > tol: return False
-    if r.get('time') != '09:15' and abs(b['o'] - r['o']) > tol: return False
-    return True
+    if r.get('time') == '09:15' or abs(b['o'] - r['o']) <= tol: return True
+    return prev_c is not None and abs(b['o'] - prev_c) <= tol
 
-def classify(bad, tol):
-    """bad: MISMATCH bars (each with .yahoo). Returns (spikes, real) lists."""
-    if all(spike_ok(b, b['yahoo'], tol) for b in bad) and len(bad) <= MAX_SPIKES: return list(bad), []
-    return [], list(bad)
+def classify(bad, tol, prev=None):
+    """bad: MISMATCH bars (each with .yahoo); prev: id(bar) -> previous TV bar close.
+    Returns (spikes, real): every bar whose close (and open) agree is a wick spike;
+    any close/open mismatch is a real feed mismatch."""
+    prev = prev or {}
+    ok = [b for b in bad if spike_ok(b, b['yahoo'], tol, prev.get(id(b)))]
+    real = [b for b in bad if b not in ok]
+    if MAX_SPIKES is not None and len(ok) > MAX_SPIKES: return [], list(bad)
+    return ok, real
 
 def agreed(b, tol):
     """(high, low) of bar b that both feeds agree on."""
