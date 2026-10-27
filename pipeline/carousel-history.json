@@ -595,10 +595,12 @@
       "topic": "27 Oct: market, stocks, MF, finance — real sources",
       "angle": "stocks",
       "oneoff": true,
-      "status": "claimed",
+      "status": "posted",
       "runId": "40459577699",
       "sha": "fe8bdc47c1161645b74d5e89ca8ff0afccc60ff3a9850d9e2d06403aa1e1f62d",
-      "claimedAt": "2026-10-27T06:42:58.262Z"
+      "claimedAt": "2026-10-27T06:42:58.262Z",
+      "mediaId": "17953765092284133",
+      "postedAt": "2026-10-27T06:46:44.901Z"
     }
   ],
   "stories": [
