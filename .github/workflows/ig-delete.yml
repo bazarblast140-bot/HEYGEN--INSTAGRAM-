@@ -36,7 +36,16 @@ jobs:
           python3 -c "import json,os,sys;d=json.load(open('m.json'));m=os.environ['MUST'];c=d.get('caption') or '';sys.exit(0 if (m=='__NO_CAPTION__' and not str(c).strip()) or (m!='__NO_CAPTION__' and m in c) else 1)" || { echo "caption check FAILED"; exit 1; }
           if [ -n "$FBID" ]; then curl -sS "$G/$FBID?fields=id,created_time,permalink_url,message&access_token=$FBT" | python3 -c "import json,sys;d=json.load(sys.stdin);d['message']=d.get('message','')[:200];print(json.dumps(d,ensure_ascii=False,indent=1))"; fi
           [ "$DRY" = "true" ] && { echo "dry run, nothing deleted"; exit 0; }
-          echo "IG delete:"; curl -sS -X DELETE "$G/$IGID?access_token=$IGT"; echo
-          echo "IG GET after: $(curl -s -o /dev/null -w '%{http_code}' "$G/$IGID?fields=id&access_token=$IGT")"
+          # Prefer User-token semantics: try IGT, then FBT. Fail unless GET after is not 200.
+          echo "IG delete via IGT:"; RESP=$(curl -sS -w "\nHTTP:%{http_code}" -X DELETE "$G/$IGID?access_token=$IGT"); echo "$RESP"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$G/$IGID?fields=id&access_token=$IGT")
+          echo "IG GET after IGT: $CODE"
+          if [ "$CODE" = "200" ] && [ -n "$FBT" ]; then
+            echo "IG delete via FBT:"; RESP=$(curl -sS -w "\nHTTP:%{http_code}" -X DELETE "$G/$IGID?access_token=$FBT"); echo "$RESP"
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "$G/$IGID?fields=id&access_token=$IGT")
+            echo "IG GET after FBT: $CODE"
+          fi
+          if [ "$CODE" = "200" ]; then echo "DELETE FAILED — media still readable"; exit 1; fi
+          echo "IG GET after: $CODE (expect not-found)"
           if [ -n "$FBID" ]; then echo "FB delete:"; curl -sS -X DELETE "$G/$FBID?access_token=$FBT"; echo
             echo "FB GET after: $(curl -s -o /dev/null -w '%{http_code}' "$G/$FBID?fields=id&access_token=$FBT")"; fi
