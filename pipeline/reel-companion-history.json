@@ -356,6 +356,23 @@
         "tries": 1,
         "at": "2026-10-28T14:38:25.615Z"
       }
+    },
+    {
+      "igMediaId": "18397561426163900",
+      "permalink": "https://www.instagram.com/reel/DfCx7aDCLUD",
+      "igTimestamp": "2026-10-28T15:43:28+0000",
+      "marker": "pkp:video:KUwYd0LahsY",
+      "story": {
+        "state": "done",
+        "id": "",
+        "from": "paise",
+        "tries": 0,
+        "at": "2026-10-28T15:44:36.981Z",
+        "note": "path B: Paise owns IG Story; companion FB-only"
+      },
+      "fb": {
+        "state": "todo"
+      }
     }
   ]
 }
