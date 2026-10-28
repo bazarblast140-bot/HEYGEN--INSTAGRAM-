@@ -33,7 +33,15 @@ jobs:
           [[ -z "$FBID" || "$FBID" =~ ^[0-9_]+$ ]] || { echo "bad fb id"; exit 1; }
           curl -sS "$G/$IGID?fields=id,media_type,timestamp,permalink,caption&access_token=$IGT" > m.json
           python3 -c "import json;d=json.load(open('m.json'));print(json.dumps({k:(v[:300] if isinstance(v,str) else v) for k,v in d.items()},ensure_ascii=False,indent=1))"
-          python3 -c "import json,os,sys;d=json.load(open('m.json'));sys.exit(0 if os.environ['MUST'] in d.get('caption','') else 1)" || { echo "caption check FAILED"; exit 1; }
+          python3 -c "
+import json, os, sys
+d = json.load(open('m.json'))
+must = os.environ['MUST']
+cap = d.get('caption') or ''
+if must == '__NO_CAPTION__':
+    sys.exit(0 if not str(cap).strip() else 1)
+sys.exit(0 if must in cap else 1)
+" || { echo "caption check FAILED"; exit 1; }
           if [ -n "$FBID" ]; then curl -sS "$G/$FBID?fields=id,created_time,permalink_url,message&access_token=$FBT" | python3 -c "import json,sys;d=json.load(sys.stdin);d['message']=d.get('message','')[:200];print(json.dumps(d,ensure_ascii=False,indent=1))"; fi
           [ "$DRY" = "true" ] && { echo "dry run, nothing deleted"; exit 0; }
           echo "IG delete:"; curl -sS -X DELETE "$G/$IGID?access_token=$IGT"; echo
