@@ -371,7 +371,12 @@
         "note": "path B: Paise owns IG Story; companion FB-only"
       },
       "fb": {
-        "state": "todo"
+        "state": "done",
+        "id": "1079048091803024",
+        "url": "https://www.facebook.com/reel/1079048091803024",
+        "from": "rehost",
+        "tries": 1,
+        "at": "2026-10-28T15:51:11.808Z"
       }
     }
   ]
