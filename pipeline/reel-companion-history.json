@@ -376,7 +376,9 @@
         "url": "https://www.facebook.com/reel/1079048091803024",
         "from": "rehost",
         "tries": 1,
-        "at": "2026-10-28T15:51:11.808Z"
+        "at": "2026-10-28T15:51:11.808Z",
+        "paiseFbId": "1175001528412293",
+        "note": "DUPLICATE: Paise already published FB reel 1175001528412293 (GHA 40718393734); companion run 40720061528 posted second FB reel 1079048091803024 - not deleted"
       }
     }
   ]
