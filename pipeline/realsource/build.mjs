@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { captureChart } from './lib/capture-chart.mjs';
 import { captureNews } from './lib/capture-news.mjs';
+import { explainLines } from './lib/explainer.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LIB = HERE;
@@ -115,6 +116,7 @@ for (const [i, a] of cfg.articles.entries()) {
     if (!body.includes(n)) P(`number ${n} in our text is not in the article`);
   }
   A.checkLine = lines.join(' · ');
+  A.explain = explainLines(A, body); // 1-2 spoken-Hindi lines above the screenshot; never a problem
   ART.push(A);
 }
 

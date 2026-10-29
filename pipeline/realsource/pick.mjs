@@ -58,6 +58,7 @@ export const Pick = z.object({
     cand: z.number().int(), kicker: z.enum(KINDS), key: z.string().min(30).max(600),
     title: z.string().min(4).max(400), coverLine: z.string().min(4).max(400), plain: z.string().min(10).max(800),
     summary: z.string().min(6).max(600), captionLine: z.string().min(6).max(600), contains: z.array(z.string().min(1).max(400)).max(10),
+    explain: z.any().optional(),
   })).length(4),
 });
 
@@ -137,6 +138,7 @@ Return JSON: {
  "key": ONE sentence copied EXACTLY character-for-character from the article text, containing a number, 30-260 chars,
  "title": slide title, STRICTLY under 45 characters, "coverLine": STRICTLY under 40 characters (count them), "plain": 1-2 short sentences explaining the key fact, max 170 chars,
  "summary": one line max 120 chars ending with "(<site>)", "captionLine": Latin-script Hinglish max 130 chars,
+ "explain": 1-2 VERY short spoken Hindi lines in Latin script (max 70 chars each) for a common viewer: line 1 what happened, line 2 starting "Matlab" what it means for them (e.g. ["SBI Card 1 Dec se 1% fee lega.", "Matlab rent/wallet payment mehenga hoga."]); only numbers from the text,
  "contains": 2-4 short exact strings from the text (numbers with units) that prove the facts you wrote}]}`;
 
 async function main() {
@@ -184,6 +186,7 @@ async function main() {
     return {
       id: a.kicker.toLowerCase().replace(/\s+/g, '-'), kicker: a.kicker, siteName: c.site, url: c.url, key: a.key, capture: c.capture,
       title: a.title, coverLine: a.coverLine, plain: a.plain, summary: a.summary, captionLine: a.captionLine,
+      ...(a.explain ? { explain: a.explain } : {}),
       checks: [{ type: 'contains', all: a.contains }],
     };
   });
