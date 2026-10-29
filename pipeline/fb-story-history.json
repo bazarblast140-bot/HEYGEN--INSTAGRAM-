@@ -884,5 +884,15 @@
     "at": "2026-10-29T10:11:24.433Z",
     "state": "done",
     "fbStoryId": "1108395395237153"
+  },
+  {
+    "date": "2026-10-29",
+    "igStoryId": "18027204503919085",
+    "igMediaId": "18029111726697368",
+    "kind": "video",
+    "source": "reel-companion",
+    "at": "2026-10-29T10:57:43.629Z",
+    "state": "done",
+    "fbStoryId": "4149653098499466"
   }
 ]
