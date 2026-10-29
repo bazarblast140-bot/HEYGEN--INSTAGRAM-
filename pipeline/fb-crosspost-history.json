@@ -268,5 +268,12 @@
     "source": "reel-companion",
     "paiseFbId": "1175001528412293",
     "note": "duplicate: Paise FB 1175001528412293 is primary; this companion copy is a second FB reel"
+  },
+  {
+    "date": "2026-10-29",
+    "kind": "carousel",
+    "slot": "midday",
+    "igMediaId": "18136706857709393",
+    "fbId": "1362385786947916_122122599489452312"
   }
 ]
