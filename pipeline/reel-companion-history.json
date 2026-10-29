@@ -380,6 +380,20 @@
         "paiseFbId": "1175001528412293",
         "note": "DUPLICATE: Paise already published FB reel 1175001528412293 (GHA 40718393734); companion run 40720061528 posted second FB reel 1079048091803024 - not deleted"
       }
+    },
+    {
+      "igMediaId": "18014502479987432",
+      "permalink": "https://www.instagram.com/reel/DfEBBFZCiOB/",
+      "igTimestamp": "2026-10-29T03:14:19+0000",
+      "marker": "pkp:video:MrA5yjx0V_g",
+      "story": {
+        "state": "done",
+        "id": "18120063692099046",
+        "from": "rehost",
+        "tries": 1,
+        "at": "2026-10-29T10:11:24.433Z"
+      },
+      "fb": null
     }
   ]
 }
