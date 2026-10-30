@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { captureChart } from './lib/capture-chart.mjs';
 import { captureNews } from './lib/capture-news.mjs';
-import { explainLines } from './lib/explainer.mjs';
+import { explainLines, plainHindi } from './lib/explainer.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LIB = HERE;
@@ -95,7 +95,7 @@ for (const [i, a] of cfg.articles.entries()) {
       const v = (c.to / c.from - 1) * 100;
       if (!(body.includes(String(c.from)) && body.includes(String(c.to)) && body.includes(c.claimText))) P('pct inputs not in the article');
       if (v < c.claimMin || v > c.claimMax) P(`${c.from}→${c.to} = ${v.toFixed(1)}%, article says "${c.claimText}"`);
-      lines.push(`Code check: ${c.from} → ${c.to} = +${v.toFixed(1)}% (“${c.claimText}” सही)`);
+      lines.push(`कोड जाँच: ${c.from} → ${c.to} = +${v.toFixed(1)}% (“${c.claimText}” सही)`);
     } else if (c.type === 'nifty-move') {
       const m = /gained ([\d,.]+) points, or ([\d.]+)%, to ([\d,.]+) at .*?after opening at ([\d,.]+)/.exec(N.key?.text || '');
       const num = (s) => Number(s.replace(/,/g, '').replace(/\.$/, ''));
@@ -108,7 +108,7 @@ for (const [i, a] of cfg.articles.entries()) {
       if (!okPrev) P(`${fmt(lvl)} − ${fmt(pts)} = ${fmt(lvl - pts)} ≠ previous close ${fmt(prev.c)}`);
       if (!okOpen) P(`article open ${open} ≠ Yahoo open ${D.yahooLast.o}`);
       if (!okPct) P(`${pts}/${prev.c} = ${(pts / prev.c * 100).toFixed(3)}% ≠ ${pct}%`);
-      lines.push(`Code check: ${fmt(lvl)} − ${fmt(pts)} = ${fmt(prev.c)} (${dshort(prev.date)} close) · open = Yahoo open`);
+      lines.push(`कोड जाँच: ${fmt(lvl)} − ${fmt(pts)} = ${fmt(prev.c)} (${dshort(prev.date)} close) · open = Yahoo open`);
     }
   }
   // every number we print for this article must be in the article itself
@@ -116,7 +116,8 @@ for (const [i, a] of cfg.articles.entries()) {
     if (!body.includes(n)) P(`number ${n} in our text is not in the article`);
   }
   A.checkLine = lines.join(' · ');
-  A.explain = explainLines(A, body); // 1-2 spoken-Hindi lines above the screenshot; never a problem
+  A.explain = explainLines(A, body); // 1-2 Devanagari spoken-Hindi lines above the screenshot; never a problem
+  A.plain = plainHindi(A, body);     // Devanagari summary box below the screenshot; fallback, never a problem
   ART.push(A);
 }
 
