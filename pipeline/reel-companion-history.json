@@ -507,7 +507,14 @@
         "state": "skipped-paise-owns",
         "at": "2026-10-30T10:55:44.356Z"
       },
-      "fb": null,
+      "fb": {
+        "state": "done",
+        "id": "1430493925262954",
+        "url": "https://www.facebook.com/reel/1430493925262954/",
+        "from": "paise",
+        "tries": 0,
+        "at": "2026-10-30T16:50:10.128Z"
+      },
       "fbStory": {
         "state": "done",
         "id": "1123379180444474",
