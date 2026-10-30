@@ -19,7 +19,8 @@
         "from": "pinned",
         "tries": 2,
         "at": "2026-10-03T12:14:53.855Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18102311315289964",
@@ -40,7 +41,8 @@
         "from": "release",
         "tries": 1,
         "at": "2026-10-04T03:59:13.523Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "17934205758143411",
@@ -61,7 +63,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-16T15:01:33.484Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18254247205308469",
@@ -82,7 +85,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-22T08:47:44.841Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18129715882891873",
@@ -103,7 +107,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-22T15:41:21.198Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18110834924612040",
@@ -124,7 +129,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-22T15:41:21.198Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "17996509101020960",
@@ -145,7 +151,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-23T08:41:10.808Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18132257848666774",
@@ -166,7 +173,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-23T11:14:26.423Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18150163780504654",
@@ -187,7 +195,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-23T15:57:15.728Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18074990717578363",
@@ -208,7 +217,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-24T08:15:58.577Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "17993634726023425",
@@ -229,7 +239,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-24T14:08:06.706Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18128526760630011",
@@ -250,7 +261,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-25T08:34:00.314Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18112019912222566",
@@ -271,7 +283,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-25T14:35:43.687Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18118473754971160",
@@ -292,7 +305,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-26T09:08:35.991Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18094585748258651",
@@ -313,7 +327,8 @@
         "from": "pinned",
         "tries": 1,
         "at": "2026-10-26T17:40:41.389Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18075252761485216",
@@ -334,7 +349,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-26T17:40:41.389Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "17994359973104700",
@@ -355,7 +371,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-28T14:38:25.615Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18397561426163900",
@@ -379,7 +396,8 @@
         "at": "2026-10-28T15:51:11.808Z",
         "paiseFbId": "1175001528412293",
         "note": "DUPLICATE: Paise already published FB reel 1175001528412293 (GHA 40718393734); companion run 40720061528 posted second FB reel 1079048091803024 - not deleted"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18014502479987432",
@@ -402,7 +420,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-29T10:11:24.433Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18029111726697368",
@@ -425,7 +444,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-29T10:57:43.629Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "18630533602003222",
@@ -448,7 +468,8 @@
         "from": "rehost",
         "tries": 1,
         "at": "2026-10-29T17:07:09.334Z"
-      }
+      },
+      "fbStory": null
     },
     {
       "igMediaId": "17912162850561057",
@@ -469,6 +490,12 @@
         "from": "paise",
         "tries": 0,
         "at": "2026-10-30T03:14:53.000Z"
+      },
+      "fbStory": {
+        "state": "done",
+        "id": "1607905267065320",
+        "tries": 1,
+        "at": "2026-10-30T10:14:00.247Z"
       }
     }
   ]
