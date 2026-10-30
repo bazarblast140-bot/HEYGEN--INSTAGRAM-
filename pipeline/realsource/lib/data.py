@@ -79,18 +79,15 @@ for b in bars[:-1]:  # not the live bar
     if not best or best[1] - best[0] < 4: continue
     top, bot = best
     pairs += [(b['h'], top), (b['l'], bot + 1)]
-def fit(ps):
-    n = len(ps); mx = sum(p for p, _ in ps) / n; my = sum(v for _, v in ps) / n
-    bb = sum((p - mx) * (v - my) for p, v in ps) / sum((p - mx) ** 2 for p, _ in ps)
-    return my - bb * mx, bb
-a, slope = fit(pairs)
-res = [abs(v - (a + slope * p)) for p, v in pairs]
-pairs2 = [pp for pp, r in zip(pairs, res) if r <= 6]
-a, slope = fit(pairs2)
-res2 = [abs(v - (a + slope * p)) for p, v in pairs2]
-mapping = {'a': a, 'b': slope, 'pairs': len(pairs2), 'dropped': len(pairs) - len(pairs2), 'maxResidualPx': round(max(res2), 2),
+# Robust Theil-Sen start (pxfit.py), same as the 5m fit: on 30 Oct 2026 two gross
+# outlier pairs dragged the old OLS start so far that 109/148 good pairs were dropped
+# and every midday run held, although the axis was fine (robust fit keeps 146/148).
+from pxfit import robust_fit
+n0 = len(pairs)
+a, slope, pairs2, res2 = robust_fit(pairs)
+mapping = {'a': a, 'b': slope, 'pairs': len(pairs2), 'dropped': n0 - len(pairs2), 'maxResidualPx': round(max(res2), 2),
            'meanResidualPx': round(sum(res2) / len(res2), 2)}
-if mapping['maxResidualPx'] > 4 or len(pairs2) < 40: problems.append(f'price->pixel fit is poor: {mapping}')
+if mapping['maxResidualPx'] > 4 or len(pairs2) < 40 or len(pairs2) < 0.7 * n0: problems.append(f'price->pixel fit is poor: {mapping}')
 
 # ---- levels ---------------------------------------------------------------
 dated = [b for b in bars if b['date']]
