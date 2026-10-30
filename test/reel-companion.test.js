@@ -8,6 +8,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import {
   runCompanion, planCompanion, fbCaption, readCompanion, readFbLedger, mergeCompanion,
   ownReason, markerOf, redact, MAX_TRIES, SOURCE, paiseVideoId, storyPlan, ffmpegArgs,
+  matchFbReel, titleOf, STORY_SKIPPED, FB_GRACE_MINUTES,
 } from '../pipeline/src/publish/companion.js';
 import { BROKER_CTA, hasBioCta } from '../pipeline/src/publish/cta.js';
 import { ENGAGEMENT } from '../pipeline/src/publish/caption.js';
@@ -57,15 +58,17 @@ function tmpFiles({ own = [], fb = [], companion = [] } = {}) {
     companion: path.join(dir, 'reel-companion-history.json'),
     fb: path.join(dir, 'fb-crosspost-history.json'),
     own: path.join(dir, 'reel-publish-history.json'),
+    fbStory: path.join(dir, 'fb-story-history.json'),
   };
+  fs.writeFileSync(files.fbStory, '[]');
   fs.writeFileSync(files.companion, JSON.stringify({ entries: companion }));
   fs.writeFileSync(files.fb, JSON.stringify(fb));
   fs.writeFileSync(files.own, JSON.stringify({ entries: own }));
   return files;
 }
 
-function fakeApi({ media = [PAISE], storyFails = null, fbFails = null, probe = () => true, release = '' } = {}) {
-  const calls = { story: [], fb: [], probe: [], release: 0 };
+function fakeApi({ media = [PAISE], storyFails = null, fbFails = null, probe = () => true, release = '', pageReels = [], pageLookupOk = true } = {}) {
+  const calls = { story: [], fb: [], fbStory: [], lookups: 0, probe: [], release: 0 };
   let n = 0;
   return {
     calls,
@@ -81,6 +84,19 @@ function fakeApi({ media = [PAISE], storyFails = null, fbFails = null, probe = (
         n += 1;
         return `1790000000000000${n}`;
       },
+      async findFbReel({ item }) {
+        calls.lookups += 1;
+        if (!pageLookupOk) return { ok: false, match: null };
+        return { ok: true, match: matchFbReel(pageReels, item) };
+      },
+      async fbStory({ igStoryId, igMediaId, url, file }) {
+        calls.fbStory.push({ igStoryId, igMediaId, url });
+        n += 1;
+        const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
+        rows.push({ igStoryId, igMediaId, state: 'done', fbStoryId: `77${n}` });
+        fs.writeFileSync(file, JSON.stringify(rows));
+        return { state: 'done', fbStoryId: `77${n}` };
+      },
       async postFbReel({ caption, videoUrl, onStage }) {
         calls.fb.push({ caption, videoUrl });
         if (fbFails) { onStage?.(fbFails.stage || 'upload'); throw fbFails.error; }
@@ -94,17 +110,20 @@ function fakeApi({ media = [PAISE], storyFails = null, fbFails = null, probe = (
 
 const quiet = () => {};
 
-test('a Paise Reel gets one Story and one Facebook Reel, recorded on both ledgers', async () => {
+test('a Paise Reel gets NO IG Story (Paise owns it), one Facebook Reel and one FB Story, recorded on the ledgers', async () => {
   const files = tmpFiles();
   const { api, calls } = fakeApi();
   const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
-  assert.equal(calls.story.length, 1);
+  assert.equal(calls.story.length, 0, 'IG Story is never posted');
+  assert.equal(out.stories.length, 0);
   assert.equal(calls.fb.length, 1);
-  assert.match(calls.story[0], /companion-media/); // re-hosted, never the Meta CDN url
-  assert.equal(out.stories[0].igMediaId, PAISE.id);
+  assert.equal(calls.fbStory.length, 1);
+  assert.match(calls.fbStory[0].url, /companion-media/); // re-hosted, never the Meta CDN url
+  assert.equal(calls.fbStory[0].igMediaId, PAISE.id);
   const entry = readCompanion(files.companion).find((e) => e.igMediaId === PAISE.id);
-  assert.equal(entry.story.state, 'done');
+  assert.equal(entry.story.state, STORY_SKIPPED);
   assert.equal(entry.fb.state, 'done');
+  assert.equal(entry.fbStory.state, 'done');
   assert.equal(entry.marker, 'pkp:video:KVmMkKG5gzk');
   const fb = readFbLedger(files.fb);
   assert.equal(fb.length, 1);
@@ -114,16 +133,20 @@ test('a Paise Reel gets one Story and one Facebook Reel, recorded on both ledger
   assert.ok(calls.fb[0].caption.startsWith('SIP ka jaadu'));
 });
 
-test('two runs over the same media never post twice', async () => {
+test('two runs over the same media never post twice (idempotent ledger)', async () => {
   const files = tmpFiles();
   const first = fakeApi();
   await runCompanion({ env: ENV, api: first.api, now: NOW, files, log: quiet });
+  const snapshot = fs.readFileSync(files.companion, 'utf8');
   const second = fakeApi();
   const out = await runCompanion({ env: ENV, api: second.api, now: NOW + 3600e3, files, log: quiet });
   assert.equal(second.calls.story.length, 0);
   assert.equal(second.calls.fb.length, 0);
+  assert.equal(second.calls.fbStory.length, 0);
+  assert.equal(second.calls.lookups, 0, 'done ledger: not even a Page lookup');
   assert.equal(out.plan[0].action, 'skip');
   assert.equal(readFbLedger(files.fb).length, 1);
+  assert.equal(fs.readFileSync(files.companion, 'utf8'), snapshot, 'ledger unchanged by the second run');
 });
 
 test('an overlapping run that recorded the Story first is respected (ledger re-read before each post)', async () => {
@@ -169,23 +192,19 @@ test('own Reels are skipped: publish ledger, own FB cross-post, or own caption C
   assert.equal(ownReason(PAISE, {}), '');
 });
 
-test('soft-fail: a Story error does not block Facebook, and is retried later up to the cap', async () => {
-  const files = tmpFiles();
-  const lines = [];
-  const bad = fakeApi({ storyFails: { error: Object.assign(new Error('boom access_token=IGTOKEN-secret-value-123'), { status: 400 }) } });
-  const out = await runCompanion({ env: ENV, api: bad.api, now: NOW, files, log: (l) => lines.push(l) });
-  assert.equal(bad.calls.story.length, 1);
-  assert.equal(bad.calls.fb.length, 1, 'Facebook still posted');
-  assert.equal(out.failures.length, 1);
-  assert.equal(lines.join('\n').includes('IGTOKEN-secret-value-123'), false, 'token never printed');
-  assert.equal(JSON.stringify(readCompanion(files.companion)).includes('IGTOKEN'), false);
-
-  // Later run: the Story is retried, Facebook is not repeated.
-  const again = fakeApi();
-  await runCompanion({ env: ENV, api: again.api, now: NOW, files, log: quiet });
-  assert.equal(again.calls.story.length, 1);
-  assert.equal(again.calls.fb.length, 0);
-  assert.equal(readCompanion(files.companion)[0].story.state, 'done');
+test('no IG Story call ever, for any Paise Reel or ledger state (even a failed/old story row)', async () => {
+  const files = tmpFiles({ companion: [{ igMediaId: PAISE.id, story: { state: 'failed', tries: 1 }, fb: null }] });
+  const media = [PAISE, PAISE_WITH_CTA];
+  const { api, calls } = fakeApi({ media });
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  await runCompanion({ env: { ...ENV, FB_CROSSPOST: 'false' }, api, now: NOW, files, log: quiet });
+  assert.equal(calls.story.length, 0);
+  for (const e of readCompanion(files.companion)) assert.equal(e.story.state, STORY_SKIPPED);
+  const plan = planCompanion({ media, now: NOW, fbEnabled: true });
+  assert.ok(plan.every((p) => p.doStory === false));
+  const src = fs.readFileSync(new URL('../pipeline/src/publish/companion.js', import.meta.url), 'utf8');
+  const run = src.slice(src.indexOf('export async function runCompanion'));
+  assert.doesNotMatch(run, /api\.postStory\(/, 'runCompanion never calls postStory');
 });
 
 test('a failing part gives up after MAX_TRIES; an uncertain publish is never retried', async () => {
@@ -200,12 +219,12 @@ test('a failing part gives up after MAX_TRIES; an uncertain publish is never ret
   assert.equal(plan[0].fb, 'gave-up');
 
   const files2 = tmpFiles();
-  const lost = fakeApi({ storyFails: { stage: 'publish', error: new Error('socket hang up') } });
+  const lost = fakeApi({ fbFails: { stage: 'finish', error: new Error('socket hang up') } });
   await runCompanion({ env: ENV, api: lost.api, now: NOW, files: files2, log: quiet });
-  assert.equal(readCompanion(files2.companion)[0].story.state, 'uncertain');
+  assert.equal(readCompanion(files2.companion)[0].fb.state, 'uncertain');
   const retry = fakeApi();
   await runCompanion({ env: ENV, api: retry.api, now: NOW, files: files2, log: quiet });
-  assert.equal(retry.calls.story.length, 0, 'uncertain Story is not posted again');
+  assert.equal(retry.calls.fb.length, 0, 'uncertain FB Reel is not posted again');
 });
 
 test('nothing throws: a broken media list or a crashing API is a logged line', async () => {
@@ -237,22 +256,22 @@ test('off unless ENABLE_REEL_COMPANION is true; dry run posts and writes nothing
   assert.deepEqual(readCompanion(files.companion), []);
 });
 
-test('FB_CROSSPOST off: Story only', async () => {
+test('FB_CROSSPOST off: nothing posted at all (no IG Story either)', async () => {
   const files = tmpFiles();
   const { api, calls } = fakeApi();
-  await runCompanion({ env: { ...ENV, FB_CROSSPOST: 'false' }, api, now: NOW, files, log: quiet });
-  assert.equal(calls.story.length, 1);
-  assert.equal(calls.fb.length, 0);
+  const out = await runCompanion({ env: { ...ENV, FB_CROSSPOST: 'false' }, api, now: NOW, files, log: quiet });
+  assert.equal(calls.story.length + calls.fb.length + calls.fbStory.length, 0);
+  assert.equal(out.plan[0].action, 'skip');
 });
 
 test('an unfetchable media_url falls back to the release mp4', async () => {
   const files = tmpFiles();
   const release = 'https://github.com/o/r/releases/download/ig-reel-2026-10-03/paise-short-1-1-abc.mp4';
   const { api, calls } = fakeApi({ probe: (url) => url === release, release });
-  const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
-  assert.equal(calls.story[0], release);
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
   assert.equal(calls.fb[0].videoUrl, release);
-  assert.equal(out.stories[0].from, 'release');
+  assert.equal(calls.fbStory[0].url, release);
+  assert.equal(readCompanion(files.companion)[0].fb.from, 'release');
 });
 
 test('Facebook caption: CTA appended once, never duplicated, kept inside the limit', () => {
@@ -300,8 +319,8 @@ test('never hands a Meta CDN media_url to Graph: pinned, then re-host, then rele
   const { api, calls } = fakeApi();
   api.pinnedVideo = async () => 'https://github.com/x/y/releases/download/companion-media/ig-pinned.mp4';
   await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
-  assert.equal(calls.story.length, 1);
-  assert.ok( calls.story.every((u) => u.includes('ig-pinned.mp4')));
+  assert.equal(calls.fb.length, 1);
+  assert.ok(calls.fbStory.every((c) => c.url.includes('ig-pinned.mp4')));
   assert.ok(calls.fb.every((c) => c.videoUrl.includes('ig-pinned.mp4')));
 });
 
@@ -345,7 +364,7 @@ test('Story length plan: ≤ 59.5 s as is; longer sped up by duration/59 up to 1
   assert.ok(ffmpegArgs({ action: 'trim', seconds: 59 }, 'i', 'o').join(' ').includes('-t 59'));
 });
 
-test('the Story uses the shortened copy; the Facebook Reel keeps the original', async () => {
+test('the FB Story uses the shortened copy; the Facebook Reel keeps the original', async () => {
   const files = tmpFiles();
   const { api, calls } = fakeApi();
   const asked = [];
@@ -353,10 +372,9 @@ test('the Story uses the shortened copy; the Facebook Reel keeps the original', 
   api.youtubePublic = async () => true;
   await runCompanion({ env: { ...ENV, GITHUB_REPOSITORY: 'x/y', GITHUB_TOKEN: 't' }, api, now: NOW, files, log: quiet });
   assert.deepEqual(asked, [PAISE.id]);
-  assert.match(calls.story[0], new RegExp(`ig-${PAISE.id}-story\\.mp4$`));
+  assert.match(calls.fbStory[0].url, new RegExp(`ig-${PAISE.id}-story\\.mp4$`));
   assert.equal(calls.fb.length, 1);
   assert.doesNotMatch(calls.fb[0].videoUrl, /-story\.mp4$/, 'FB gets the original');
-  assert.equal(readCompanion(files.companion)[0].story.from, 'story-copy (1.077x)');
 });
 
 test('a YouTube video that is not public is skipped and nothing is recorded', async () => {
@@ -365,13 +383,13 @@ test('a YouTube video that is not public is skipped and nothing is recorded', as
   api.youtubePublic = async (id) => (id === 'KVmMkKG5gzk' ? false : true);
   const lines = [];
   await runCompanion({ env: ENV, api, now: NOW, files, log: (l) => lines.push(l) });
-  assert.equal(calls.story.length, 0);
-  assert.equal(calls.fb.length, 0);
+  assert.equal(calls.fb.length + calls.fbStory.length, 0);
   assert.deepEqual(readCompanion(files.companion), []);
   assert.ok(lines.some((l) => /KVmMkKG5gzk is not public/.test(l)));
   api.youtubePublic = async () => null; // oEmbed unreachable: not a reason to skip
   await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
-  assert.equal(calls.story.length, 1);
+  assert.equal(calls.fb.length, 1);
+  assert.equal(calls.story.length, 0);
 });
 
 test('ffmpeg: a 63.5 s clip becomes a ≤ 59.5 s Story copy', { skip: !hasFfmpeg }, () => {
@@ -409,10 +427,10 @@ test('audit: the copy is this Reel\'s own video — re-hosted media_url is used 
   const files = tmpFiles();
   const release = 'https://github.com/o/r/releases/download/ig-reel-2026-10-03/paise-short-1-1-abc.mp4';
   const { api, calls } = fakeApi({ release });
-  const out = await runCompanion({ env: { ...ENV, GITHUB_REPOSITORY: 'x/y', GITHUB_TOKEN: 't' }, api, now: NOW, files, log: quiet });
+  await runCompanion({ env: { ...ENV, GITHUB_REPOSITORY: 'x/y', GITHUB_TOKEN: 't' }, api, now: NOW, files, log: quiet });
   assert.equal(calls.release, 0, 'release lookup not needed');
-  assert.match(calls.story[0], /companion-media/);
-  assert.equal(out.stories[0].from, 'rehost');
+  assert.match(calls.fb[0].videoUrl, /companion-media/);
+  assert.equal(readCompanion(files.companion)[0].fb.from, 'rehost');
 });
 
 test('audit: a handled Reel is never posted again — second run, other run\'s ledger row, FB ledger row', async () => {
@@ -420,11 +438,67 @@ test('audit: a handled Reel is never posted again — second run, other run\'s l
   const { api, calls } = fakeApi();
   await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
   await runCompanion({ env: ENV, api, now: NOW + 3600 * 1000, files, log: quiet });
-  assert.equal(calls.story.length, 1);
+  assert.equal(calls.story.length, 0);
   assert.equal(calls.fb.length, 1);
+  assert.equal(calls.fbStory.length, 1);
   const files2 = tmpFiles();
   fs.writeFileSync(files2.fb, JSON.stringify([{ date: '2026-10-03', kind: 'reel', igMediaId: PAISE.id, fbId: '1', source: SOURCE }]));
   const two = fakeApi();
   await runCompanion({ env: ENV, api: two.api, now: NOW, files: files2, log: quiet });
   assert.equal(two.calls.fb.length, 0, 'FB copy already in fb-crosspost-history.json');
+});
+
+// ---------------------------------------------------------------- 30 Oct: nothing double
+
+test('FB Reel skipped when Paise already put this Reel on the Page (title match), ledger marked from=paise', async () => {
+  const files = tmpFiles();
+  const pageReels = [{ id: '1642320804298508', description: 'SIP ka jaadu\n\nPaise ki pathshala ...', created_time: '2026-10-03T03:02:40+0000', permalink_url: '/reel/1642320804298508/' }];
+  const { api, calls } = fakeApi({ pageReels });
+  const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.fb.length, 0, 'no second FB Reel');
+  assert.equal(calls.story.length, 0);
+  const e = readCompanion(files.companion)[0];
+  assert.equal(e.fb.state, 'done');
+  assert.equal(e.fb.from, 'paise');
+  assert.equal(e.fb.id, '1642320804298508');
+  assert.equal(out.fbSkipped[0].fbId, '1642320804298508');
+  assert.equal(readFbLedger(files.fb).length, 0);
+  const again = fakeApi({ pageReels });
+  await runCompanion({ env: ENV, api: again.api, now: NOW + 3600e3, files, log: quiet });
+  assert.equal(again.calls.fb.length + again.calls.lookups, 0);
+});
+
+test('FB match by marker or YouTube id; an old same-title video or another title is not a match', () => {
+  const item = PAISE;
+  assert.ok(matchFbReel([{ id: '1', description: 'x pkp:video:KVmMkKG5gzk' }], item));
+  assert.ok(matchFbReel([{ id: '2', description: 'https://youtu.be/KVmMkKG5gzk' }], item));
+  assert.equal(matchFbReel([{ id: '3', description: 'Gold vs FD', created_time: '2026-10-03T03:05:00+0000' }], item), null);
+  assert.equal(matchFbReel([{ id: '4', description: 'SIP ka jaadu', created_time: '2026-09-01T03:05:00+0000' }], item), null, 'stale');
+  assert.equal(matchFbReel([{ id: '5', description: 'Short' }], { ...item, caption: 'Short\n\npkp:video:AAAAAAAAAAA' }), null, 'too-short title');
+  assert.equal(titleOf('  Aaj ki  Khabar | 30 Oct \n\nbody'), 'aaj ki khabar | 30 oct');
+});
+
+test('FB Reel is NOT posted when the Page lookup fails (fail closed) and is not counted as a try', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi({ pageLookupOk: false });
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.fb.length, 0);
+  assert.equal(readCompanion(files.companion)[0].fb, null);
+});
+
+test('FB check waits FB_GRACE_MINUTES after the IG Reel so Paise can cross-post first', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  const fresh = Date.parse(PAISE.timestamp) + (FB_GRACE_MINUTES - 5) * 60000;
+  await runCompanion({ env: ENV, api, now: fresh, files, log: quiet });
+  assert.equal(calls.fb.length + calls.lookups, 0);
+});
+
+test('ledger done (e.g. from=paise) is never posted; FB Story already in fb-story ledger by media id is not repeated', async () => {
+  const files = tmpFiles({ companion: [{ igMediaId: PAISE.id, story: { state: 'done', from: 'paise' }, fb: { state: 'done', from: 'paise', id: '9' } }] });
+  fs.writeFileSync(files.fbStory, JSON.stringify([{ igStoryId: '1790', igMediaId: PAISE.id, state: 'done', fbStoryId: '5' }]));
+  const { api, calls } = fakeApi();
+  const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.story.length + calls.fb.length + calls.fbStory.length + calls.lookups, 0);
+  assert.equal(out.plan[0].action, 'skip');
 });

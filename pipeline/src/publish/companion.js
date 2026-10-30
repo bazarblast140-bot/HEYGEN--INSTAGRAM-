@@ -2,13 +2,18 @@
 // (marker pkp:video:<YouTube id>, video public on YouTube); never our own Reels.
 //
 // Paise Ki Pathshala (another repo) posts its YouTube Shorts to the same
-// Instagram account as Reels. It posts no Story and nothing to Facebook. This
-// job lists the account's recent media, and for each of those Reels:
+// Instagram account as Reels, and (since late Oct 2026) also posts the IG
+// Story itself and, often, a Facebook Reel. Owner rule 30-Oct: nothing is ever
+// posted twice. So for each Paise Reel this job:
 //
-//   * posts the same video as an Instagram Story (media_url first, then the
-//     matching mp4 Paise hosted on this repo's releases), and
+//   * NEVER posts an Instagram Story (Paise owns it): the ledger records
+//     story.state = 'skipped-paise-owns';
 //   * copies it to the Facebook Page as a Reel (facebook.js), with the IG
-//     caption plus one "link in bio" CTA when the caption has none.
+//     caption plus one "link in bio" CTA, ONLY when the Page has no Reel for it
+//     yet (Paise's FB Reel is found on the Page via Graph by marker / YouTube
+//     id / title; a failed lookup means no post) and the ledger is not done;
+//   * posts one Facebook Page video Story for it (fb-story-history.json, keyed
+//     on the IG media id), since Paise posts none.
 //
 // Never twice. Everything is keyed on the Instagram media id:
 //   reel-companion-history.json   { igMediaId, story: {...}, fb: {...} }
@@ -49,6 +54,9 @@ export const WINDOW_HOURS = 36;
 export const MAX_TRIES = 3;
 export const RELEASE_MATCH_MINUTES = 90;
 export const FB_CAPTION_LIMIT = 2200;
+/** Paise cross-posts its own FB Reel minutes after the IG Reel: wait this long before checking. */
+export const FB_GRACE_MINUTES = 30;
+export const STORY_SKIPPED = 'skipped-paise-owns';
 export const MEDIA_FIELDS = 'id,media_type,media_product_type,timestamp,permalink,media_url,caption';
 
 const VERSION = process.env.IG_API_VERSION || 'v23.0';
@@ -111,6 +119,7 @@ export function mergeCompanion(a = [], b = []) {
       ...entry,
       story: strongerPart(prev.story, entry.story),
       fb: strongerPart(prev.fb, entry.fb),
+      fbStory: strongerPart(prev.fbStory, entry.fbStory),
     });
   }
   return [...byId.values()];
@@ -222,8 +231,12 @@ export function ownReason(item, { ownIds = new Set(), fbLedger = [] } = {}) {
 }
 
 /** todo | retry | done | uncertain | gave-up | off */
-export function partState(entry, part, { fbLedger = [], id } = {}) {
+export function partState(entry, part, { fbLedger = [], fbStoryLedger = [], id } = {}) {
   if (part === 'fb' && fbLedger.some((row) => String(row?.igMediaId) === String(id))) return 'done';
+  if (part === 'fbStory') {
+    const row = fbStoryLedger.find((r) => String(r?.igMediaId) === String(id) && ['done', 'uncertain'].includes(r?.state));
+    if (row) return row.state;
+  }
   const p = entry?.[part];
   if (!p) return 'todo';
   if (p.state === 'done') return 'done';
@@ -233,7 +246,7 @@ export function partState(entry, part, { fbLedger = [], id } = {}) {
 }
 
 export function planCompanion({
-  media = [], now = Date.now(), ownIds = new Set(), companion = [], fbLedger = [],
+  media = [], now = Date.now(), ownIds = new Set(), companion = [], fbLedger = [], fbStoryLedger = [],
   windowHours = WINDOW_HOURS, fbEnabled = false,
 } = {}) {
   const since = now - windowHours * 3600 * 1000;
@@ -250,17 +263,50 @@ export function planCompanion({
       const yt = paiseVideoId(item.caption);
       if (!yt) return { id, item, action: 'skip', reason: 'not a Paise Ki Pathshala Reel (no pkp:video:<id> marker)', story: 'other', fb: 'other', doStory: false, doFb: false };
       const entry = companion.find((e) => String(e.igMediaId) === id);
-      const story = partState(entry, 'story', { fbLedger, id });
+      // The IG Story of a Paise Reel belongs to Paise: never posted here.
+      const story = entry?.story?.state === 'done' ? 'done' : STORY_SKIPPED;
+      const doStory = false;
       const fb = fbEnabled ? partState(entry, 'fb', { fbLedger, id }) : 'off';
-      const doStory = story === 'todo' || story === 'retry';
+      const fbStory = fbEnabled ? partState(entry, 'fbStory', { fbStoryLedger, id }) : 'off';
       const doFb = fb === 'todo' || fb === 'retry';
+      const doFbStory = fbStory === 'todo' || fbStory === 'retry';
       return {
         id, item, yt,
-        action: doStory || doFb ? 'handle' : 'skip',
-        reason: doStory || doFb ? '' : 'already handled',
-        story, fb, doStory, doFb,
+        action: doFb || doFbStory ? 'handle' : 'skip',
+        reason: doFb || doFbStory ? '' : 'already handled',
+        story, fb, fbStory, doStory, doFb, doFbStory,
       };
     });
+}
+
+function norm(t) { return String(t || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+/** First caption line, used as the title Paise also puts first in its FB description. */
+export function titleOf(caption) {
+  const line = String(caption || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+  return norm(line).slice(0, 60);
+}
+
+/**
+ * The Page video that is already this IG Reel (same marker, same YouTube id, or
+ * same title posted from 6 h before the IG Reel onwards), else null.
+ */
+export function matchFbReel(rows = [], item = {}) {
+  const marker = markerOf(item.caption).toLowerCase();
+  const yt = paiseVideoId(item.caption);
+  const title = titleOf(item.caption);
+  const t = when(item);
+  for (const row of rows || []) {
+    const desc = norm(row?.description);
+    if (!desc) continue;
+    const at = new Date(row?.created_time || '').getTime();
+    const recent = t === null || Number.isNaN(at) || at >= t - 6 * 3600e3;
+    const hit = (marker && desc.includes(marker))
+      || (yt && String(row?.description || '').includes(yt))
+      || (recent && title.length >= 12 && desc.includes(title));
+    if (hit) return { id: String(row.id), url: row.permalink_url ? (String(row.permalink_url).startsWith('http') ? row.permalink_url : `https://www.facebook.com${row.permalink_url}`) : '', created_time: row.created_time || '' };
+  }
+  return null;
 }
 
 export function fbCaption(igCaption) {
@@ -450,6 +496,31 @@ export function realApi({ fetchImpl = globalThis.fetch } = {}) {
       return id;
     },
 
+    /**
+     * The Page's own Reel/video for this IG Reel if one exists (Paise posts
+     * its FB Reel with description = title + YouTube description). Lists
+     * /video_reels and /videos; ok:false when neither could be read.
+     */
+    async findFbReel({ pageId, token, item }) {
+      const rows = [];
+      let okAny = false;
+      for (const edge of ['video_reels', 'videos']) {
+        const url = new URL(`https://graph.facebook.com/${VERSION}/${encodeURIComponent(pageId)}/${edge}`);
+        url.searchParams.set('fields', 'id,description,created_time,permalink_url');
+        url.searchParams.set('limit', '50');
+        url.searchParams.set('access_token', token);
+        try {
+          const res = await fetchImpl(url, { signal: AbortSignal.timeout(20000) });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || body.error) continue;
+          okAny = true;
+          if (Array.isArray(body.data)) rows.push(...body.data);
+        } catch { /* try the other edge */ }
+      }
+      if (!okAny) return { ok: false, match: null };
+      return { ok: true, match: matchFbReel(rows, item) };
+    },
+
     async postFbReel({ pageId, token, videoUrl, caption, onStage }) {
       return crossPostReel({ pageId, token, videoUrl, caption, onStage, fetchImpl });
     },
@@ -541,8 +612,9 @@ function describe(p) {
   const head = `${p.id}  ${t}${marker ? `  ${marker}` : ''}  ${p.item.permalink || ''}`.trim();
   if (p.action === 'skip') return `SKIP   ${head}  — ${p.reason}`;
   const parts = [
-    p.doStory ? `Story (${p.story})` : `no Story (${p.story})`,
+    `no IG Story (${p.story})`,
     p.doFb ? `FB Reel (${p.fb})` : `no FB (${p.fb})`,
+    p.doFbStory ? `FB Story (${p.fbStory})` : `no FB Story (${p.fbStory})`,
   ];
   return `DO     ${head}  — ${parts.join(', ')}`;
 }
@@ -592,6 +664,7 @@ export async function runCompanion({
       companion: readCompanion(files.companion),
       fbLedger: readFbLedger(files.fb),
       ownIds: readOwnIds(files.own),
+      fbStoryLedger: readStoryLedger(files.fbStory || FB_STORY_LEDGER),
     });
     const plan = planCompanion({ media: listed.items, now, fbEnabled, ...read() });
     result.plan = plan.map(({ item, ...rest }) => ({ ...rest, timestamp: item.timestamp, permalink: item.permalink || '', marker: markerOf(item.caption) }));
@@ -638,60 +711,39 @@ export async function runCompanion({
         return video;
       };
 
-      // --- Story
-      if (p.doStory) {
-        await sync();
-        const fresh = planCompanion({ media: [p.item], now, fbEnabled, ...read() })[0];
-        if (!fresh?.doStory) {
-          say(`  ${p.id}: Story already recorded by another run — skipped.`);
-        } else {
-          const prev = readCompanion(files.companion).find((e) => String(e.igMediaId) === p.id)?.story;
-          const tries = (prev?.tries || 0) + 1;
-          let stage = '';
-          try {
-            const original = await resolveVideo();
-            if (!original) throw new Error('no fetchable video (media_url and release mp4 both unavailable)');
-            // Stories max out at 60 s: a longer video gets a sped-up / trimmed copy (Story only).
-            const v = api.storyVideo
-              ? await api.storyVideo({ repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN, id: p.item.id, video: original, log: say })
-              : original;
-            const id = await api.postStory({ igUserId, token, surface, videoUrl: v.url, onStage: (s) => { stage = s; } });
-            updatePart(files.companion, p.item, 'story', { state: 'done', id: String(id), from: v.from, tries, at: new Date(now).toISOString() });
-            result.stories.push({ igMediaId: p.id, storyId: String(id), from: v.from });
-            say(`  ${p.id}: Story published ${id} (video from ${v.from})`);
-            // The same Story on the Facebook Page (video story, re-hosted URL).
-            // Its own try: a failure is a logged line and can never mark the
-            // IG Story failed or stop the Facebook Reel below.
-            try {
-              if (api.fbStory) {
-                const fbs = await api.fbStory({
-                  kind: 'video', igStoryId: String(id), igMediaId: p.id, url: v.url, source: SOURCE, env,
-                  file: files.fbStory || FB_STORY_LEDGER, now, log: (l) => say(`  ${p.id}: ${l}`),
-                });
-                result.fbStories.push({ igMediaId: p.id, igStoryId: String(id), ...fbs });
-              }
-            } catch (e) {
-              say(`  ${p.id}: Facebook Story error (ignored): ${redact(e?.message, secrets)}`);
-            }
-            await commit(`Record reel companion Story for ${p.id}`);
-          } catch (err) {
-            const uncertain = stage === 'publish' && !err.status;
-            updatePart(files.companion, p.item, 'story', {
-              state: uncertain ? 'uncertain' : 'failed', tries, stage, error: redact(err.message, secrets), at: new Date(now).toISOString(),
-            });
-            result.failures.push({ igMediaId: p.id, part: 'story', uncertain, error: redact(err.message, secrets) });
-            say(`  ${p.id}: Story FAILED${uncertain ? ' (uncertain — will not retry)' : ` (try ${tries}/${MAX_TRIES})`}: ${err.message}`);
-            await commit(`Record reel companion Story failure for ${p.id}`);
-          }
+      // --- Instagram Story: never (Paise owns it). Only recorded.
+      {
+        const cur = readCompanion(files.companion).find((e) => String(e.igMediaId) === p.id)?.story;
+        if (!cur || (cur.state !== 'done' && cur.state !== STORY_SKIPPED)) {
+          const e = readCompanion(files.companion);
+          const id = String(p.item.id);
+          const base = e.find((x) => String(x.igMediaId) === id) || {
+            igMediaId: id, permalink: p.item.permalink || '', igTimestamp: p.item.timestamp || '', marker: markerOf(p.item.caption), story: null, fb: null,
+          };
+          writeCompanion(files.companion, [...e.filter((x) => String(x.igMediaId) !== id), { ...base, story: { state: STORY_SKIPPED, at: new Date(now).toISOString() } }]);
         }
       }
 
       // --- Facebook
-      if (p.doFb) {
+      const young = when(p.item) !== null && now - when(p.item) < FB_GRACE_MINUTES * 60000;
+      if (p.doFb && young) {
+        say(`  ${p.id}: Reel is under ${FB_GRACE_MINUTES} min old — Facebook check deferred to a later run (Paise may still cross-post).`);
+      } else if (p.doFb) {
         await sync();
         const fresh = planCompanion({ media: [p.item], now, fbEnabled, ...read() })[0];
+        const found = fresh?.doFb && api.findFbReel
+          ? await api.findFbReel({ pageId, token: fbToken, item: p.item }).catch(() => ({ ok: false, match: null }))
+          : { ok: false, match: null }; // no lookup available = fail closed
         if (!fresh?.doFb) {
           say(`  ${p.id}: Facebook copy already recorded — skipped.`);
+        } else if (!found.ok) {
+          say(`  ${p.id}: could not read the Page's Reels to rule out a Paise copy — Facebook NOT posted (retried next run).`);
+          result.failures.push({ igMediaId: p.id, part: 'fb-check', uncertain: false, error: 'page video lookup failed' });
+        } else if (found.match) {
+          updatePart(files.companion, p.item, 'fb', { state: 'done', id: found.match.id, url: found.match.url, from: 'paise', tries: 0, at: new Date(now).toISOString() });
+          result.fbSkipped = [...(result.fbSkipped || []), { igMediaId: p.id, fbId: found.match.id }];
+          say(`  ${p.id}: Page already has this Reel (${found.match.id}, posted by Paise) — Facebook NOT posted again.`);
+          await commit(`Record Paise Facebook Reel for ${p.id} (companion skipped)`);
         } else {
           const prev = readCompanion(files.companion).find((e) => String(e.igMediaId) === p.id)?.fb;
           const tries = (prev?.tries || 0) + 1;
@@ -718,6 +770,37 @@ export async function runCompanion({
             say(`  ${p.id}: Facebook FAILED${uncertain ? ' (uncertain — will not retry)' : ` (try ${tries}/${MAX_TRIES})`}: ${err.message}`);
             await commit(`Record reel companion Facebook failure for ${p.id}`);
           }
+        }
+      }
+
+      // --- Facebook Page Story (Paise posts none). Keyed on the IG media id.
+      if (p.doFbStory && api.fbStory) {
+        await sync();
+        const fresh = planCompanion({ media: [p.item], now, fbEnabled, ...read() })[0];
+        if (!fresh?.doFbStory) {
+          say(`  ${p.id}: Facebook Story already recorded — skipped.`);
+        } else {
+          try {
+            const original = await resolveVideo();
+            if (!original) throw new Error('no fetchable video');
+            const v = api.storyVideo
+              ? await api.storyVideo({ repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN, id: p.item.id, video: original, log: say })
+              : original;
+            const fbs = await api.fbStory({
+              kind: 'video', igStoryId: p.id, igMediaId: p.id, url: v.url, source: SOURCE, env,
+              file: files.fbStory || FB_STORY_LEDGER, now, log: (l) => say(`  ${p.id}: ${l}`),
+            });
+            result.fbStories.push({ igMediaId: p.id, ...fbs });
+            if (['done', 'uncertain', 'failed'].includes(fbs?.state)) {
+              const prev = readCompanion(files.companion).find((e) => String(e.igMediaId) === p.id)?.fbStory;
+              updatePart(files.companion, p.item, 'fbStory', {
+                state: fbs.state, id: fbs.fbStoryId || '', tries: (prev?.tries || 0) + 1, ...(fbs.error ? { error: redact(fbs.error, secrets) } : {}), at: new Date(now).toISOString(),
+              });
+            }
+          } catch (e) {
+            say(`  ${p.id}: Facebook Story error (ignored): ${redact(e?.message, secrets)}`);
+          }
+          await commit(`Record reel companion Facebook Story for ${p.id}`);
         }
       }
     }

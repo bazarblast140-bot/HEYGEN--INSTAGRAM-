@@ -217,35 +217,38 @@ function companionApi(fetchImpl) {
       async rehostVideo() { return 'https://github.com/o/r/releases/download/companion-media/ig-18000000000000001.mp4'; },
       async storyVideo({ id }) { return { url: `https://github.com/o/r/releases/download/companion-media/ig-${id}-story.mp4`, from: 'story-copy (1.077x)' }; },
       async postStory({ onStage }) { calls.story.push(1); onStage?.('publish'); return '17900000000000001'; },
+      async findFbReel() { return { ok: true, match: null }; },
       async postFbReel({ onStage }) { calls.fbReel += 1; onStage?.('finish'); return { id: 'R1', url: 'https://www.facebook.com/reel/R1' }; },
       async fbStory(args) { return fbStory({ ...args, fetchImpl }); },
     },
   };
 }
 
-test('companion: after the IG Story, the same (re-hosted, ≤60 s) video goes up as an FB Page video story', async () => {
+test('companion: no IG Story (Paise owns it); the re-hosted ≤60 s video goes up as an FB Page video story keyed on the IG media id', async () => {
   const { fetchImpl, calls } = mockFetch(videoRoutes());
   const files = companionFiles();
-  const { api } = companionApi(fetchImpl);
+  const { api, calls: apiCalls } = companionApi(fetchImpl);
   const out = await runCompanion({ env: CENV, api, now: NOW, files, log: () => {} });
-  assert.equal(out.stories.length, 1);
-  assert.deepEqual(out.fbStories.map((s) => [s.igStoryId, s.state, s.fbStoryId]), [['17900000000000001', 'done', 'STORY_V1']]);
+  assert.equal(out.stories.length, 0);
+  assert.equal(apiCalls.story.length, 0);
+  assert.deepEqual(out.fbStories.map((s) => [s.igMediaId, s.state, s.fbStoryId]), [['18000000000000001', 'done', 'STORY_V1']]);
   const upload = calls.find((c) => c.url.includes('rupload'));
   assert.equal(upload.headers.file_url, 'https://github.com/o/r/releases/download/companion-media/ig-18000000000000001-story.mp4');
   assert.equal(readStoryLedger(files.fbStory)[0].source, 'reel-companion');
-  // A second run does nothing new (IG Story done → no FB Story attempt either).
+  // A second run does nothing new.
   const before = calls.length;
   await runCompanion({ env: CENV, api, now: NOW + 3600000, files, log: () => {} });
   assert.equal(calls.length, before);
 });
 
-test('companion: an FB Story failure never marks the IG Story failed and never stops the FB Reel', async () => {
+test('companion: an FB Story failure never stops the FB Reel and never posts an IG Story', async () => {
   const { fetchImpl } = mockFetch({ [`${PAGE}/video_stories`]: { res: json(400, { error: { message: 'Unsupported post request', code: 100, fbtrace_id: 'T9' } }) } });
   const files = companionFiles();
   const { api, calls } = companionApi(fetchImpl);
   const lines = [];
   const out = await runCompanion({ env: CENV, api, now: NOW, files, log: (l) => lines.push(l) });
-  assert.equal(readCompanion(files.companion)[0].story.state, 'done');
+  assert.equal(readCompanion(files.companion)[0].story.state, 'skipped-paise-owns');
+  assert.equal(calls.story.length, 0);
   assert.equal(calls.fbReel, 1);
   assert.equal(out.fb.length, 1);
   assert.equal(out.fbStories[0].state, 'failed');
@@ -258,7 +261,8 @@ test('companion: a crashing FB Story helper is contained too', async () => {
   const { api, calls } = companionApi(null);
   api.fbStory = async () => { throw new Error('boom'); };
   const out = await runCompanion({ env: CENV, api, now: NOW, files, log: () => {} });
-  assert.equal(readCompanion(files.companion)[0].story.state, 'done');
+  assert.equal(readCompanion(files.companion)[0].story.state, 'skipped-paise-owns');
+  assert.equal(calls.story.length, 0);
   assert.equal(calls.fbReel, 1);
   assert.deepEqual(out.failures, []);
 });

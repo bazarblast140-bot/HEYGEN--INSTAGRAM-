@@ -1,5 +1,13 @@
 name: Reel companion
 
+# OWNER RULE 30-Oct-2026: nothing is ever posted twice. Paise Ki Pathshala
+# owns the Instagram Story of its Reels: this job NEVER posts an IG Story
+# (ledger story.state = skipped-paise-owns). It posts only a Facebook Reel
+# (skipped when the Page already has one for that Reel: Paise cross-posts too,
+# found via Graph /video_reels + /videos by marker / YouTube id / title; a failed
+# lookup posts nothing; checked >=30 min after the IG Reel) and one Facebook
+# Page Story per Reel. The older notes below predate this rule.
+#
 # Paise Ki Pathshala (another repo) posts each public YouTube Short to this
 # Instagram account as a Reel, and nothing else. This job adds what it does not:
 # an Instagram Story of that Reel and a copy on the Facebook Page. Runs
