@@ -3,31 +3,61 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
-import { explainLines, fallbackExplain, EXPLAIN_MAX } from '../pipeline/realsource/lib/explainer.mjs';
+import { explainLines, fallbackExplain, plainHindi, isDevanagari, EXPLAIN_MAX, PLAIN_MAX } from '../pipeline/realsource/lib/explainer.mjs';
 
 const A = { kicker: 'Finance', title: 'SBI Card लेगा 1% fee', headline: 'SBI Card to charge 1% fee on rent payments from Dec 1', bodyText: 'SBI Card will levy 1% fee from December 1 on rent and wallet loads.' };
 
-test('model lines pass when short and their numbers are in the article', () => {
-  const x = explainLines({ ...A, explain: ['SBI Card 1 Dec se 1% fee lega.', 'Matlab rent/wallet payment mehenga hoga.'] });
-  assert.deepEqual(x, ['SBI Card 1 Dec se 1% fee lega.', 'Matlab rent/wallet payment mehenga hoga.']);
+test('Devanagari model lines pass when short and their numbers are in the article', () => {
+  const ok = ['SBI Card 1 दिसंबर से 1% फीस लेगा।', 'मतलब: किराया और वॉलेट पेमेंट महँगा होगा।'];
+  assert.deepEqual(explainLines({ ...A, explain: ok }), ok);
 });
 
-test('invented number, too long, missing or junk -> deterministic headline fallback, never throws', () => {
+test('Roman Hinglish/English, invented number, too long, Devanagari digits, missing or junk -> Devanagari fallback, never throws', () => {
   const fb = fallbackExplain(A);
-  assert.equal(fb.length, 2); assert.match(fb[0], /^Khabar: SBI Card/); assert.match(fb[1], /^Matlab/);
-  assert.deepEqual(explainLines({ ...A, explain: ['Fee 7% hogi.'] }), fb);
-  assert.deepEqual(explainLines({ ...A, explain: ['x'.repeat(EXPLAIN_MAX + 1)] }), fb);
+  assert.equal(fb.length, 2); assert.match(fb[0], /^खबर: /); assert.ok(isDevanagari(fb[0])); assert.match(fb[1], /^मतलब: /);
+  assert.deepEqual(explainLines({ ...A, explain: ['SBI Card 1 Dec se 1% fee lega.', 'Matlab rent mehenga hoga.'] }), fb);
+  assert.deepEqual(explainLines({ ...A, explain: ['SBI Card will charge 1% fee'] }), fb);
+  assert.deepEqual(explainLines({ ...A, explain: ['फीस 7% होगी।'] }), fb);
+  assert.deepEqual(explainLines({ ...A, explain: ['फीस १% होगी।'] }), fb);
+  assert.deepEqual(explainLines({ ...A, explain: ['क'.repeat(EXPLAIN_MAX + 1)] }), fb);
   assert.deepEqual(explainLines(A), fb);
   assert.deepEqual(explainLines({ ...A, explain: 42 }), fb);
   assert.doesNotThrow(() => explainLines(undefined));
-  for (const l of fallbackExplain({ kicker: 'Market', title: 'y'.repeat(300) })) assert.ok(l.length <= EXPLAIN_MAX);
+  for (const l of fallbackExplain({ kicker: 'Market', title: 'ख'.repeat(300) })) assert.ok(l.length <= EXPLAIN_MAX);
+  for (const k of ['Market', 'Stocks', 'Mutual Funds', 'Finance', undefined]) for (const l of fallbackExplain({ kicker: k, title: 'Nifty jumps 2% on bank rally' })) {
+    assert.ok(isDevanagari(l), `fallback "${l}" is Devanagari`); assert.ok(!/Nifty jumps/.test(l), 'English title is not used'); assert.ok(l.length <= EXPLAIN_MAX);
+  }
+});
+
+test('summary box text (plain) is Devanagari, number-checked, else Devanagari fallback', () => {
+  const good = 'SBI Card अब किराए और वॉलेट पेमेंट पर 1% फीस लेगा।';
+  assert.equal(plainHindi({ ...A, plain: good }), good);
+  for (const bad of ['SBI Card ab rent par 1% fee lega.', 'SBI Card will levy a fee of 1%.', 'अब 5% fee लगेगी।', 'क'.repeat(PLAIN_MAX + 1)]) {
+    const x = plainHindi({ ...A, plain: bad });
+    assert.equal(x, fallbackExplain(A).join(' ')); assert.ok(isDevanagari(x));
+  }
+  assert.doesNotThrow(() => plainHindi(undefined));
+});
+
+test('pick asks for Devanagari explain/plain and flags Roman copy only as a soft retry problem', async () => {
+  const { scriptProblems } = await import('../pipeline/realsource/pick.mjs');
+  assert.deepEqual(scriptProblems({ articles: [{ cand: 1, plain: 'SBI Card अब 1% फीस लेगा।', explain: ['SBI Card 1 दिसंबर से 1% फीस लेगा।'] }] }), []);
+  const p = scriptProblems({ articles: [{ cand: 2, plain: 'SBI Card ab fee lega', explain: ['Matlab mehenga'] }] });
+  assert.equal(p.length, 2);
+  const src = await fs.readFile(new URL('../pipeline/realsource/pick.mjs', import.meta.url), 'utf8');
+  assert.match(src, /attempt < 4 \? scriptProblems\(pick\)/);
 });
 
 test('pick prompt asks for the explain field; build attaches it without adding a problem', async () => {
   const pick = await fs.readFile(new URL('../pipeline/realsource/pick.mjs', import.meta.url), 'utf8');
-  assert.match(pick, /"explain": 1-2 VERY short spoken Hindi lines/);
+  assert.match(pick, /"explain": 1-2 VERY short spoken Hindi lines in DEVANAGARI script/);
+  assert.match(pick, /"plain": [^\n]*DEVANAGARI script/);
   const build = await fs.readFile(new URL('../pipeline/realsource/build.mjs', import.meta.url), 'utf8');
   assert.match(build, /A\.explain = explainLines\(A, body\)/);
+  assert.match(build, /A\.plain = plainHindi\(A, body\)/);
+  const wf = await fs.readFile(new URL('../.github/workflows/midday-realsource.yml', import.meta.url), 'utf8');
+  assert.match(wf, /fonts-noto-core/);
+  await fs.access(new URL('../pipeline/realsource/fonts/noto-devanagari.ttf', import.meta.url));
   assert.ok(!/explain[^\n]*problems\.push|P\([^\n]*explain/.test(build));
 });
 

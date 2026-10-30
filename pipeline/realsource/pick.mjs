@@ -17,6 +17,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { captureNews } from './lib/capture-news.mjs';
+import { isDevanagari, EXPLAIN_MAX, PLAIN_MAX } from './lib/explainer.mjs';
 import { resolveProvider, callOpenAICompatible } from '../src/script/providers.js';
 
 const args = process.argv.slice(2);
@@ -50,7 +51,7 @@ export function istDateOf(pub) {
 const numbers = (t) => (String(t || '').match(/\d(?:[\d,]*\d)?(?:\.\d+)?/g) || []);
 
 // Loose schema so a long field comes back as fixable feedback, not a parse failure.
-export const LIMITS = { hook: 40, title: 48, coverLine: 50, plain: 170, summary: 120, captionLine: 130, contains: 60 };
+export const LIMITS = { hook: 40, title: 48, coverLine: 50, plain: PLAIN_MAX, summary: 120, captionLine: 130, contains: 60 };
 export const Pick = z.object({
   hook: z.string().optional(),
   hookFrom: z.number().int().optional(), hookTerms: z.array(z.string()).optional(),
@@ -129,6 +130,18 @@ export function pickProblems(pick, cands, dropped = new Set()) {
   return out;
 }
 
+/** Devanagari rule (30 Oct 2026) for the explainer + summary box. Soft: asked for on retries,
+ * but never fails the day — build.mjs swaps in Devanagari fallback lines instead. */
+export function scriptProblems(pick) {
+  const out = [];
+  for (const a of pick?.articles || []) {
+    if (!isDevanagari(a.plain)) out.push(`cand ${a.cand}: plain must be simple Hindi in Devanagari script (not Roman/English)`);
+    const ex = Array.isArray(a.explain) ? a.explain : [];
+    if (!ex.length || ex.some((l) => !isDevanagari(l) || String(l).length > EXPLAIN_MAX)) out.push(`cand ${a.cand}: explain must be 1-2 Devanagari Hindi lines, max ${EXPLAIN_MAX} chars each`);
+  }
+  return out;
+}
+
 const SYSTEM = `You write a daily Instagram carousel for @rajesh_technical_trader (Indian retail investors).
 You get today's news articles (the text a reader sees on the page). Choose exactly 4: one "Market" (Nifty/Sensex/market move or market-wide news), one "Stocks" (a specific company/stock news, NOT a buy/sell tip), one "Mutual Funds" (MF/ETF/NFO/SEBI-MF news), one "Finance" (personal finance, banking, tax, RBI/SEBI regulation).
 Rules: use ONLY facts written in that article's text. Never add numbers that are not in the text. No advice, no predictions, no "buy/sell".
@@ -136,9 +149,9 @@ Language: simple Hinglish — Hindi in Devanagari with common English finance wo
 Return JSON: {
  "articles":[{"cand": candidate number, "kicker": "Market"|"Stocks"|"Mutual Funds"|"Finance",
  "key": ONE sentence copied EXACTLY character-for-character from the article text, containing a number, 30-260 chars,
- "title": slide title, STRICTLY under 45 characters, "coverLine": STRICTLY under 40 characters (count them), "plain": 1-2 short sentences explaining the key fact, max 170 chars,
+ "title": slide title, STRICTLY under 45 characters, "coverLine": STRICTLY under 40 characters (count them), "plain": 1-2 short sentences explaining the key fact in simple spoken Hindi written in DEVANAGARI script (bolchaal, not Roman Hinglish/English; brand names may stay Latin; figures in Latin digits), max ${PLAIN_MAX} chars,
  "summary": one line max 120 chars ending with "(<site>)", "captionLine": Latin-script Hinglish max 130 chars,
- "explain": 1-2 VERY short spoken Hindi lines in Latin script (max 70 chars each) for a common viewer: line 1 what happened, line 2 starting "Matlab" what it means for them (e.g. ["SBI Card 1 Dec se 1% fee lega.", "Matlab rent/wallet payment mehenga hoga."]); only numbers from the text,
+ "explain": 1-2 VERY short spoken Hindi lines in DEVANAGARI script (max ${EXPLAIN_MAX} chars each, figures in Latin digits) for a common viewer: line 1 what happened, line 2 starting "मतलब:" what it means for them (e.g. ["SBI Card 1 दिसंबर से 1% फीस लेगा।", "मतलब: किराया और वॉलेट पेमेंट महँगा होगा।"]); only numbers from the text,
  "contains": 2-4 short exact strings from the text (numbers with units) that prove the facts you wrote}]}`;
 
 async function main() {
@@ -173,7 +186,7 @@ async function main() {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     try {
       ({ output: pick } = await callOpenAICompatible({ provider, system: SYSTEM, user, schema: Pick }));
-      problems = pickProblems(applyCodeFields(pick, cands), cands, dropped);
+      problems = [...pickProblems(applyCodeFields(pick, cands), cands, dropped), ...(attempt < 4 ? scriptProblems(pick) : [])];
     } catch (err) { problems = [String(err.message).slice(0, 300)]; pick = null; }
     await fs.writeFile(path.join(out, `pick-attempt-${attempt}.json`), `${JSON.stringify({ pick, problems }, null, 1)}\n`);
     console.log(`model attempt ${attempt}: ${problems.length ? problems.join(' | ') : 'ok'}`);
