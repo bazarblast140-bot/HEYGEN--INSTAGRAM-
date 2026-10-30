@@ -391,7 +391,9 @@
         "id": "18120063692099046",
         "from": "rehost",
         "tries": 1,
-        "at": "2026-10-29T10:11:24.433Z"
+        "at": "2026-10-29T10:11:24.433Z",
+        "paiseStoryId": "18348217162255897",
+        "note": "DUPLICATE: Paise posted IG Story 18348217162255897 (paise GHA 40810812263). Delete via ig-delete.yml failed: Graph API (#10) cannot delete Stories; must remove in IG app or let expire 24h"
       },
       "fb": {
         "state": "done",
@@ -412,7 +414,9 @@
         "id": "18027204503919085",
         "from": "rehost",
         "tries": 1,
-        "at": "2026-10-29T10:57:43.629Z"
+        "at": "2026-10-29T10:57:43.629Z",
+        "paiseStoryId": "17916499176516453",
+        "note": "DUPLICATE: Paise posted IG Story 17916499176516453 (paise GHA 40858205333). Delete via ig-delete.yml failed: Graph API (#10) cannot delete Stories; must remove in IG app or let expire 24h"
       },
       "fb": {
         "state": "done",
@@ -433,7 +437,9 @@
         "id": "18098102099437641",
         "from": "rehost",
         "tries": 1,
-        "at": "2026-10-29T17:07:09.334Z"
+        "at": "2026-10-29T17:07:09.334Z",
+        "paiseStoryId": "18076612997774611",
+        "note": "DUPLICATE: Paise posted IG Story 18076612997774611 (paise GHA 40880736224). Delete via ig-delete.yml failed: Graph API (#10) cannot delete Stories; must remove in IG app or let expire 24h"
       },
       "fb": {
         "state": "done",
