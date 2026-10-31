@@ -569,6 +569,23 @@
         "tries": 1,
         "at": "2026-10-31T09:48:28.248Z"
       }
+    },
+    {
+      "igMediaId": "17980281803918311",
+      "permalink": "https://www.instagram.com/reel/DfKHca9CDyq/",
+      "igTimestamp": "2026-10-31T12:06:09+0000",
+      "marker": "pkp:video:Nj7FlqVnwvk",
+      "story": {
+        "state": "skipped-paise-owns",
+        "at": "2026-10-31T12:18:14.200Z"
+      },
+      "fb": null,
+      "fbStory": {
+        "state": "done",
+        "id": "29473463058945773",
+        "tries": 1,
+        "at": "2026-10-31T12:18:14.200Z"
+      }
     }
   ]
 }
