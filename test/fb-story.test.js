@@ -218,6 +218,7 @@ function companionApi(fetchImpl) {
       async storyVideo({ id }) { return { url: `https://github.com/o/r/releases/download/companion-media/ig-${id}-story.mp4`, from: 'story-copy (1.077x)' }; },
       async postStory({ onStage }) { calls.story.push(1); onStage?.('publish'); return '17900000000000001'; },
       async findFbReel() { return { ok: true, match: null }; },
+      async reelCover() { return { buffer: Buffer.alloc(20000, 1), from: 'drawn-hindi', headline: { main: 'टेस्ट' } }; },
       async postFbReel({ onStage }) { calls.fbReel += 1; onStage?.('finish'); return { id: 'R1', url: 'https://www.facebook.com/reel/R1' }; },
       async fbStory(args) { return fbStory({ ...args, fetchImpl }); },
     },

@@ -73,8 +73,9 @@ export async function crossPostCarousel({ pageId, token, imageUrls, caption, fet
 }
 
 /** A Reel becomes a Facebook Reel on the Page, fetched from the same public URL. */
-export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImpl = fetch, onStage }) {
+export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImpl = fetch, onStage, cover = null, requireCover = false }) {
   if (!videoUrl) throw new Error('no video URL to cross-post');
+  if (requireCover && !cover?.length) throw new Error('no custom cover — Reel not posted (owner rule: never an auto frame)');
   onStage?.('start');
   const start = await graph(`${pageId}/video_reels`, {
     method: 'POST', params: { upload_phase: 'start' }, token, fetchImpl,
@@ -90,6 +91,12 @@ export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImp
   if (!up.ok || upBody.success === false || upBody.error) {
     throw new Error(`Facebook reel upload failed: ${upBody.error?.message || upBody.debug_info?.message || up.status}`);
   }
+  // Custom cover BEFORE publishing (POST /{video-id}/thumbnails, is_preferred):
+  // if it fails the video is never published, so no Reel goes out with an auto frame.
+  if (cover?.length) {
+    onStage?.('thumbnail', videoId);
+    await setThumbnail({ videoId, token, image: cover, fetchImpl });
+  }
   // Past this point a lost response may still mean a live post, so callers
   // treat a failure here as "uncertain" and never retry it automatically.
   onStage?.('finish', videoId);
@@ -99,6 +106,20 @@ export async function crossPostReel({ pageId, token, videoUrl, caption, fetchImp
     token, fetchImpl,
   });
   return { id: videoId, url: `https://www.facebook.com/reel/${videoId}` };
+}
+
+/** POST /{video-id}/thumbnails source=<jpeg> is_preferred=true (multipart). Throws with .status on failure. */
+export async function setThumbnail({ videoId, token, image, fetchImpl = fetch }) {
+  const form = new FormData();
+  form.set('access_token', token);
+  form.set('is_preferred', 'true');
+  form.set('source', new Blob([image], { type: 'image/jpeg' }), 'cover.jpg');
+  const res = await fetchImpl(`${GRAPH}/${VERSION}/${videoId}/thumbnails`, { method: 'POST', body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.error || body.success === false) {
+    throw Object.assign(new Error(`Facebook cover (thumbnail) failed: ${body.error?.message || res.status}`), { status: res.status || 400 });
+  }
+  return true;
 }
 
 // The ledger: one line per Instagram media id that has been copied. A second

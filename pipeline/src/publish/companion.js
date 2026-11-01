@@ -40,6 +40,7 @@ import { ENGAGEMENT } from './caption.js';
 import { withBioCta } from './cta.js';
 import { flagOn } from './flags.js';
 import { enabled as fbFlagOn, crossPostReel, istDay } from './facebook.js';
+import { buildReelCover } from './reel-cover.js';
 import { call, waitForContainer } from './instagram.js';
 import { fbStory, FB_STORY_LEDGER, readStoryLedger, writeStoryLedger, mergeStoryLedger } from './fb-story.js';
 
@@ -521,8 +522,13 @@ export function realApi({ fetchImpl = globalThis.fetch } = {}) {
       return { ok: true, match: matchFbReel(rows, item) };
     },
 
-    async postFbReel({ pageId, token, videoUrl, caption, onStage }) {
-      return crossPostReel({ pageId, token, videoUrl, caption, onStage, fetchImpl });
+    async postFbReel({ pageId, token, videoUrl, caption, onStage, cover }) {
+      return crossPostReel({ pageId, token, videoUrl, caption, onStage, cover, requireCover: true, fetchImpl });
+    },
+
+    /** Custom cover JPEG for the FB Reel (YouTube custom thumb + big Devanagari headline). */
+    async reelCover({ caption, yt }) {
+      return buildReelCover({ caption, yt, fetchImpl });
     },
 
     /** Facebook Page video story for an IG Story just posted (never throws). */
@@ -751,10 +757,14 @@ export async function runCompanion({
           try {
             const v = await resolveVideo();
             if (!v) throw new Error('no fetchable video (media_url and release mp4 both unavailable)');
+            // Owner rule 1-Nov-2026: no custom cover = no Facebook Reel (never an auto frame).
+            const cover = api.reelCover ? await api.reelCover({ caption: p.item.caption, yt: p.yt }).catch((e) => { say(`  ${p.id}: cover build failed: ${redact(e?.message, secrets)}`); return null; }) : null;
+            if (!cover?.buffer?.length) throw new Error('no custom cover could be made — Facebook Reel NOT posted (no auto-frame Reels)');
+            say(`  ${p.id}: cover ready (${cover.from}): ${cover.headline?.main || ''}`);
             const out = await api.postFbReel({
-              pageId, token: fbToken, videoUrl: v.url, caption: fbCaption(p.item.caption), onStage: (s) => { stage = s; },
+              pageId, token: fbToken, videoUrl: v.url, caption: fbCaption(p.item.caption), cover: cover.buffer, onStage: (s) => { stage = s; },
             });
-            updatePart(files.companion, p.item, 'fb', { state: 'done', id: String(out.id), url: out.url, from: v.from, tries, at: new Date(now).toISOString() });
+            updatePart(files.companion, p.item, 'fb', { state: 'done', id: String(out.id), url: out.url, from: v.from, cover: cover.from, tries, at: new Date(now).toISOString() });
             const fbRows = readFbLedger(files.fb);
             fbRows.push({ date: istDay(new Date(now)), kind: 'reel', igMediaId: p.id, fbId: String(out.id), source: SOURCE });
             fs.writeFileSync(files.fb, `${JSON.stringify(fbRows.slice(-200), null, 2)}\n`);

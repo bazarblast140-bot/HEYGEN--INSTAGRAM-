@@ -97,6 +97,7 @@ function fakeApi({ media = [PAISE], storyFails = null, fbFails = null, probe = (
         fs.writeFileSync(file, JSON.stringify(rows));
         return { state: 'done', fbStoryId: `77${n}` };
       },
+      async reelCover() { return { buffer: Buffer.alloc(20000, 1), from: 'drawn-hindi', headline: { main: 'टेस्ट' } }; },
       async postFbReel({ caption, videoUrl, onStage }) {
         calls.fb.push({ caption, videoUrl });
         if (fbFails) { onStage?.(fbFails.stage || 'upload'); throw fbFails.error; }
@@ -501,4 +502,111 @@ test('ledger done (e.g. from=paise) is never posted; FB Story already in fb-stor
   const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
   assert.equal(calls.story.length + calls.fb.length + calls.fbStory.length + calls.lookups, 0);
   assert.equal(out.plan[0].action, 'skip');
+});
+
+// ---- Owner rule 1-Nov-2026: FB Reel needs a custom Hindi cover, never an auto frame.
+import { crossPostReel, setThumbnail } from '../pipeline/src/publish/facebook.js';
+import { coverHeadline, hasDevanagari, coverHtml, buildReelCover } from '../pipeline/src/publish/reel-cover.js';
+
+test('no cover → Facebook Reel NOT posted, recorded failed (not uncertain), no ledger row', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  api.reelCover = async () => { throw new Error('render failed'); };
+  const out = await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.fb.length, 0, 'postFbReel never called');
+  assert.equal(readFbLedger(files.fb).length, 0);
+  const entry = readCompanion(files.companion).find((e) => e.igMediaId === PAISE.id);
+  assert.equal(entry.fb.state, 'failed');
+  assert.ok(out.failures.some((f) => f.part === 'fb' && !f.uncertain));
+});
+
+test('api without reelCover posts no Facebook Reel', async () => {
+  const files = tmpFiles();
+  const { api, calls } = fakeApi();
+  delete api.reelCover;
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(calls.fb.length, 0);
+});
+
+test('cover buffer is handed to postFbReel and recorded', async () => {
+  const files = tmpFiles();
+  const { api } = fakeApi();
+  let got = null;
+  const orig = api.postFbReel;
+  api.postFbReel = async (a) => { got = a.cover; return orig(a); };
+  await runCompanion({ env: ENV, api, now: NOW, files, log: quiet });
+  assert.equal(got.length, 20000);
+  assert.equal(readCompanion(files.companion).find((e) => e.igMediaId === PAISE.id).fb.cover, 'drawn-hindi');
+});
+
+function graphMock({ thumbFails = false } = {}) {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const u = String(url);
+    const body = init.body instanceof URLSearchParams ? Object.fromEntries(init.body) : init.body;
+    calls.push({ u, body });
+    const json = (o, status = 200) => ({ ok: status < 300, status, json: async () => o });
+    if (u.endsWith('/thumbnails')) return thumbFails ? json({ error: { message: 'bad image', code: 100 } }, 400) : json({ success: true });
+    if (u.includes('rupload')) return json({ success: true });
+    if (u.endsWith('/video_reels') && body.upload_phase === 'start') return json({ video_id: 'V1', upload_url: 'https://rupload.facebook.com/x/V1' });
+    if (u.endsWith('/video_reels') && body.upload_phase === 'finish') return json({ success: true });
+    return json({ error: { message: 'unexpected' } }, 500);
+  };
+  return { calls, fetchImpl };
+}
+
+test('crossPostReel sets the thumbnail (is_preferred) BEFORE the publish call', async () => {
+  const { calls, fetchImpl } = graphMock();
+  const out = await crossPostReel({ pageId: 'P', token: 't', videoUrl: 'https://x/v.mp4', caption: 'c', cover: Buffer.alloc(20000), requireCover: true, fetchImpl });
+  assert.equal(out.id, 'V1');
+  const iThumb = calls.findIndex((c) => c.u.endsWith('/V1/thumbnails'));
+  const iFinish = calls.findIndex((c) => c.body?.upload_phase === 'finish');
+  assert.ok(iThumb > 0 && iThumb < iFinish);
+  const form = calls[iThumb].body;
+  assert.equal(form.get('is_preferred'), 'true');
+  assert.ok(form.get('source'));
+});
+
+test('thumbnail failure → publish never called, error has status (not uncertain)', async () => {
+  const { calls, fetchImpl } = graphMock({ thumbFails: true });
+  let stage = '';
+  await assert.rejects(
+    crossPostReel({ pageId: 'P', token: 't', videoUrl: 'https://x/v.mp4', cover: Buffer.alloc(20000), requireCover: true, fetchImpl, onStage: (s) => { stage = s; } }),
+    (e) => e.status === 400,
+  );
+  assert.equal(stage, 'thumbnail');
+  assert.ok(!calls.some((c) => c.body?.upload_phase === 'finish'));
+});
+
+test('requireCover without a cover makes no Graph call at all', async () => {
+  const { calls, fetchImpl } = graphMock();
+  await assert.rejects(crossPostReel({ pageId: 'P', token: 't', videoUrl: 'https://x/v.mp4', requireCover: true, fetchImpl }));
+  assert.equal(calls.length, 0);
+});
+
+test('setThumbnail throws on success:false', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ success: false }) });
+  await assert.rejects(setThumbnail({ videoId: 'V', token: 't', image: Buffer.alloc(10), fetchImpl }));
+});
+
+test('cover headline is always Devanagari', () => {
+  const a = coverHeadline({ ytTitle: 'कोटक महिंद्रा बैंक Q2 नतीजे: प्रॉफिट 26% बढ़ा | ब्रेकआउट प्लान' });
+  assert.equal(a.main, 'कोटक महिंद्रा बैंक Q2 नतीजे');
+  const b = coverHeadline({ ytTitle: 'POWERGRID share analysis | breakout trade plan next session' });
+  assert.ok(hasDevanagari(b.main));
+  assert.match(b.sub, /POWERGRID/);
+  assert.ok(hasDevanagari(coverHeadline({ caption: 'hello world' }).main));
+  const html = coverHtml({ main: 'टेस्ट <b>', sub: 'x' });
+  assert.match(html, /टेस्ट &lt;b&gt;/);
+});
+
+test('buildReelCover uses the YouTube thumbnail as background when available (mocked fetch + render)', async () => {
+  const fetchImpl = async (url) => String(url).includes('oembed')
+    ? { ok: true, json: async () => ({ title: 'POWERGRID breakout' }) }
+    : { ok: true, arrayBuffer: async () => new Uint8Array(9000).buffer };
+  let seen = null;
+  const c = await buildReelCover({ caption: '', yt: 'abc', fetchImpl, render: async (o) => { seen = o; return Buffer.alloc(20000); } });
+  assert.equal(c.from, 'youtube-thumb+drawn-hindi');
+  assert.match(seen.bgDataUri, /^data:image\/jpeg;base64,/);
+  assert.ok(hasDevanagari(seen.main));
 });
