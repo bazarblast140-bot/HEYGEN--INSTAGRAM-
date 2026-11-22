@@ -32,7 +32,7 @@ jobs:
           PY
       - name: Facebook Page Reel via Graph
         env:
-          FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN || secrets.IG_ACCESS_TOKEN }}
+          FB_ACCESS_TOKEN: ${{ secrets.FB_PAGE_TOKEN || secrets.FB_ACCESS_TOKEN || secrets.IG_ACCESS_TOKEN }}
           FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
         run: |
           python - <<'PY'
