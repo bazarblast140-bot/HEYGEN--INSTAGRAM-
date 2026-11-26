@@ -1,0 +1,316 @@
+name: One-off Fibonacci BTCUSD Reel 2026-11-26
+on:
+  workflow_dispatch:
+    inputs:
+      release_authorized:
+        description: "Only after owner approval and video QA; IG Reel + FB Page Reel only; no Story, no YouTube, no automatic resume"
+        type: boolean
+        required: true
+        default: false
+jobs:
+  publish:
+    if: ${{ inputs.release_authorized }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch media + caption
+        run: |
+          mkdir -p run
+          V="https://github.com/bazarblast140-bot/HEYGEN--INSTAGRAM-/releases/download/ig-reel-2026-11-26-fibonacci/final.mp4"
+          C="https://github.com/bazarblast140-bot/HEYGEN--INSTAGRAM-/releases/download/ig-reel-2026-11-26-fibonacci/cover_1080x1920.jpg"
+          CAP="https://github.com/bazarblast140-bot/HEYGEN--INSTAGRAM-/releases/download/ig-reel-2026-11-26-fibonacci/caption.txt"
+          curl -fsSL -L -o run/final.mp4 "$V"
+          curl -fsSL -L -o run/cover.jpg "$C"
+          curl -fsSL -L -o run/caption.txt "$CAP"
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          cap=Path("run/caption.txt").read_text(encoding="utf-8")
+          sha=hashlib.sha256(Path("run/final.mp4").read_bytes()).hexdigest()
+          print("caption", len(cap), "title", cap.splitlines()[0], "sha256", sha, "bytes", Path("run/final.mp4").stat().st_size)
+          assert sha.startswith("f5b4cf23"), sha
+          assert "delta.exchange/?code=TPBYQA" in cap
+          PY
+      - name: Graph precheck + publish IG Reel then FB Page Reel (no Story)
+        env:
+          IG_USER_ID: ${{ vars.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          FB_ACCESS_TOKEN: ${{ secrets.FB_PAGE_TOKEN || secrets.FB_ACCESS_TOKEN || secrets.IG_ACCESS_TOKEN }}
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+        run: |
+          python - <<'PY'
+          import os, json, time, urllib.parse, urllib.request, urllib.error, subprocess
+          from datetime import datetime, timezone, timedelta
+          from pathlib import Path
+
+          IST = timezone(timedelta(hours=5, minutes=30))
+          now = datetime.now(IST)
+          V = "https://github.com/bazarblast140-bot/HEYGEN--INSTAGRAM-/releases/download/ig-reel-2026-11-26-fibonacci/final.mp4"
+          C = "https://github.com/bazarblast140-bot/HEYGEN--INSTAGRAM-/releases/download/ig-reel-2026-11-26-fibonacci/cover_1080x1920.jpg"
+          cap = Path("run/caption.txt").read_text(encoding="utf-8")
+          MARKERS = ("Fibonacci 0.61", "53.61% ROE", "53.61%")
+          EXPECTED_IG = "17841410293109609"
+          EXPECTED_PAGE = "1362385786947916"
+          IG = os.environ["IG_USER_ID"].strip()
+          IG_T = os.environ["IG_ACCESS_TOKEN"]
+          FB_T = os.environ["FB_ACCESS_TOKEN"]
+          PAGE = os.environ.get("FB_PAGE_ID", "").strip()
+          report = {"started_IST": now.strftime("%Y-%m-%d %H:%M:%S IST"), "ig": {}, "fb": {}}
+
+          def http(method, url, data=None, headers=None, timeout=180):
+              if data is not None and not isinstance(data, (bytes, bytearray)):
+                  body = urllib.parse.urlencode(data).encode()
+                  req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+              else:
+                  req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+              try:
+                  return json.loads(urllib.request.urlopen(req, timeout=timeout).read())
+              except urllib.error.HTTPError as e:
+                  err = e.read().decode()[:1200]
+                  raise RuntimeError(f"HTTP {e.code}: {err}") from None
+
+          def parse_ts(ts):
+              if not ts:
+                  return None
+              return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(IST)
+
+          def spacing_block(items, ts_key, text_keys, account):
+              """Return (ok, reason, last_item). Block if <3h or already a morning-slot post today."""
+              parsed = []
+              for it in items:
+                  dt = parse_ts(it.get(ts_key) or "")
+                  if dt:
+                      parsed.append((dt, it))
+              if not parsed:
+                  return True, "no_dated_items", None
+              parsed.sort(key=lambda x: x[0], reverse=True)
+              last_dt, last_it = parsed[0]
+              blob = " ".join(str(last_it.get(k) or "") for k in text_keys)
+              for m in MARKERS:
+                  if any(m in ((" ".join(str(it.get(k) or "") for k in text_keys))) for _, it in parsed):
+                      hit = [it for _, it in parsed if any(m in (str(it.get(k) or "")) for k in text_keys)][0]
+                      return False, f"DUPLICATE already up: {hit}", hit
+              gap_h = (now - last_dt).total_seconds() / 3600
+              print(f"{account}_LAST", last_dt.strftime("%Y-%m-%d %H:%M:%S IST"), f"gap={gap_h:.2f}h", last_it)
+              if gap_h < 3:
+                  return False, f"SPACING: last post {last_dt.strftime('%Y-%m-%d %H:%M:%S IST')} is only {gap_h:.2f}h ago, need ~3h", last_it
+              # Same morning slot (05:00–12:00 IST today) — skill rule, one post per slot
+              slot_start = now.replace(hour=5, minute=0, second=0, microsecond=0)
+              slot_end = now.replace(hour=12, minute=0, second=0, microsecond=0)
+              if slot_start <= last_dt < slot_end and slot_start <= now < slot_end:
+                  return False, f"SLOT: already a morning-slot post at {last_dt.strftime('%Y-%m-%d %H:%M:%S IST')}", last_it
+              return True, f"ok gap={gap_h:.2f}h last={last_dt.strftime('%Y-%m-%d %H:%M:%S IST')}", last_it
+
+          def already_live_ig():
+              recent = http("GET", f"https://graph.facebook.com/v23.0/{IG}/media?fields=id,caption,timestamp,permalink,media_product_type,thumbnail_url&limit=8&access_token={IG_T}")
+              hits = []
+              for it in recent.get("data") or []:
+                  cap0 = it.get("caption") or ""
+                  if all(m in cap0 for m in ("Fibonacci 0.61", "TPBYQA")) or ("53.61%" in cap0 and "Fibonacci" in cap0):
+                      hits.append(it)
+              return hits, recent.get("data") or []
+
+          def already_live_fb():
+              hits, items = [], []
+              for path in (f"{PAGE}/video_reels?fields=id,description,created_time,permalink_url,title&limit=8",
+                           f"{PAGE}/posts?fields=id,message,created_time,permalink_url&limit=8"):
+                  try:
+                      data = http("GET", f"https://graph.facebook.com/v23.0/{path}&access_token={FB_T}")
+                  except Exception as e:
+                      print("fb_list_warn", path.split("?")[0], e)
+                      continue
+                  for it in data.get("data") or []:
+                      items.append(it)
+                      blob = (it.get("description") or "") + " " + (it.get("message") or "") + " " + (it.get("title") or "")
+                      if "Fibonacci 0.61" in blob or ("53.61%" in blob and "Fibonacci" in blob):
+                          hits.append(it)
+              return hits, items
+
+          # ---------------- IG ----------------
+          if IG != EXPECTED_IG:
+              raise SystemExit(f"Refusing IG: IG_USER_ID {IG!r} is not {EXPECTED_IG}")
+          print("IG_PRECHECK starting")
+          try:
+              live, ig_items = already_live_ig()
+          except Exception as e:
+              report["ig"] = {"state": "precheck_failed", "error": str(e)}
+              print("IG_PRECHECK_FAIL", e)
+              live, ig_items = [], []
+              ig_ok = False
+              ig_reason = f"precheck failed: {e}"
+          else:
+              print("IG_PRECHECK", json.dumps([{k: (v[:90] if k == "caption" and isinstance(v, str) else v) for k, v in it.items()} for it in ig_items[:5]], ensure_ascii=False))
+              if live:
+                  ig_ok, ig_reason = False, f"ALREADY_LIVE {live[0]}"
+                  report["ig"] = {"state": "already_live", "readback": live[0], "reason": ig_reason}
+              else:
+                  ig_ok, ig_reason, last = spacing_block(ig_items, "timestamp", ["caption"], "IG")
+                  report["ig"]["precheck"] = ig_reason
+                  if last:
+                      report["ig"]["last"] = {k: last.get(k) for k in ("id", "permalink", "timestamp", "media_product_type")}
+
+          if not ig_ok:
+              print("IG_SKIP", ig_reason)
+              report["ig"].setdefault("state", "skipped")
+              report["ig"]["reason"] = ig_reason
+          else:
+              print("IG_PUBLISH", ig_reason)
+              try:
+                  cont = http("POST", f"https://graph.facebook.com/v23.0/{IG}/media", {
+                      "media_type": "REELS", "video_url": V, "caption": cap, "cover_url": C,
+                      "share_to_feed": "true", "access_token": IG_T,
+                  })
+                  print("container", cont)
+                  cid = cont["id"]
+                  st = {}
+                  for i in range(48):
+                      st = http("GET", f"https://graph.facebook.com/v23.0/{cid}?fields=status_code,status&access_token={IG_T}")
+                      print("status", st)
+                      if st.get("status_code") == "FINISHED":
+                          break
+                      if st.get("status_code") == "ERROR":
+                          raise RuntimeError(f"container ERROR {st}")
+                      time.sleep(5)
+                  else:
+                      raise RuntimeError("timeout waiting FINISHED")
+                  pub = http("POST", f"https://graph.facebook.com/v23.0/{IG}/media_publish", {
+                      "creation_id": cid, "access_token": IG_T,
+                  })
+                  print("published", pub)
+                  mid = pub["id"]
+                  info = http("GET", f"https://graph.facebook.com/v23.0/{mid}?fields=id,permalink,caption,timestamp,media_type,media_product_type,thumbnail_url&access_token={IG_T}")
+                  print("IG_READBACK", json.dumps(info, ensure_ascii=False))
+                  report["ig"] = {"state": "published", "readback": info, "precheck": ig_reason}
+                  Path("run/ig_readback.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+              except Exception as e:
+                  print("IG_PUBLISH_FAIL", e)
+                  hits, _ = already_live_ig()
+                  if hits:
+                      print("IG_ALREADY_LIVE_AFTER_FAIL", hits[0])
+                      report["ig"] = {"state": "already_live_after_error", "error": str(e), "readback": hits[0]}
+                      Path("run/ig_readback.json").write_text(json.dumps(hits[0], ensure_ascii=False, indent=2), encoding="utf-8")
+                  else:
+                      report["ig"] = {"state": "failed", "error": str(e), "precheck": ig_reason}
+                      # do not retry
+
+          # ---------------- FB ----------------
+          if PAGE != EXPECTED_PAGE:
+              report["fb"] = {"state": "refused", "reason": f"FB_PAGE_ID {PAGE!r} is not {EXPECTED_PAGE}"}
+              print("FB_SKIP", report["fb"]["reason"])
+          else:
+              print("FB_PRECHECK starting")
+              try:
+                  page = http("GET", f"https://graph.facebook.com/v23.0/{PAGE}?fields=id,name,link&access_token={FB_T}")
+                  print("page", page)
+                  if page.get("id") != EXPECTED_PAGE:
+                      raise RuntimeError(f"token resolved to {page}, not expected page")
+                  live, fb_items = already_live_fb()
+                  print("FB_PRECHECK", json.dumps([{k: (v[:80] if k in ("description", "title", "message") and isinstance(v, str) else v) for k, v in it.items()} for it in fb_items[:6]], ensure_ascii=False))
+                  if live:
+                      fb_ok, fb_reason = False, f"ALREADY_LIVE {live[0]}"
+                      report["fb"] = {"state": "already_live", "readback": live[0], "reason": fb_reason, "page": page}
+                  else:
+                      fb_ok, fb_reason, last = spacing_block(fb_items, "created_time", ["description", "message", "title"], "FB")
+                      report["fb"]["precheck"] = fb_reason
+                      report["fb"]["page"] = page
+                      if last:
+                          report["fb"]["last"] = {k: last.get(k) for k in ("id", "permalink_url", "created_time")}
+              except Exception as e:
+                  print("FB_PRECHECK_FAIL", e)
+                  fb_ok, fb_reason = False, f"precheck failed: {e}"
+                  report["fb"] = {"state": "precheck_failed", "error": str(e)}
+
+              if not fb_ok:
+                  print("FB_SKIP", fb_reason)
+                  report["fb"].setdefault("state", "skipped")
+                  report["fb"]["reason"] = fb_reason
+              else:
+                  print("FB_PUBLISH", fb_reason)
+                  try:
+                      start = http("POST", f"https://graph.facebook.com/v23.0/{PAGE}/video_reels", {
+                          "upload_phase": "start", "access_token": FB_T,
+                      })
+                      print("start", {k: start.get(k) for k in start if k != "access_token"})
+                      vid = start["video_id"]
+                      up = start.get("upload_url")
+                      if up:
+                          subprocess.check_call(["curl", "-fsSL", "-L", "-o", "/tmp/fb.mp4", V])
+                          size = str(Path("/tmp/fb.mp4").stat().st_size)
+                          req = urllib.request.Request(up, data=Path("/tmp/fb.mp4").read_bytes(), method="POST", headers={
+                              "Authorization": f"OAuth {FB_T}",
+                              "offset": "0",
+                              "file_size": size,
+                              "Content-Type": "application/octet-stream",
+                          })
+                          print("rupload", urllib.request.urlopen(req, timeout=600).read()[:200])
+                          fin = http("POST", f"https://graph.facebook.com/v23.0/{PAGE}/video_reels", {
+                              "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED",
+                              "description": cap, "access_token": FB_T,
+                          })
+                      else:
+                          fin = http("POST", f"https://graph.facebook.com/v23.0/{PAGE}/video_reels", {
+                              "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED",
+                              "description": cap, "access_token": FB_T, "file_url": V,
+                          })
+                      print("finish", fin)
+                      info = {}
+                      for i in range(48):
+                          info = http("GET", f"https://graph.facebook.com/v23.0/{vid}?fields=status,permalink_url,description,created_time,title&access_token={FB_T}")
+                          print("status", info)
+                          st = info.get("status") or {}
+                          phase = (st.get("publishing_phase") or {}).get("status") if isinstance(st, dict) else None
+                          if info.get("permalink_url") and (phase == "complete" or i > 8):
+                              break
+                          time.sleep(5)
+                      try:
+                          cov = http("POST", f"https://graph.facebook.com/v23.0/{vid}", {"thumb": C, "access_token": FB_T})
+                          print("cover", cov)
+                      except Exception as e:
+                          print("cover_url_fail", e)
+                          try:
+                              subprocess.check_call(["curl", "-fsSL", "-L", "-o", "/tmp/cover.jpg", C])
+                              # multipart thumb
+                              import mimetypes
+                              boundary = "----FbThumbBoundary"
+                              data = Path("/tmp/cover.jpg").read_bytes()
+                              parts = []
+                              parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"access_token\"\r\n\r\n{FB_T}\r\n".encode())
+                              parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"source\"; filename=\"cover.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".encode() + data + b"\r\n")
+                              parts.append(f"--{boundary}--\r\n".encode())
+                              body = b"".join(parts)
+                              req = urllib.request.Request(f"https://graph.facebook.com/v23.0/{vid}/thumbnails", data=body, method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+                              print("cover_upload", urllib.request.urlopen(req, timeout=180).read()[:400])
+                          except Exception as e2:
+                              print("cover_upload_fail", e2)
+                      out = {"video_id": vid, "permalink_url": info.get("permalink_url"), "description": info.get("description"), "status": info.get("status"), "created_time": info.get("created_time"), "page": PAGE, "page_name": page.get("name")}
+                      report["fb"] = {"state": "published", "readback": out, "precheck": fb_reason, "page": page}
+                      Path("run/fb_readback.json").write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+                      print("FB_DONE", json.dumps(out, ensure_ascii=False))
+                  except Exception as e:
+                      print("FB_PUBLISH_FAIL", e)
+                      hits, _ = already_live_fb()
+                      if hits:
+                          print("FB_ALREADY_LIVE_AFTER_FAIL", hits[0])
+                          report["fb"] = {"state": "already_live_after_error", "error": str(e), "readback": hits[0]}
+                          Path("run/fb_readback.json").write_text(json.dumps(hits[0], ensure_ascii=False, indent=2), encoding="utf-8")
+                      else:
+                          report["fb"] = {"state": "failed", "error": str(e), "precheck": fb_reason}
+
+          Path("run/publish_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+          print("REPORT", json.dumps(report, ensure_ascii=False)[:4000])
+          ig_state = report.get("ig", {}).get("state")
+          fb_state = report.get("fb", {}).get("state")
+          ok_states = {"published", "already_live", "already_live_after_error"}
+          if ig_state not in ok_states and fb_state not in ok_states:
+              raise SystemExit(f"Neither surface published: ig={ig_state} fb={fb_state}")
+          PY
+      - name: Upload readbacks
+        if: ${{ always() && inputs.release_authorized }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fib-reel-readback-2026-11-26
+          path: run/*.json
+          if-no-files-found: warn
